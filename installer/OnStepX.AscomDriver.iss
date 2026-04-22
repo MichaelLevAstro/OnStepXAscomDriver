@@ -72,23 +72,48 @@ Source: "{#HubSrc}\*.pdb";                  DestDir: "{app}"; Flags: ignoreversi
 ; suspenders; these keys are the authoritative source so the install works
 ; without .NET Framework SDK tools on the target machine.
 ; Inno escapes braces by doubling: "{{" → literal "{".
+;
+; 64-bit view (HKCR64) serves 64-bit COM clients (NINA, SGP x64). 32-bit view
+; (HKCR32, i.e. Wow6432Node) serves 32-bit clients (PHD2, CdC, legacy x86).
+; The driver DLL is AnyCPU so mscoree.dll loads the correct runtime per-caller;
+; we only need the CLSID keys mirrored in both views. Without the 32-bit
+; mirror, 32-bit clients fail with "Could not establish instance of OnStepX
+; Telescope Driver" because CoCreateInstance can't find the CLSID.
 [Registry]
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}";                                 ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "";               ValueData: "mscoree.dll"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "Class";          ValueData: "ASCOM.OnStepX.Driver.Telescope"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Class";          ValueData: "ASCOM.OnStepX.Driver.Telescope"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\ProgId";                          ValueType: string; ValueName: "";               ValueData: "{#ComProgId}"
-Root: HKCR; Subkey: "CLSID\{{#ComClsid}\Implemented Categories\{{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}";                                 ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "";               ValueData: "mscoree.dll"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "Class";          ValueData: "ASCOM.OnStepX.Driver.Telescope"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Class";          ValueData: "ASCOM.OnStepX.Driver.Telescope"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\ProgId";                          ValueType: string; ValueName: "";               ValueData: "{#ComProgId}"
+Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\Implemented Categories\{{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
 
-Root: HKCR; Subkey: "{#ComProgId}";                                       ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
-Root: HKCR; Subkey: "{#ComProgId}\CLSID";                                 ValueType: string; ValueName: "";               ValueData: "{{#ComClsid}"
+Root: HKCR64; Subkey: "{#ComProgId}";                                       ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
+Root: HKCR64; Subkey: "{#ComProgId}\CLSID";                                 ValueType: string; ValueName: "";               ValueData: "{{#ComClsid}"
+
+; --- 32-bit mirror (Wow6432Node) so PHD2 / CdC / x86 clients find the CLSID.
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}";                                 ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "";               ValueData: "mscoree.dll"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "Class";          ValueData: "ASCOM.OnStepX.Driver.Telescope"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Class";          ValueData: "ASCOM.OnStepX.Driver.Telescope"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\ProgId";                          ValueType: string; ValueName: "";               ValueData: "{#ComProgId}"
+Root: HKCR32; Subkey: "CLSID\{{#ComClsid}\Implemented Categories\{{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
+
+Root: HKCR32; Subkey: "{#ComProgId}";                                       ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
+Root: HKCR32; Subkey: "{#ComProgId}\CLSID";                                 ValueType: string; ValueName: "";               ValueData: "{{#ComClsid}"
 
 ; ASCOM Profile registry-mirror store (Platform 6/7 compatible).
 Root: HKLM; Subkey: "SOFTWARE\ASCOM\Telescope Drivers\{#ComProgId}";      ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
@@ -106,7 +131,9 @@ Filename: "{app}\{#HubExe}"; Description: "Launch {#MyAppShortName} Hub"; Flags:
 
 [UninstallRun]
 ; Let regasm tear down any [ComRegisterFunction] residue before we drop files.
-Filename: "{dotnet40}\regasm.exe"; Parameters: "/unregister ""{app}\{#DriverDll}"""; Flags: runhidden; RunOnceId: "RegasmUnreg"
+; Run both 64-bit and 32-bit regasm so the Wow6432Node mirror is cleaned too.
+Filename: "{dotnet4064}\regasm.exe"; Parameters: "/unregister ""{app}\{#DriverDll}"""; Flags: runhidden; RunOnceId: "RegasmUnreg64"; Check: IsWin64
+Filename: "{dotnet4032}\regasm.exe"; Parameters: "/unregister ""{app}\{#DriverDll}"""; Flags: runhidden; RunOnceId: "RegasmUnreg32"
 
 [Code]
 function IsAscomPlatformInstalled(): Boolean;

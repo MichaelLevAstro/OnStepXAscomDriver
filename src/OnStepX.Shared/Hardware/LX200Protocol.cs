@@ -25,23 +25,25 @@ namespace ASCOM.OnStepX.Hardware
         public string GetLastError() => _transport.SendAndReceive(":GE#");
 
         // ---------- Site ----------
-        // NOTE on sign convention: LX200 :Gg/:Sg reports/accepts longitude as positive-WEST
-        // (Meade classic). ASCOM and modern geo APIs use positive-EAST. The driver works
-        // internally in ASCOM (east-positive) degrees; conversions happen here at the wire.
-        // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's current
-        // precision mode — avoids losing the seconds component in Meade-classic low-prec.
+        // NOTE on sign convention: OnStepX firmware reports/accepts longitude as
+        // positive-EAST on :Gg/:Sg — same convention ASCOM uses — so no sign flip
+        // at the wire. (Classic Meade LX200 used positive-WEST; an earlier driver
+        // revision flipped to compensate for a firmware quirk that has since been
+        // corrected upstream.)
+        // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's
+        // current precision mode — avoids losing the seconds component in low-prec.
         public string GetLatitude()  => _transport.SendAndReceive(":GtH#");
         public string GetLongitudeRaw() => _transport.SendAndReceive(":GgH#");
         // East-positive longitude for the rest of the driver.
         public double GetLongitudeEastPositive()
         {
-            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
-                return -westPos;
+            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var eastPos))
+                return eastPos;
             throw new FormatException("Mount longitude reply could not be parsed");
         }
         public bool TryGetLongitudeEastPositive(out double eastPos)
         {
-            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos)) { eastPos = -westPos; return true; }
+            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var v)) { eastPos = v; return true; }
             eastPos = 0; return false;
         }
         public string GetElevation() => _transport.SendAndReceive(":Gv#");
@@ -59,13 +61,12 @@ namespace ASCOM.OnStepX.Hardware
                 return true;
             return Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
         }
-        // Input is east-positive; mount expects west-positive, so flip sign before formatting.
+        // OnStepX accepts east-positive longitude on :Sg — pass through as-is.
         public bool SetLongitude(double eastPositiveDeg)
         {
-            double westPos = -eastPositiveDeg;
-            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPos) + "#")))
+            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(eastPositiveDeg) + "#")))
                 return true;
-            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPos) + "#"));
+            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(eastPositiveDeg) + "#"));
         }
         public bool SetElevation(double m)
         {
