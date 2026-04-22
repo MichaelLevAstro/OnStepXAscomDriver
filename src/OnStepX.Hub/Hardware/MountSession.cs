@@ -83,10 +83,6 @@ namespace ASCOM.OnStepX.Hardware
                 // Stage 2: probe :GVP# until we hear OnStep back (or caller cancels).
                 ProbeUntilResponsive(t, ct);
 
-                // Force high-precision coordinate replies before anything else reads site
-                // or RA/Dec — otherwise :Gt#/:Gg#/:GR# lose the seconds component.
-                try { Protocol?.EnsureHighPrecisionMode(); } catch { }
-
                 lock (_gate)
                 {
                     if (_transport != t) throw new OperationCanceledException("Transport replaced during open");

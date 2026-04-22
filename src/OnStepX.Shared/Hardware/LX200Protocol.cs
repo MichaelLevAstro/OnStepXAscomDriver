@@ -14,27 +14,6 @@ namespace ASCOM.OnStepX.Hardware
         public string GetVersionNumber() => _transport.SendAndReceive(":GVN#");
         public string GetVersionFull()   => _transport.SendAndReceive(":GVM#");
 
-        // In Meade-classic low-precision mode, :Gt#/:Gg#/:GR# return truncated DMS / HMS
-        // (no seconds), so NINA's "take position from mount" silently drops the seconds
-        // component of the site. OnStepX defaults to user preference which may be either
-        // mode. :U# is a toggle; probe :GR# (sample count of colons) to decide whether
-        // we need to flip it. Only toggle on a *confirmed* low-precision reply — a timed-
-        // out/empty probe reply must not trigger a blind toggle, or we can flip an already-
-        // high-prec mount back to low and strand it there for the rest of the session.
-        public void EnsureHighPrecisionMode()
-        {
-            for (int attempt = 0; attempt < 4; attempt++)
-            {
-                string ra;
-                try { ra = _transport.SendAndReceive(":GR#"); }
-                catch { return; }
-                if (string.IsNullOrEmpty(ra)) { System.Threading.Thread.Sleep(150); continue; }
-                if (ra.Split(':').Length >= 3) return; // already high-prec
-                try { _transport.SendBlind(":U#"); } catch { return; }
-                System.Threading.Thread.Sleep(150);
-            }
-        }
-
         // ---------- Coordinates ----------
         public string GetRA()  => _transport.SendAndReceive(":GRH#");
         public string GetDec() => _transport.SendAndReceive(":GDH#");
@@ -49,8 +28,10 @@ namespace ASCOM.OnStepX.Hardware
         // NOTE on sign convention: LX200 :Gg/:Sg reports/accepts longitude as positive-WEST
         // (Meade classic). ASCOM and modern geo APIs use positive-EAST. The driver works
         // internally in ASCOM (east-positive) degrees; conversions happen here at the wire.
-        public string GetLatitude()  => _transport.SendAndReceive(":Gt#");
-        public string GetLongitudeRaw() => _transport.SendAndReceive(":Gg#");
+        // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's current
+        // precision mode — avoids losing the seconds component in Meade-classic low-prec.
+        public string GetLatitude()  => _transport.SendAndReceive(":GtH#");
+        public string GetLongitudeRaw() => _transport.SendAndReceive(":GgH#");
         // East-positive longitude for the rest of the driver.
         public double GetLongitudeEastPositive()
         {
