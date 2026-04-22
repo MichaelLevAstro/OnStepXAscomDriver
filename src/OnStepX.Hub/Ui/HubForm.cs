@@ -68,12 +68,14 @@ namespace ASCOM.OnStepX.Ui
         private readonly Timer _uiTimer = new Timer { Interval = 250 };
         private readonly MountSession _mount = MountSession.Instance;
         private bool _hubConnected;
+        private System.Threading.CancellationTokenSource _connectCts;
 
         public HubForm()
         {
             Text = "OnStepX ASCOM Driver";
             MinimumSize = new Size(1000, 900);
             StartPosition = FormStartPosition.CenterScreen;
+            Icon = AppIcons.App;
             BuildUi();
             LoadFromSettings();
 
@@ -165,7 +167,18 @@ namespace ASCOM.OnStepX.Ui
         private void SyncConnectionStateFromMount()
         {
             bool open = _mount.IsOpen;
-            if (open == _hubConnected && _connState != ConnState.Connecting) return;
+            if (_connState == ConnState.Connecting)
+            {
+                // Stage 1 (transport-only up) leaves IsOpen=false — hold Connecting.
+                // Stage 2 (mount responsive) flips IsOpen=true — promote to Connected.
+                if (open && !_hubConnected)
+                {
+                    _hubConnected = true;
+                    ApplyConnState(ConnState.Connected);
+                }
+                return;
+            }
+            if (open == _hubConnected) return;
             _hubConnected = open;
             ApplyConnState(open ? ConnState.Connected : ConnState.Disconnected);
         }
@@ -661,7 +674,8 @@ namespace ASCOM.OnStepX.Ui
         private void DoConnect()
         {
             // Snapshot UI state on main thread; open on a worker so the form stays painted
-            // and responsive while the ESP32 boot-probe loop runs (can take 10+ seconds).
+            // and responsive while the ESP32 boot-probe loop runs (indefinite — user aborts
+            // via Disconnect, which cancels the token and tears down the transport).
             string kind = (string)_transportKind.SelectedItem;
             string host = _hostBox.Text;
             int tcpPort = (int)_tcpPortBox.Value;
@@ -670,9 +684,14 @@ namespace ASCOM.OnStepX.Ui
 
             ApplyConnState(ConnState.Connecting);
 
+            var cts = new System.Threading.CancellationTokenSource();
+            try { _connectCts?.Cancel(); _connectCts?.Dispose(); } catch { }
+            _connectCts = cts;
+
             System.Threading.Tasks.Task.Run(() =>
             {
                 Exception err = null;
+                bool canceled = false;
                 double mountMaxSlew = 0.0;
                 try
                 {
@@ -680,13 +699,15 @@ namespace ASCOM.OnStepX.Ui
                         ? (ITransport)new TcpTransport(host, tcpPort)
                         : new SerialTransport(port, baud);
                     _mount.Configure(t);
-                    // Open() runs the :GVP# probe loop; it throws if identity never matches.
-                    // We stay in the Connecting UI state until this returns successfully.
-                    _mount.Open();
-                    // Query mount's configured max slew rate. :GX9A# returns deg/sec;
-                    // returns 0 if firmware doesn't support it (pre-OnStepX).
+                    // Open() stages: transport up -> ConnectionChanged (UI holds Connecting),
+                    // then :GVP# probe loop until responsive -> ConnectionChanged (UI flips to
+                    // Connected via SyncConnectionStateFromMount). Throws OCE on cancellation.
+                    _mount.Open(cts.Token);
+                    // Mount's configured max slew rate. :GX9A# returns deg/sec; returns 0 if
+                    // firmware doesn't support it (pre-OnStepX).
                     try { mountMaxSlew = _mount.Protocol.GetMaxSlewRateDegPerSec(); } catch { }
                 }
+                catch (OperationCanceledException) { canceled = true; }
                 catch (Exception ex) { err = ex; }
 
                 try
@@ -694,6 +715,11 @@ namespace ASCOM.OnStepX.Ui
                     if (IsDisposed || !IsHandleCreated) return;
                     BeginInvoke(new Action(() =>
                     {
+                        if (canceled)
+                        {
+                            ApplyConnState(ConnState.Disconnected);
+                            return;
+                        }
                         if (err != null)
                         {
                             ApplyConnState(ConnState.Disconnected);
@@ -724,6 +750,12 @@ namespace ASCOM.OnStepX.Ui
                     }));
                 }
                 catch { }
+                finally
+                {
+                    if (ReferenceEquals(_connectCts, cts))
+                        _connectCts = null;
+                    try { cts.Dispose(); } catch { }
+                }
             });
         }
 
@@ -848,6 +880,8 @@ namespace ASCOM.OnStepX.Ui
 
         private void DoDisconnect()
         {
+            // Cancel first so an in-flight probe loop unblocks before Close() runs.
+            try { _connectCts?.Cancel(); } catch { }
             try { _mount.Close(); } catch { }
             _hubConnected = false;
             ApplyConnState(ConnState.Disconnected);
@@ -890,14 +924,52 @@ namespace ASCOM.OnStepX.Ui
 
         private void DoWriteSite()
         {
-            if (!_hubConnected) return;
-            double lat = CoordFormat.ParseDegrees(_latBox.Text);
-            double lon = CoordFormat.ParseDegrees(_lonBox.Text);
-            double ele = double.Parse(_eleBox.Text, CultureInfo.InvariantCulture);
-            _mount.Protocol.SetLatitude(lat);
-            _mount.Protocol.SetLongitude(lon);
-            _mount.Protocol.SetElevation(ele);
-            DriverSettings.SiteLatitude = lat; DriverSettings.SiteLongitude = lon; DriverSettings.SiteElevation = ele;
+            if (!_hubConnected)
+            {
+                MessageBox.Show(this, "Not connected.", "Write site", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            double lat, lon, ele;
+            try
+            {
+                if (!CoordFormat.TryParseDegrees(_latBox.Text, out lat))
+                    throw new FormatException("Latitude '" + _latBox.Text + "' is not a valid DMS value (e.g. +32°45'12\").");
+                if (!CoordFormat.TryParseDegrees(_lonBox.Text, out lon))
+                    throw new FormatException("Longitude '" + _lonBox.Text + "' is not a valid DMS value (e.g. -117°09'30\").");
+                if (!double.TryParse(_eleBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out ele))
+                    throw new FormatException("Elevation '" + _eleBox.Text + "' is not a valid number (metres).");
+            }
+            catch (Exception ex)
+            {
+                CopyableMessage.Show(this, "Write site", ex.Message);
+                return;
+            }
+
+            try
+            {
+                bool latOk = _mount.Protocol.SetLatitude(lat);
+                bool lonOk = _mount.Protocol.SetLongitude(lon);
+                bool eleOk = _mount.Protocol.SetElevation(ele);
+                if (!latOk || !lonOk || !eleOk)
+                {
+                    string err = "";
+                    try { err = _mount.Protocol.GetLastError(); } catch { }
+                    CopyableMessage.Show(this, "Write site",
+                        "Mount rejected one or more site values.\r\n" +
+                        "  Latitude:  " + (latOk ? "OK" : "REJECTED") + "\r\n" +
+                        "  Longitude: " + (lonOk ? "OK" : "REJECTED") + "\r\n" +
+                        "  Elevation: " + (eleOk ? "OK" : "REJECTED") +
+                        (string.IsNullOrWhiteSpace(err) ? "" : "\r\n\r\nMount error: " + err));
+                    return;
+                }
+                DriverSettings.SiteLatitude = lat;
+                DriverSettings.SiteLongitude = lon;
+                DriverSettings.SiteElevation = ele;
+            }
+            catch (Exception ex)
+            {
+                CopyableMessage.Show(this, "Write site", "Write failed:\r\n\r\n" + ex.ToString());
+            }
         }
 
         private void DoSyncLocationFromPc()

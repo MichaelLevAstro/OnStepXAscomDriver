@@ -41,6 +41,7 @@ DefaultDirName={autopf}\OnStepX
 DefaultGroupName=OnStepX
 DisableProgramGroupPage=no
 UninstallDisplayIcon={app}\{#HubExe}
+SetupIconFile=AppIcon.ico
 OutputDir={#OutRoot}
 OutputBaseFilename=OnStepX-Setup-{#MyAppVersion}
 Compression=lzma2

@@ -14,6 +14,27 @@ namespace ASCOM.OnStepX.Hardware
         public string GetVersionNumber() => _transport.SendAndReceive(":GVN#");
         public string GetVersionFull()   => _transport.SendAndReceive(":GVM#");
 
+        // In Meade-classic low-precision mode, :Gt#/:Gg#/:GR# return truncated DMS / HMS
+        // (no seconds), so NINA's "take position from mount" silently drops the seconds
+        // component of the site. OnStepX defaults to user preference which may be either
+        // mode. :U# is a toggle; probe :GR# (sample count of colons) to decide whether
+        // we need to flip it. Only toggle on a *confirmed* low-precision reply — a timed-
+        // out/empty probe reply must not trigger a blind toggle, or we can flip an already-
+        // high-prec mount back to low and strand it there for the rest of the session.
+        public void EnsureHighPrecisionMode()
+        {
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                string ra;
+                try { ra = _transport.SendAndReceive(":GR#"); }
+                catch { return; }
+                if (string.IsNullOrEmpty(ra)) { System.Threading.Thread.Sleep(150); continue; }
+                if (ra.Split(':').Length >= 3) return; // already high-prec
+                try { _transport.SendBlind(":U#"); } catch { return; }
+                System.Threading.Thread.Sleep(150);
+            }
+        }
+
         // ---------- Coordinates ----------
         public string GetRA()  => _transport.SendAndReceive(":GRH#");
         public string GetDec() => _transport.SendAndReceive(":GDH#");
@@ -47,10 +68,24 @@ namespace ASCOM.OnStepX.Hardware
         public string GetDate() => _transport.SendAndReceive(":GC#");
         public string GetLocalTime() => _transport.SendAndReceive(":GL#");
 
-        public bool SetLatitude(double deg)  => Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
+        // Prefer signed-decimal (OnStepX-Extended): preserves full precision and avoids
+        // the integer-seconds rounding that produces "+53*07:00"-style truncation when
+        // a client (e.g. NINA) re-writes the mount's site from a stored double. Fall
+        // back to classic DMS if the firmware rejects the decimal form.
+        public bool SetLatitude(double deg)
+        {
+            if (Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesDecimal(deg) + "#")))
+                return true;
+            return Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
+        }
         // Input is east-positive; mount expects west-positive, so flip sign before formatting.
-        public bool SetLongitude(double eastPositiveDeg) =>
-            Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(-eastPositiveDeg) + "#"));
+        public bool SetLongitude(double eastPositiveDeg)
+        {
+            double westPos = -eastPositiveDeg;
+            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPos) + "#")))
+                return true;
+            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPos) + "#"));
+        }
         public bool SetElevation(double m)
         {
             string v = (m >= 0 ? "+" : "") + m.ToString("0.0", CultureInfo.InvariantCulture);

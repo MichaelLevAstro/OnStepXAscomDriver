@@ -86,6 +86,18 @@ namespace ASCOM.OnStepX.Hardware
             return string.Format(CultureInfo.InvariantCulture, "{0}{1:00}*{2:00}:{3:00}", sign, d, m, s);
         }
 
+        // OnStepX-Extended also accepts signed decimal degrees for :St/:Sg/:Sd/:Sa,
+        // which preserves sub-arcsec precision that DMS integer-seconds throws away.
+        // 6 fractional digits ≈ 0.004″. Use this as the preferred write format; fall
+        // back to FormatDegreesMount (DMS) on older firmware that rejects decimals.
+        public static string FormatDegreesDecimal(double deg) =>
+            string.Format(CultureInfo.InvariantCulture, "{0}{1:00.000000}",
+                deg < 0 ? "-" : "+", Math.Abs(deg));
+
+        public static string FormatLongitudeDecimal(double deg) =>
+            string.Format(CultureInfo.InvariantCulture, "{0}{1:000.000000}",
+                deg < 0 ? "-" : "+", Math.Abs(deg));
+
         // User-facing DMS "+DD°MM'SS"" / "-DD°MM'SS"" for latitude, "+DDD°..." for longitude.
         public static string FormatLatitudeDms(double deg)  => FormatDms(deg, 2);
         public static string FormatLongitudeDms(double deg) => FormatDms(deg, 3);

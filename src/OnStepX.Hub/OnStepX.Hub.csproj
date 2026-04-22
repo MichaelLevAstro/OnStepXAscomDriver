@@ -20,6 +20,7 @@
     <LangVersion>9.0</LangVersion>
     <StartupObject>ASCOM.OnStepX.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,6 +36,7 @@
     <EmbeddedResource Include="Astronomy\Data\ic.txt" />
     <EmbeddedResource Include="Astronomy\Data\sh2.txt" />
     <EmbeddedResource Include="Astronomy\Data\ldn.txt" />
+    <EmbeddedResource Include="AppIcon.ico" />
   </ItemGroup>
 
 </Project>

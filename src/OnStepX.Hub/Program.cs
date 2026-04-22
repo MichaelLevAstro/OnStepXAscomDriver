@@ -83,7 +83,7 @@ namespace ASCOM.OnStepX
 
             _tray = new NotifyIcon
             {
-                Icon = SystemIcons.Application,
+                Icon = Ui.AppIcons.App,
                 Text = "OnStepX Hub",
                 ContextMenuStrip = menu,
                 Visible = true
