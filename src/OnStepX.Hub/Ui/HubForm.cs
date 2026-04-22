@@ -988,10 +988,13 @@ namespace ASCOM.OnStepX.Ui
             }
 
             // Don't let the poll override a user-initiated mode change for 3 s.
-            // If the mount accepted the command its :GU# will confirm after settling;
+            // If the mount accepted the command its :GT# readback confirms after settling;
             // if it rejected it the UI will revert once the debounce window expires.
+            // Also skip while the list is dropped down — writing SelectedIndex under an
+            // open popup fights the hover highlight and makes the selection strobe as
+            // the mouse moves.
             bool modeDebouncing = (DateTime.UtcNow - _trackingModeSetAt).TotalMilliseconds < 3000;
-            if (!modeDebouncing && !string.IsNullOrEmpty(st.TrackingMode))
+            if (!modeDebouncing && !_trackingModeBox.DroppedDown && !string.IsNullOrEmpty(st.TrackingMode))
             {
                 int idx = _trackingModeBox.Items.IndexOf(st.TrackingMode);
                 if (idx >= 0 && idx != _trackingModeBox.SelectedIndex)
