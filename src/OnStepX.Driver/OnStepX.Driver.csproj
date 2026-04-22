@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>ASCOM.OnStepX</RootNamespace>
+    <AssemblyName>ASCOM.OnStepX.Telescope</AssemblyName>
+    <Version>0.4.0</Version>
+    <AssemblyVersion>0.4.0.0</AssemblyVersion>
+    <FileVersion>0.4.0.0</FileVersion>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Product>OnStepX</Product>
+    <Company>OnStepX Community</Company>
+    <AssemblyTitle>ASCOM OnStepX Telescope Driver</AssemblyTitle>
+    <Description>ASCOM InprocServer driver for OnStepX mounts — pipes to OnStepX.Hub.</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <LangVersion>9.0</LangVersion>
+    <EnableComHosting>false</EnableComHosting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnStepX.Shared\OnStepX.Shared.csproj" />
+  </ItemGroup>
+
+  <!--
+    Platform 6 GAC references. Driver DLL must marshal ITelescopeV3 through the
+    same ASCOM.DeviceInterfaces (v6.0.0.0) and ASCOM.Exceptions (v6.0.0.0) the
+    ASCOM Platform installs — Platform 7 NuGet has incompatible interface GUIDs
+    that fail at QueryInterface time even though GUIDs match.
+  -->
+  <ItemGroup>
+    <Reference Include="ASCOM.DeviceInterfaces, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL">
+      <HintPath>C:\Windows\assembly\GAC_MSIL\ASCOM.DeviceInterfaces\6.0.0.0__565de7938946fba7\ASCOM.DeviceInterfaces.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ASCOM.Exceptions, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL">
+      <HintPath>C:\Windows\assembly\GAC_MSIL\ASCOM.Exceptions\6.0.0.0__565de7938946fba7\ASCOM.Exceptions.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
