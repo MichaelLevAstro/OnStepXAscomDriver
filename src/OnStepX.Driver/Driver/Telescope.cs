@@ -153,12 +153,19 @@ namespace ASCOM.OnStepX.Driver
         public bool CanSetPierSide => TelescopeCapabilities.CanSetPierSide;
         public bool CanMoveAxis(TelescopeAxes Axis) => TelescopeCapabilities.CanMoveAxis;
 
+        // ASCOM + OnStepX convention (firmware Goto.cpp:253-254):
+        //   pierEast  = counterweights east, OTA west, looking at western sky  → HA > 0
+        //   pierWest  = counterweights west, OTA east, looking at eastern sky  → HA < 0
+        // Previously this returned the inverse, which causes NINA's plate-solve-
+        // and-sync flow to trigger a spurious meridian flip on near-meridian
+        // targets (driver reports the opposite pier, NINA "corrects" by flipping
+        // the already-correct mount, ends up pointed the wrong way).
         public PierSide DestinationSideOfPier(double RightAscension, double Declination)
         {
             if (!_clientConnected) return PierSide.pierUnknown;
             double ha = SafeHours(() => CoordFormat.ParseHours(_protocol.GetSiderealTime())) - RightAscension;
             while (ha < -12) ha += 24; while (ha > 12) ha -= 24;
-            return ha < 0 ? PierSide.pierEast : PierSide.pierWest;
+            return ha >= 0 ? PierSide.pierEast : PierSide.pierWest;
         }
 
         // ---------- Positions ----------
@@ -341,7 +348,8 @@ namespace ASCOM.OnStepX.Driver
                 if (!DateTime.TryParseExact(date + " " + time, "MM/dd/yy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
                     return DateTime.UtcNow;
                 double offH = 0; double.TryParse(off.Replace(":", "."), NumberStyles.Float, CultureInfo.InvariantCulture, out offH);
-                return local.AddHours(-offH);
+                // :GG# reports west-positive (Meade convention). UTC = local + westPos.
+                return local.AddHours(offH);
             }
             set
             {

@@ -25,11 +25,16 @@ namespace ASCOM.OnStepX.Hardware
         public string GetLastError() => _transport.SendAndReceive(":GE#");
 
         // ---------- Site ----------
-        // NOTE on sign convention: OnStepX firmware reports/accepts longitude as
-        // positive-EAST on :Gg/:Sg — same convention ASCOM uses — so no sign flip
-        // at the wire. (Classic Meade LX200 used positive-WEST; an earlier driver
-        // revision flipped to compensate for a firmware quirk that has since been
-        // corrected upstream.)
+        // NOTE on sign convention: OnStepX follows the Meade LX200 spec — :Sg/:Gg
+        // treats longitude as WEST-positive (east = negative). Verified in
+        // firmware Site.command.cpp (:Sg parser negates stored longitude when the
+        // wire value carries a '-') and Site.cpp julianDateToLAST, which computes
+        // LST = GAST − radToHrs(location.longitude); for eastern longitudes the
+        // stored rad value must be NEGATIVE for LST to run ahead of GAST.
+        // ASCOM exposes east-positive, so this layer flips sign at the wire in
+        // both directions. (A prior revision removed this flip on the assumption
+        // upstream had switched to east-positive — it had not, and the resulting
+        // 2·longitude-hours error in LST caused ~6h-early slews.)
         // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's
         // current precision mode — avoids losing the seconds component in low-prec.
         public string GetLatitude()  => _transport.SendAndReceive(":GtH#");
@@ -37,13 +42,13 @@ namespace ASCOM.OnStepX.Hardware
         // East-positive longitude for the rest of the driver.
         public double GetLongitudeEastPositive()
         {
-            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var eastPos))
-                return eastPos;
+            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
+                return -westPos;
             throw new FormatException("Mount longitude reply could not be parsed");
         }
         public bool TryGetLongitudeEastPositive(out double eastPos)
         {
-            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var v)) { eastPos = v; return true; }
+            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos)) { eastPos = -westPos; return true; }
             eastPos = 0; return false;
         }
         public string GetElevation() => _transport.SendAndReceive(":Gv#");
@@ -61,23 +66,32 @@ namespace ASCOM.OnStepX.Hardware
                 return true;
             return Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
         }
-        // OnStepX accepts east-positive longitude on :Sg — pass through as-is.
+        // OnStepX :Sg is west-positive (Meade). Flip ASCOM east-positive input at
+        // the wire so LST computes with the correct sign (see note above).
         public bool SetLongitude(double eastPositiveDeg)
         {
-            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(eastPositiveDeg) + "#")))
+            double westPos = -eastPositiveDeg;
+            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPos) + "#")))
                 return true;
-            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(eastPositiveDeg) + "#"));
+            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPos) + "#"));
         }
         public bool SetElevation(double m)
         {
             string v = (m >= 0 ? "+" : "") + m.ToString("0.0", CultureInfo.InvariantCulture);
             return Bool(_transport.SendAndReceive(":Sv" + v + "#"));
         }
-        public bool SetUtcOffset(double hours)
+        // :SG uses the Meade LX200 convention — positive value = hours WEST of
+        // Greenwich (i.e. the negative of the civil timezone). Driver callers pass
+        // east-positive timezone offsets (e.g. Israel = +3), so flip the sign here
+        // at the wire. Without this flip OnStepX applies UTC offset twice in the
+        // wrong direction, producing a local-vs-UTC gap of 2·tz hours and a
+        // corresponding LST error that corrupts pier-side selection on slews.
+        public bool SetUtcOffset(double tzHoursEastPositive)
         {
-            int h = (int)Math.Truncate(hours);
-            int mm = (int)Math.Abs((hours - h) * 60);
-            string sgn = hours < 0 ? "-" : "+";
+            double westPos = -tzHoursEastPositive;
+            int h = (int)Math.Truncate(westPos);
+            int mm = (int)Math.Abs((westPos - h) * 60);
+            string sgn = westPos < 0 ? "-" : "+";
             return Bool(_transport.SendAndReceive(string.Format(CultureInfo.InvariantCulture, ":SG{0}{1:00}:{2:00}#", sgn, Math.Abs(h), mm)));
         }
         public bool SetLocalTime(DateTime localTime) =>
@@ -99,7 +113,14 @@ namespace ASCOM.OnStepX.Hardware
         // Returns 0 on success, otherwise a Meade-style error code.
         public int SlewToTarget()   => NumericSlew(_transport.SendAndReceive(":MS#"));
         public int SlewToTargetAltAz() => NumericSlew(_transport.SendAndReceive(":MA#"));
-        public bool Sync()          => Bool(_transport.SendAndReceive(":CS#"));
+        // OnStepX: :CS# is blind (no reply) — SendAndReceive would time out and be
+        // misread as failure. :CM# replies "N/A#" on accept; treat any non-empty
+        // reply as success. Real sync errors surface via :GE# (GetLastError).
+        public bool Sync()
+        {
+            var reply = Strip(_transport.SendAndReceive(":CM#"));
+            return !string.IsNullOrEmpty(reply);
+        }
         public void AbortSlew()     => _transport.SendBlind(":Q#");
 
         public void MoveNorth() => _transport.SendBlind(":Mn#");
@@ -148,7 +169,6 @@ namespace ASCOM.OnStepX.Hardware
         public bool SetParkHere()  => Bool(_transport.SendAndReceive(":hQ#"));
         public void FindHome()     => _transport.SendBlind(":hF#");
         public void GoHome()       => _transport.SendBlind(":hC#");
-        public bool ResetHomeHere()=> Bool(_transport.SendAndReceive(":hF#")); // OnStepX uses same family; wrapper kept for UI semantics.
 
         // ---------- Limits ----------
         public int GetHorizonLimit()
@@ -175,6 +195,26 @@ namespace ASCOM.OnStepX.Hardware
             var s = _transport.SendAndReceive(":GX95#");
             return Strip(s).StartsWith("1");
         }
+
+        // ---------- Meridian limits (minutes of RA past meridian) ----------
+        // OnStepX stores the "continue tracking past meridian" window on each side
+        // of the pier as minutes of RA (1 min RA = 0.25°). :GXE9# = East, :GXEA# =
+        // West. Set via :SXE9,n# / :SXEA,n#. Values are integer minutes and may be
+        // negative (stop tracking before the meridian).
+        public int GetMeridianLimitEastMinutes()
+        {
+            int.TryParse(Digits(_transport.SendAndReceive(":GXE9#")), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v);
+            return v;
+        }
+        public int GetMeridianLimitWestMinutes()
+        {
+            int.TryParse(Digits(_transport.SendAndReceive(":GXEA#")), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v);
+            return v;
+        }
+        public bool SetMeridianLimitEastMinutes(int minutes) =>
+            Bool(_transport.SendAndReceive(string.Format(CultureInfo.InvariantCulture, ":SXE9,{0}#", minutes)));
+        public bool SetMeridianLimitWestMinutes(int minutes) =>
+            Bool(_transport.SendAndReceive(string.Format(CultureInfo.InvariantCulture, ":SXEA,{0}#", minutes)));
 
         // ---------- Slew rate query ----------
         // Returns mount's configured max move-axis slew rate in deg/sec, or 0 if the

@@ -42,7 +42,7 @@ namespace ASCOM.OnStepX.Ui
 
         private DateTimePicker _datePicker, _timePicker;
         private NumericUpDown _utcOffsetBox;
-        private Button _syncFromPcBtn;
+        private Button _syncFromPcBtn, _setDateTimeBtn;
 
         private CheckBox _trackingCheck;
         private bool _suppressTrackingCheckEvent;
@@ -53,9 +53,10 @@ namespace ASCOM.OnStepX.Ui
         private ComboBox _meridianActionBox;
 
         private NumericUpDown _horizonLimitBox, _overheadLimitBox;
+        private NumericUpDown _meridianEastBox, _meridianWestBox;
         private Button _limitsWriteBtn;
 
-        private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel;
+        private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel, _lstLabel;
 
         private CheckBox _autoConnectCheck;
         private CheckBox _autoSyncTimeCheck;
@@ -79,7 +80,7 @@ namespace ASCOM.OnStepX.Ui
             BuildUi();
             LoadFromSettings();
 
-            _uiTimer.Tick += (s, e) => { RefreshStatus(); DrainIo(); };
+            _uiTimer.Tick += (s, e) => { RefreshStatus(); DrainIo(); TickLocalTime(); };
             _uiTimer.Start();
 
             ClientRegistry.Changed += OnClientRegistryChanged;
@@ -344,28 +345,36 @@ namespace ASCOM.OnStepX.Ui
 
         private GroupBox BuildTimeGroup()
         {
-            var g = NewGroup("Date / Time", 440, 138);
+            var g = NewGroup("Date / Time", 440, 168);
             _datePicker = new DateTimePicker { Left = 110, Top = 24, Width = 120, Format = DateTimePickerFormat.Short };
             _timePicker = new DateTimePicker { Left = 240, Top = 24, Width = 110, Format = DateTimePickerFormat.Time, ShowUpDown = true };
+            // Timezone offset — east-positive civil value (Israel = +3). The driver
+            // flips sign at the wire because OnStepX :SG uses the Meade west-positive
+            // convention. UI stays in the intuitive civil sign so users don't have to
+            // second-guess.
             _utcOffsetBox = new NumericUpDown { Left = 110, Top = 54, Width = 80, Minimum = -14, Maximum = 14, DecimalPlaces = 1, Increment = 0.5M };
             _syncFromPcBtn = new Button { Text = "Sync from PC", Left = 210, Top = 52, Width = 140 };
             _syncFromPcBtn.Click += (s, e) => DoSyncTime();
+            _setDateTimeBtn = new Button { Text = "Set Date/Time on mount", Left = 110, Top = 84, Width = 240 };
+            _setDateTimeBtn.Click += (s, e) => DoWriteDateTime();
             _autoSyncTimeCheck = new CheckBox {
-                Text = "Auto-sync date/time from PC on connect", Left = 10, Top = 86, Width = 340,
+                Text = "Auto-sync date/time from PC on connect", Left = 10, Top = 116, Width = 340,
                 Checked = DriverSettings.AutoSyncTimeOnConnect
             };
             _autoSyncTimeCheck.CheckedChanged += (s, e) => DriverSettings.AutoSyncTimeOnConnect = _autoSyncTimeCheck.Checked;
             g.Controls.Add(new Label { Text = "Local:", Left = 10, Top = 28, Width = 100 });
             g.Controls.Add(_datePicker);
             g.Controls.Add(_timePicker);
-            g.Controls.Add(new Label { Text = "UTC offset (h):", Left = 10, Top = 58, Width = 100 });
+            g.Controls.Add(new Label { Text = "Timezone (h):", Left = 10, Top = 58, Width = 100 });
             g.Controls.Add(_utcOffsetBox);
             g.Controls.Add(_syncFromPcBtn);
+            g.Controls.Add(_setDateTimeBtn);
             g.Controls.Add(_autoSyncTimeCheck);
             _mountActionControls.Add(_datePicker);
             _mountActionControls.Add(_timePicker);
             _mountActionControls.Add(_utcOffsetBox);
             _mountActionControls.Add(_syncFromPcBtn);
+            _mountActionControls.Add(_setDateTimeBtn);
             _mountActionControls.Add(_autoSyncTimeCheck);
             return g;
         }
@@ -450,41 +459,85 @@ namespace ASCOM.OnStepX.Ui
 
         private GroupBox BuildLimitsGroup()
         {
-            var g = NewGroup("Limits", 440, 90);
+            var g = NewGroup("Limits", 440, 120);
             _horizonLimitBox = new NumericUpDown { Left = 110, Top = 26, Width = 60, Minimum = -30, Maximum = 30 };
             _overheadLimitBox = new NumericUpDown { Left = 260, Top = 26, Width = 60, Minimum = 60, Maximum = 90, Value = 85 };
-            _limitsWriteBtn = new Button { Text = "Write limits", Left = 230, Top = 54, Width = 100 };
+            // OnStepX meridian limits are minutes of RA (1 min = 0.25°). Typical
+            // safe range is -270..+270; most users stay within ±60. Negative value
+            // stops tracking before the meridian on that side.
+            _meridianEastBox = new NumericUpDown { Left = 110, Top = 56, Width = 60, Minimum = -270, Maximum = 270 };
+            _meridianWestBox = new NumericUpDown { Left = 260, Top = 56, Width = 60, Minimum = -270, Maximum = 270 };
+            _limitsWriteBtn = new Button { Text = "Write limits", Left = 230, Top = 86, Width = 100 };
             _limitsWriteBtn.Click += (s, e) => DoWriteLimits();
             g.Controls.Add(new Label { Text = "Horizon (°):", Left = 10, Top = 30, Width = 100 });
             g.Controls.Add(_horizonLimitBox);
             g.Controls.Add(new Label { Text = "Overhead (°):", Left = 180, Top = 30, Width = 80 });
             g.Controls.Add(_overheadLimitBox);
+            g.Controls.Add(new Label { Text = "Merid. E (min RA):", Left = 10, Top = 60, Width = 100 });
+            g.Controls.Add(_meridianEastBox);
+            g.Controls.Add(new Label { Text = "Merid. W (min RA):", Left = 175, Top = 60, Width = 85 });
+            g.Controls.Add(_meridianWestBox);
             g.Controls.Add(_limitsWriteBtn);
             _mountActionControls.Add(_horizonLimitBox);
             _mountActionControls.Add(_overheadLimitBox);
+            _mountActionControls.Add(_meridianEastBox);
+            _mountActionControls.Add(_meridianWestBox);
             _mountActionControls.Add(_limitsWriteBtn);
             return g;
         }
 
         private GroupBox BuildPositionGroup()
         {
-            var g = NewGroup("Current Position", 360, 150);
+            var g = NewGroup("Current Position", 360, 180);
             _raLabel = new Label { Left = 110, Top = 28, Width = 230, Text = "—" };
             _decLabel = new Label { Left = 110, Top = 54, Width = 230, Text = "—" };
             _altLabel = new Label { Left = 110, Top = 80, Width = 230, Text = "—" };
             _azLabel = new Label { Left = 110, Top = 106, Width = 230, Text = "—" };
             _pierLabel = new Label { Left = 110, Top = 124, Width = 230, Text = "—" };
+            // Diagnostic: mount-reported LST alongside computed sky LST for the
+            // stored site longitude. A large Δ (> a few seconds) points at a
+            // longitude-sign or UTC-offset convention mismatch — which directly
+            // corrupts pier-side selection on slews (pier choice uses sign of
+            // HA = LST − RA).
+            _lstLabel = new Label { Left = 110, Top = 150, Width = 230, Text = "—" };
             g.Controls.Add(new Label { Text = "RA:", Left = 10, Top = 28, Width = 100 });
             g.Controls.Add(new Label { Text = "Dec:", Left = 10, Top = 54, Width = 100 });
             g.Controls.Add(new Label { Text = "Altitude:", Left = 10, Top = 80, Width = 100 });
             g.Controls.Add(new Label { Text = "Azimuth:", Left = 10, Top = 106, Width = 100 });
             g.Controls.Add(new Label { Text = "Pier side:", Left = 10, Top = 124, Width = 100 });
+            g.Controls.Add(new Label { Text = "LST (mount / sky):", Left = 10, Top = 150, Width = 100 });
             g.Controls.Add(_raLabel);
             g.Controls.Add(_decLabel);
             g.Controls.Add(_altLabel);
             g.Controls.Add(_azLabel);
             g.Controls.Add(_pierLabel);
+            g.Controls.Add(_lstLabel);
             return g;
+        }
+
+        // Compute apparent sidereal time (hours, 0..24) for the given east-positive
+        // longitude at the current UTC. Mean GMST formula (Meeus, ch. 12) — accurate
+        // to a few tenths of a second, plenty for diagnosing a sign-convention bug.
+        private static double ComputeSkyLstHours(double eastLonDeg)
+        {
+            var utc = DateTime.UtcNow;
+            double jd = utc.ToOADate() + 2415018.5;
+            double d = jd - 2451545.0;
+            double t = d / 36525.0;
+            double gmstDeg = 280.46061837 + 360.98564736629 * d + 0.000387933 * t * t - (t * t * t) / 38710000.0;
+            double lstDeg = gmstDeg + eastLonDeg;
+            lstDeg = ((lstDeg % 360.0) + 360.0) % 360.0;
+            return lstDeg / 15.0;
+        }
+
+        private static string FormatHours(double h)
+        {
+            h = ((h % 24.0) + 24.0) % 24.0;
+            int hh = (int)h;
+            double remMin = (h - hh) * 60.0;
+            int mm = (int)remMin;
+            double ss = (remMin - mm) * 60.0;
+            return string.Format(CultureInfo.InvariantCulture, "{0:00}:{1:00}:{2:00.0}", hh, mm, ss);
         }
 
         private GroupBox BuildParkHomeGroup()
@@ -492,9 +545,18 @@ namespace ASCOM.OnStepX.Ui
             var g = NewGroup("Park / Home / Go To", 360, 140);
             _parkBtn = new Button { Text = "Park", Left = 10, Top = 26, Width = 80 };
             _unparkBtn = new Button { Text = "Unpark", Left = 100, Top = 26, Width = 80 };
-            _findHomeBtn = new Button { Text = "Search Home", Left = 190, Top = 26, Width = 100 };
+            // :hF# per OnStep command reference resets the telescope's home
+            // reference to the current axes (mount must be physically at home).
+            // Mirrors the "Set Home" action in the OnStepX web UI.
+            _findHomeBtn = new Button { Text = "Set Home", Left = 190, Top = 26, Width = 100 };
             _goHomeBtn = new Button { Text = "Go Home", Left = 10, Top = 60, Width = 110 };
-            _resetHomeBtn = new Button { Text = "Reset Home (here)", Left = 130, Top = 60, Width = 160 };
+            // NOTE: this button sends :hQ# which sets the PARK position at the
+            // current axes. It does NOT redefine the mount's home reference —
+            // LX200 has no standard "set current as home" command; that calibration
+            // is done via the OnStepX web UI / SHC. Previously mislabeled
+            // "Reset Home (here)", which caused users to think GoHome would return
+            // to this position (it does not, which surfaced as a park-vs-home offset).
+            _resetHomeBtn = new Button { Text = "Set Park Here", Left = 130, Top = 60, Width = 160 };
             _slewTargetBtn = new Button { Text = "Slew to Target...", Left = 10, Top = 94, Width = 200 };
             _parkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Park", _mount.Protocol.Park()));
             _unparkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Unpark", _mount.Protocol.Unpark()));
@@ -1022,6 +1084,14 @@ namespace ASCOM.OnStepX.Ui
             }
         }
 
+        private void TickLocalTime()
+        {
+            if (_datePicker.Focused || _timePicker.Focused) return;
+            var now = DateTime.Now;
+            _datePicker.Value = now.Date;
+            _timePicker.Value = now;
+        }
+
         private void DoSyncTime()
         {
             if (!_hubConnected) return;
@@ -1034,13 +1104,33 @@ namespace ASCOM.OnStepX.Ui
             _datePicker.Value = now.Date; _timePicker.Value = now;
         }
 
+        // Push the date/time/timezone currently shown in the UI to the mount.
+        // Order matters: offset first so the subsequent LocalDate/LocalTime are
+        // interpreted in the intended timezone.
+        private void DoWriteDateTime()
+        {
+            if (!_hubConnected) return;
+            double offsetH = (double)_utcOffsetBox.Value;
+            var local = _datePicker.Value.Date
+                .AddHours(_timePicker.Value.Hour)
+                .AddMinutes(_timePicker.Value.Minute)
+                .AddSeconds(_timePicker.Value.Second);
+            _mount.Protocol.SetUtcOffset(offsetH);
+            _mount.Protocol.SetLocalDate(local);
+            _mount.Protocol.SetLocalTime(local);
+        }
+
         private void DoWriteLimits()
         {
             if (!_hubConnected) return;
             _mount.Protocol.SetHorizonLimit((int)_horizonLimitBox.Value);
             _mount.Protocol.SetOverheadLimit((int)_overheadLimitBox.Value);
+            _mount.Protocol.SetMeridianLimitEastMinutes((int)_meridianEastBox.Value);
+            _mount.Protocol.SetMeridianLimitWestMinutes((int)_meridianWestBox.Value);
             DriverSettings.HorizonLimitDeg = (int)_horizonLimitBox.Value;
             DriverSettings.OverheadLimitDeg = (int)_overheadLimitBox.Value;
+            DriverSettings.MeridianLimitEastMin = (int)_meridianEastBox.Value;
+            DriverSettings.MeridianLimitWestMin = (int)_meridianWestBox.Value;
         }
 
         private void OnDirPress(string dir)
@@ -1092,6 +1182,15 @@ namespace ASCOM.OnStepX.Ui
             _altLabel.Text = st.Altitude.ToString("F2", CultureInfo.InvariantCulture) + "°";
             _azLabel.Text  = st.Azimuth.ToString("F2", CultureInfo.InvariantCulture) + "°";
             _pierLabel.Text = string.IsNullOrEmpty(st.SideOfPier) ? "—" : st.SideOfPier;
+            double skyLst = ComputeSkyLstHours(DriverSettings.SiteLongitude);
+            double mountLst = st.SiderealTime;
+            double dhHours = mountLst - skyLst;
+            // Unwrap to nearest-wrap signed minutes.
+            while (dhHours > 12) dhHours -= 24;
+            while (dhHours < -12) dhHours += 24;
+            double deltaMin = dhHours * 60.0;
+            _lstLabel.Text = FormatHours(mountLst) + "  /  " + FormatHours(skyLst)
+                + "   Δ " + deltaMin.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) + " min";
             string mode;
             if (st.AtPark) mode = "Parked";
             else if (st.Slewing) mode = "Slewing";
@@ -1141,6 +1240,8 @@ namespace ASCOM.OnStepX.Ui
             _eleBox.Text = DriverSettings.SiteElevation.ToString("F1", CultureInfo.InvariantCulture);
             _horizonLimitBox.Value = DriverSettings.HorizonLimitDeg;
             _overheadLimitBox.Value = DriverSettings.OverheadLimitDeg;
+            _meridianEastBox.Value = Math.Max(_meridianEastBox.Minimum, Math.Min(_meridianEastBox.Maximum, DriverSettings.MeridianLimitEastMin));
+            _meridianWestBox.Value = Math.Max(_meridianWestBox.Minimum, Math.Min(_meridianWestBox.Maximum, DriverSettings.MeridianLimitWestMin));
             _guideRateBox.Value = (decimal)DriverSettings.GuideRateMultiplier;
             _slewSpeedBox.Value = (decimal)DriverSettings.SlewRateDegPerSec;
             _meridianActionBox.SelectedIndex = DriverSettings.MeridianAutoFlip ? 0 : 1;
