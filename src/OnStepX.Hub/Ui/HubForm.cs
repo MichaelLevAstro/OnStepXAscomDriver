@@ -11,21 +11,26 @@ namespace ASCOM.OnStepX.Ui
 {
     public sealed class HubForm : Form
     {
+        private enum ConnState { Disconnected, Connecting, Connected }
+        private ConnState _connState = ConnState.Disconnected;
+        private readonly System.Collections.Generic.List<Control> _mountActionControls = new System.Collections.Generic.List<Control>();
+        private readonly System.Collections.Generic.List<Control> _connectionControls = new System.Collections.Generic.List<Control>();
+
         private ComboBox _transportKind, _portCombo;
         private TextBox _hostBox;
         private NumericUpDown _baudBox, _tcpPortBox;
         private Button _autoDetectBtn, _connectBtn, _disconnectBtn;
         private Label _statusLed, _stateLabel, _clientsLabel;
-        private TextBox _logBox;
-        private CheckBox _logEnable;
-        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _logPending = new System.Collections.Concurrent.ConcurrentQueue<string>();
 
         private TextBox _ioBox;
         private CheckBox _ioEnable;
+        private TextBox _ioFilter;
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _ioPending = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        // Full history (pre-filter); rendered through _ioFilter into _ioBox.
+        private readonly System.Collections.Generic.LinkedList<string> _ioAll = new System.Collections.Generic.LinkedList<string>();
+        private const int IoHistoryMax = 2000;
 
         private Panel _logPanel;
-        private TableLayoutPanel _logGrid;
         private CheckBox _consoleToggle;
         private TextBox _cmdInput;
         private Button _cmdSendBtn;
@@ -72,25 +77,21 @@ namespace ASCOM.OnStepX.Ui
             BuildUi();
             LoadFromSettings();
 
-            _uiTimer.Tick += (s, e) => { RefreshStatus(); DrainLog(); DrainIo(); };
+            _uiTimer.Tick += (s, e) => { RefreshStatus(); DrainIo(); };
             _uiTimer.Start();
 
             ClientRegistry.Changed += OnClientRegistryChanged;
             _mount.ConnectionChanged += OnMountConnectionChanged;
-            TransportLogger.Line += OnTransportLine;
             TransportLogger.Pair += OnTransportPair;
-            FormClosed += (s, e) => { TransportLogger.Line -= OnTransportLine; TransportLogger.Pair -= OnTransportPair; };
+            FormClosed += (s, e) => { TransportLogger.Pair -= OnTransportPair; };
             UpdateClientLabel();
 
-            Shown += (s, e) => TryAutoConnect();
-        }
+            // Reflect the initial Disconnected state on every action control so the UI
+            // can't be poked before the mount is up. Auto-connect (if enabled) will
+            // transition through Connecting -> Connected once Shown fires.
+            ApplyConnState(ConnState.Disconnected);
 
-        private void OnTransportLine(string line)
-        {
-            if (_logEnable != null && !_logEnable.Checked) return;
-            _logPending.Enqueue(DateTime.Now.ToString("HH:mm:ss.fff") + "  " + line);
-            // Cap the queue so a disconnected hub can't accumulate forever.
-            while (_logPending.Count > 2000 && _logPending.TryDequeue(out _)) { }
+            Shown += (s, e) => TryAutoConnect();
         }
 
         private void OnTransportPair(string cmd, string reply, int elapsedMs)
@@ -103,37 +104,52 @@ namespace ASCOM.OnStepX.Ui
             while (_ioPending.Count > 2000 && _ioPending.TryDequeue(out _)) { }
         }
 
-        private void DrainLog()
-        {
-            if (_logBox == null) return;
-            if (_logPending.IsEmpty) return;
-            var sb = new System.Text.StringBuilder();
-            while (_logPending.TryDequeue(out var line)) sb.AppendLine(line);
-            if (sb.Length == 0) return;
-            // Trim the visible buffer so the control stays responsive after long sessions.
-            const int maxChars = 200_000;
-            if (_logBox.TextLength + sb.Length > maxChars)
-            {
-                int keep = Math.Max(0, maxChars - sb.Length);
-                _logBox.Text = _logBox.Text.Length > keep ? _logBox.Text.Substring(_logBox.Text.Length - keep) : _logBox.Text;
-            }
-            _logBox.AppendText(sb.ToString());
-        }
-
         private void DrainIo()
         {
             if (_ioBox == null) return;
             if (_ioPending.IsEmpty) return;
-            var sb = new System.Text.StringBuilder();
-            while (_ioPending.TryDequeue(out var line)) sb.AppendLine(line);
-            if (sb.Length == 0) return;
-            const int maxChars = 200_000;
-            if (_ioBox.TextLength + sb.Length > maxChars)
+            bool appendedVisible = false;
+            var visible = new System.Text.StringBuilder();
+            string filter = (_ioFilter?.Text ?? "").Trim();
+            while (_ioPending.TryDequeue(out var line))
             {
-                int keep = Math.Max(0, maxChars - sb.Length);
+                _ioAll.AddLast(line);
+                if (_ioAll.Count > IoHistoryMax) _ioAll.RemoveFirst();
+                if (LineMatchesFilter(line, filter))
+                {
+                    visible.AppendLine(line);
+                    appendedVisible = true;
+                }
+            }
+            if (!appendedVisible) return;
+            const int maxChars = 200_000;
+            if (_ioBox.TextLength + visible.Length > maxChars)
+            {
+                int keep = Math.Max(0, maxChars - visible.Length);
                 _ioBox.Text = _ioBox.Text.Length > keep ? _ioBox.Text.Substring(_ioBox.Text.Length - keep) : _ioBox.Text;
             }
-            _ioBox.AppendText(sb.ToString());
+            _ioBox.AppendText(visible.ToString());
+        }
+
+        private static bool LineMatchesFilter(string line, string filter)
+        {
+            if (string.IsNullOrEmpty(filter)) return true;
+            // Loose substring search, case-insensitive, space-separated tokens all-must-match.
+            foreach (var tok in filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                if (line.IndexOf(tok, StringComparison.OrdinalIgnoreCase) < 0) return false;
+            return true;
+        }
+
+        private void RebuildIoView()
+        {
+            if (_ioBox == null) return;
+            string filter = (_ioFilter?.Text ?? "").Trim();
+            var sb = new System.Text.StringBuilder();
+            foreach (var l in _ioAll)
+                if (LineMatchesFilter(l, filter)) sb.AppendLine(l);
+            _ioBox.Text = sb.ToString();
+            _ioBox.SelectionStart = _ioBox.TextLength;
+            _ioBox.ScrollToCaret();
         }
 
         private void OnMountConnectionChanged(object sender, EventArgs e)
@@ -149,10 +165,9 @@ namespace ASCOM.OnStepX.Ui
         private void SyncConnectionStateFromMount()
         {
             bool open = _mount.IsOpen;
-            if (open == _hubConnected) return;
+            if (open == _hubConnected && _connState != ConnState.Connecting) return;
             _hubConnected = open;
-            _statusLed.Text = open ? "Connected" : "Disconnected";
-            _statusLed.ForeColor = open ? Color.ForestGreen : Color.DarkRed;
+            ApplyConnState(open ? ConnState.Connected : ConnState.Disconnected);
         }
 
         private void OnClientRegistryChanged(object sender, EventArgs e)
@@ -186,7 +201,7 @@ namespace ASCOM.OnStepX.Ui
                 {
                     // Client already opened the shared transport; reflect that in the UI.
                     _hubConnected = true;
-                    _statusLed.Text = "Connected"; _statusLed.ForeColor = Color.ForestGreen;
+                    ApplyConnState(ConnState.Connected);
                 }
             }
             catch { }
@@ -277,6 +292,14 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_disconnectBtn);
             g.Controls.Add(_statusLed);
             g.Controls.Add(_autoConnectCheck);
+
+            _connectionControls.Add(_transportKind);
+            _connectionControls.Add(_portCombo);
+            _connectionControls.Add(_baudBox);
+            _connectionControls.Add(_hostBox);
+            _connectionControls.Add(_tcpPortBox);
+            _connectionControls.Add(_autoDetectBtn);
+            _connectionControls.Add(_autoConnectCheck);
             return g;
         }
 
@@ -298,6 +321,11 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_eleBox);
             g.Controls.Add(_siteSyncPcBtn);
             g.Controls.Add(_siteWriteBtn);
+            _mountActionControls.Add(_latBox);
+            _mountActionControls.Add(_lonBox);
+            _mountActionControls.Add(_eleBox);
+            _mountActionControls.Add(_siteSyncPcBtn);
+            _mountActionControls.Add(_siteWriteBtn);
             return g;
         }
 
@@ -321,6 +349,11 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_utcOffsetBox);
             g.Controls.Add(_syncFromPcBtn);
             g.Controls.Add(_autoSyncTimeCheck);
+            _mountActionControls.Add(_datePicker);
+            _mountActionControls.Add(_timePicker);
+            _mountActionControls.Add(_utcOffsetBox);
+            _mountActionControls.Add(_syncFromPcBtn);
+            _mountActionControls.Add(_autoSyncTimeCheck);
             return g;
         }
 
@@ -394,6 +427,11 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_slewSpeedBox);
             g.Controls.Add(new Label { Text = "At meridian:", Left = 10, Top = 130, Width = 100 });
             g.Controls.Add(_meridianActionBox);
+            _mountActionControls.Add(_trackingCheck);
+            _mountActionControls.Add(_trackingModeBox);
+            _mountActionControls.Add(_guideRateBox);
+            _mountActionControls.Add(_slewSpeedBox);
+            _mountActionControls.Add(_meridianActionBox);
             return g;
         }
 
@@ -409,6 +447,9 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(new Label { Text = "Overhead (°):", Left = 180, Top = 30, Width = 80 });
             g.Controls.Add(_overheadLimitBox);
             g.Controls.Add(_limitsWriteBtn);
+            _mountActionControls.Add(_horizonLimitBox);
+            _mountActionControls.Add(_overheadLimitBox);
+            _mountActionControls.Add(_limitsWriteBtn);
             return g;
         }
 
@@ -450,6 +491,12 @@ namespace ASCOM.OnStepX.Ui
             _slewTargetBtn.Click += (s, e) => OpenSlewTarget();
             g.Controls.Add(_parkBtn); g.Controls.Add(_unparkBtn); g.Controls.Add(_findHomeBtn); g.Controls.Add(_goHomeBtn); g.Controls.Add(_resetHomeBtn);
             g.Controls.Add(_slewTargetBtn);
+            _mountActionControls.Add(_parkBtn);
+            _mountActionControls.Add(_unparkBtn);
+            _mountActionControls.Add(_findHomeBtn);
+            _mountActionControls.Add(_goHomeBtn);
+            _mountActionControls.Add(_resetHomeBtn);
+            _mountActionControls.Add(_slewTargetBtn);
             return g;
         }
 
@@ -466,6 +513,7 @@ namespace ASCOM.OnStepX.Ui
             _slewPad.DirectionReleased += OnDirRelease;
             _slewPad.Stop += () => Guard(() => _mount.Protocol.AbortSlew());
             g.Controls.Add(_slewPad);
+            _mountActionControls.Add(_slewPad);
             return g;
         }
 
@@ -484,18 +532,8 @@ namespace ASCOM.OnStepX.Ui
         {
             _logPanel = new Panel { Dock = DockStyle.Bottom, Height = ConsoleExpandedHeight, Padding = new Padding(8, 0, 8, 8) };
 
-            _logGrid = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1
-            };
-            _logGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            _logGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            _logGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-
-            _logGrid.Controls.Add(BuildLogPane(), 0, 0);
-            _logGrid.Controls.Add(BuildIoPane(),  1, 0);
+            var ioPane = BuildIoPane();
+            ioPane.Dock = DockStyle.Fill;
 
             var header = new Panel { Dock = DockStyle.Top, Height = 32 };
             _consoleToggle = new CheckBox { Text = "Show console", Left = 0, Top = 8, Width = 110, Checked = true };
@@ -515,7 +553,7 @@ namespace ASCOM.OnStepX.Ui
             header.Controls.Add(_cmdSendBtn);
             header.Controls.Add(hint);
 
-            _logPanel.Controls.Add(_logGrid);
+            _logPanel.Controls.Add(ioPane);
             _logPanel.Controls.Add(header);
             return _logPanel;
         }
@@ -523,8 +561,10 @@ namespace ASCOM.OnStepX.Ui
         private void ApplyConsoleVisibility()
         {
             bool show = _consoleToggle.Checked;
-            _logGrid.Visible = show;
+            // Header is always visible; toggle only the IO pane height.
             _logPanel.Height = show ? ConsoleExpandedHeight : ConsoleCollapsedHeight;
+            foreach (Control c in _logPanel.Controls)
+                if (c.Dock == DockStyle.Fill) c.Visible = show;
         }
 
         private void SendManualCommand()
@@ -561,53 +601,28 @@ namespace ASCOM.OnStepX.Ui
             });
         }
 
-        // Raw transport log (every TX/RX line + noise notes).
-        private Panel BuildLogPane()
-        {
-            var pane = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 4, 0) };
-
-            var header = new Panel { Dock = DockStyle.Top, Height = 26 };
-            var title = new Label { Text = "Transport log", Left = 0, Top = 4, Width = 120, Font = new Font(Font, FontStyle.Bold) };
-            _logEnable = new CheckBox { Text = "Enabled", Left = 130, Top = 4, Width = 80, Checked = true };
-            var clearBtn = new Button { Text = "Clear", Left = 220, Top = 0, Width = 70, Height = 24 };
-            var copyBtn  = new Button { Text = "Copy",  Left = 295, Top = 0, Width = 70, Height = 24 };
-            clearBtn.Click += (s, e) => { _logBox.Clear(); while (_logPending.TryDequeue(out _)) { } };
-            copyBtn.Click  += (s, e) => { try { if (!string.IsNullOrEmpty(_logBox.Text)) Clipboard.SetText(_logBox.Text); } catch { } };
-            header.Controls.Add(title);
-            header.Controls.Add(_logEnable);
-            header.Controls.Add(clearBtn);
-            header.Controls.Add(copyBtn);
-
-            _logBox = new TextBox
-            {
-                Dock = DockStyle.Fill,
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                WordWrap = false,
-                Font = new Font(FontFamily.GenericMonospace, 8.5f),
-                BackColor = Color.Black,
-                ForeColor = Color.LightGray
-            };
-            pane.Controls.Add(_logBox);
-            pane.Controls.Add(header);
-            return pane;
-        }
-
         // Paired command -> response view, one line per completed exchange.
+        // Filter textbox performs loose (space-tokenised, case-insensitive substring)
+        // matching over the full history so the user can narrow to e.g. ":GU" or
+        // ":TQ 60.164" without touching the capture stream.
         private Panel BuildIoPane()
         {
-            var pane = new Panel { Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0) };
+            var pane = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
 
             var header = new Panel { Dock = DockStyle.Top, Height = 26 };
-            var title = new Label { Text = "Mount I/O (cmd -> reply)", Left = 0, Top = 4, Width = 180, Font = new Font(Font, FontStyle.Bold) };
-            _ioEnable = new CheckBox { Text = "Enabled", Left = 190, Top = 4, Width = 80, Checked = true };
-            var clearBtn = new Button { Text = "Clear", Left = 280, Top = 0, Width = 70, Height = 24 };
-            var copyBtn  = new Button { Text = "Copy",  Left = 355, Top = 0, Width = 70, Height = 24 };
-            clearBtn.Click += (s, e) => { _ioBox.Clear(); while (_ioPending.TryDequeue(out _)) { } };
+            var title = new Label { Text = "Mount I/O (cmd -> reply)", Left = 0, Top = 4, Width = 170, Font = new Font(Font, FontStyle.Bold) };
+            _ioEnable = new CheckBox { Text = "Enabled", Left = 175, Top = 4, Width = 75, Checked = true };
+            var filterLabel = new Label { Text = "Filter:", Left = 255, Top = 6, Width = 40 };
+            _ioFilter = new TextBox { Left = 295, Top = 2, Width = 220, Font = new Font(FontFamily.GenericMonospace, 9f) };
+            _ioFilter.TextChanged += (s, e) => RebuildIoView();
+            var clearBtn = new Button { Text = "Clear", Left = 525, Top = 0, Width = 70, Height = 24 };
+            var copyBtn  = new Button { Text = "Copy",  Left = 600, Top = 0, Width = 70, Height = 24 };
+            clearBtn.Click += (s, e) => { _ioBox.Clear(); _ioAll.Clear(); while (_ioPending.TryDequeue(out _)) { } };
             copyBtn.Click  += (s, e) => { try { if (!string.IsNullOrEmpty(_ioBox.Text)) Clipboard.SetText(_ioBox.Text); } catch { } };
             header.Controls.Add(title);
             header.Controls.Add(_ioEnable);
+            header.Controls.Add(filterLabel);
+            header.Controls.Add(_ioFilter);
             header.Controls.Add(clearBtn);
             header.Controls.Add(copyBtn);
 
@@ -653,9 +668,7 @@ namespace ASCOM.OnStepX.Ui
             string port = _portCombo.Text;
             int baud = (int)_baudBox.Value;
 
-            _connectBtn.Enabled = false;
-            _autoDetectBtn.Enabled = false;
-            _statusLed.Text = "Connecting..."; _statusLed.ForeColor = Color.DarkOrange;
+            ApplyConnState(ConnState.Connecting);
 
             System.Threading.Tasks.Task.Run(() =>
             {
@@ -667,6 +680,8 @@ namespace ASCOM.OnStepX.Ui
                         ? (ITransport)new TcpTransport(host, tcpPort)
                         : new SerialTransport(port, baud);
                     _mount.Configure(t);
+                    // Open() runs the :GVP# probe loop; it throws if identity never matches.
+                    // We stay in the Connecting UI state until this returns successfully.
                     _mount.Open();
                     // Query mount's configured max slew rate. :GX9A# returns deg/sec;
                     // returns 0 if firmware doesn't support it (pre-OnStepX).
@@ -679,11 +694,9 @@ namespace ASCOM.OnStepX.Ui
                     if (IsDisposed || !IsHandleCreated) return;
                     BeginInvoke(new Action(() =>
                     {
-                        _connectBtn.Enabled = true;
-                        _autoDetectBtn.Enabled = true;
                         if (err != null)
                         {
-                            _statusLed.Text = "Disconnected"; _statusLed.ForeColor = Color.DarkRed;
+                            ApplyConnState(ConnState.Disconnected);
                             CopyableMessage.Show(this, "Connect failed", err.ToString());
                             return;
                         }
@@ -701,7 +714,7 @@ namespace ASCOM.OnStepX.Ui
                                 _slewSpeedBox.Value = mountMaxDec;
                         }
 
-                        _statusLed.Text = "Connected"; _statusLed.ForeColor = Color.ForestGreen;
+                        ApplyConnState(ConnState.Connected);
                         ReconcileSiteLocationOnConnect();
                         if (DriverSettings.AutoSyncTimeOnConnect)
                         {
@@ -837,7 +850,42 @@ namespace ASCOM.OnStepX.Ui
         {
             try { _mount.Close(); } catch { }
             _hubConnected = false;
-            _statusLed.Text = "Disconnected"; _statusLed.ForeColor = Color.DarkRed;
+            ApplyConnState(ConnState.Disconnected);
+        }
+
+        private void ApplyConnState(ConnState s)
+        {
+            _connState = s;
+            switch (s)
+            {
+                case ConnState.Disconnected:
+                    _statusLed.Text = "Disconnected"; _statusLed.ForeColor = Color.DarkRed;
+                    _connectBtn.Enabled = true;
+                    _disconnectBtn.Enabled = false;
+                    foreach (var c in _connectionControls) c.Enabled = true;
+                    foreach (var c in _mountActionControls) c.Enabled = false;
+                    if (_cmdInput != null) _cmdInput.Enabled = false;
+                    if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
+                    break;
+                case ConnState.Connecting:
+                    _statusLed.Text = "Connecting..."; _statusLed.ForeColor = Color.DarkOrange;
+                    _connectBtn.Enabled = false;
+                    _disconnectBtn.Enabled = false;
+                    foreach (var c in _connectionControls) c.Enabled = false;
+                    foreach (var c in _mountActionControls) c.Enabled = false;
+                    if (_cmdInput != null) _cmdInput.Enabled = false;
+                    if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
+                    break;
+                case ConnState.Connected:
+                    _statusLed.Text = "Connected"; _statusLed.ForeColor = Color.ForestGreen;
+                    _connectBtn.Enabled = false;
+                    _disconnectBtn.Enabled = true;
+                    foreach (var c in _connectionControls) c.Enabled = false;
+                    foreach (var c in _mountActionControls) c.Enabled = true;
+                    if (_cmdInput != null) _cmdInput.Enabled = true;
+                    if (_cmdSendBtn != null) _cmdSendBtn.Enabled = true;
+                    break;
+            }
         }
 
         private void DoWriteSite()
@@ -1046,6 +1094,9 @@ namespace ASCOM.OnStepX.Ui
                     "OnStepX", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                 if (r == DialogResult.Cancel) { e.Cancel = true; return; }
                 if (r == DialogResult.Yes) { e.Cancel = true; Hide(); return; }
+                // "No" path: fall through and terminate the process. Any still-connected
+                // clients will get a transport error on their next call — that is the
+                // user's explicit intent (close the hub, don't hide).
             }
             base.OnFormClosing(e);
         }
@@ -1054,11 +1105,11 @@ namespace ASCOM.OnStepX.Ui
         {
             base.OnFormClosed(e);
             try { _uiTimer.Stop(); } catch { }
-            if (ClientRegistry.Count == 0)
-            {
-                try { _mount.ForceCloseAll(); } catch { }
-                Application.ExitThread();
-            }
+            // Always tear down on close — previously this was gated on "no clients",
+            // which stranded the process (tray icon present, main window gone, pipe
+            // server still serving) when the user chose to close with clients active.
+            try { _mount.ForceCloseAll(); } catch { }
+            Application.ExitThread();
         }
     }
 }
