@@ -23,6 +23,14 @@ namespace ASCOM.OnStepX.Config
         public static int    OverheadLimitDeg{ get => GetInt("OverheadLimitDeg", 85); set => SetInt("OverheadLimitDeg", value); }
         public static int    MeridianLimitEastMin { get => GetInt("MeridianLimitEastMin", 15); set => SetInt("MeridianLimitEastMin", value); }
         public static int    MeridianLimitWestMin { get => GetInt("MeridianLimitWestMin", 15); set => SetInt("MeridianLimitWestMin", value); }
+        // Sync distance guardrail (degrees). 0 disables the check; any positive
+        // value triggers a confirmation popup in the driver process when an
+        // ASCOM sync would move the mount's reported position by more than
+        // this angular distance — a large delta usually means the site or
+        // time is wrong rather than a legitimate plate-solve correction.
+        // Read by the driver directly from registry (same HKCU key) so the
+        // hub and driver processes share one source of truth.
+        public static int    SyncLimitDeg { get => GetInt("SyncLimitDeg", 0); set => SetInt("SyncLimitDeg", value); }
 
         public static double SlewRateDegPerSec { get => GetDouble("SlewRateDegPerSec", 3.0); set => SetDouble("SlewRateDegPerSec", value); }
         public static double GuideRateMultiplier { get => GetDouble("GuideRateMultiplier", 0.5); set => SetDouble("GuideRateMultiplier", value); }

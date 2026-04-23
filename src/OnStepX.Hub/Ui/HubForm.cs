@@ -59,6 +59,7 @@ namespace ASCOM.OnStepX.Ui
 
         private NumericUpDown _horizonLimitBox, _overheadLimitBox;
         private NumericUpDown _meridianEastBox, _meridianWestBox;
+        private NumericUpDown _syncLimitBox;
         private Button _limitsWriteBtn;
 
         private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel, _lstLabel;
@@ -509,7 +510,7 @@ namespace ASCOM.OnStepX.Ui
 
         private GroupBox BuildLimitsGroup()
         {
-            var g = NewGroup("Limits", 440, 120);
+            var g = NewGroup("Limits", 440, 150);
             _horizonLimitBox = new NumericUpDown { Left = 110, Top = 26, Width = 60, Minimum = -30, Maximum = 30 };
             _overheadLimitBox = new NumericUpDown { Left = 260, Top = 26, Width = 60, Minimum = 60, Maximum = 90, Value = 85 };
             // OnStepX meridian limits are minutes of RA (1 min = 0.25°). Typical
@@ -517,7 +518,13 @@ namespace ASCOM.OnStepX.Ui
             // stops tracking before the meridian on that side.
             _meridianEastBox = new NumericUpDown { Left = 110, Top = 56, Width = 60, Minimum = -270, Maximum = 270 };
             _meridianWestBox = new NumericUpDown { Left = 260, Top = 56, Width = 60, Minimum = -270, Maximum = 270 };
-            _limitsWriteBtn = new Button { Text = "Write limits", Left = 230, Top = 86, Width = 100 };
+            // Sync distance guardrail. Driver-side (not firmware) — confirmation
+            // popup when an ASCOM sync would move the mount by more than this
+            // many degrees. 0 disables. Lives in Limits group because it is
+            // conceptually a safety limit on the sync operation.
+            _syncLimitBox = new NumericUpDown { Left = 110, Top = 86, Width = 60, Minimum = 0, Maximum = 180, Value = 0 };
+            _syncLimitBox.ValueChanged += (s, e) => DriverSettings.SyncLimitDeg = (int)_syncLimitBox.Value;
+            _limitsWriteBtn = new Button { Text = "Write limits", Left = 230, Top = 116, Width = 100 };
             _limitsWriteBtn.Click += (s, e) => DoWriteLimits();
             g.Controls.Add(new Label { Text = "Horizon (°):", Left = 10, Top = 30, Width = 100 });
             g.Controls.Add(_horizonLimitBox);
@@ -527,12 +534,16 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_meridianEastBox);
             g.Controls.Add(new Label { Text = "Merid. W (min RA):", Left = 175, Top = 60, Width = 85 });
             g.Controls.Add(_meridianWestBox);
+            g.Controls.Add(new Label { Text = "Sync limit (°):", Left = 10, Top = 90, Width = 100 });
+            g.Controls.Add(_syncLimitBox);
+            g.Controls.Add(new Label { Text = "0 = disabled", Left = 180, Top = 90, Width = 100, ForeColor = SystemColors.GrayText });
             g.Controls.Add(_limitsWriteBtn);
             _mountActionControls.Add(_horizonLimitBox);
             _mountActionControls.Add(_overheadLimitBox);
             _mountActionControls.Add(_meridianEastBox);
             _mountActionControls.Add(_meridianWestBox);
             _mountActionControls.Add(_limitsWriteBtn);
+            _mountActionControls.Add(_syncLimitBox);
             return g;
         }
 
@@ -1323,6 +1334,7 @@ namespace ASCOM.OnStepX.Ui
             _overheadLimitBox.Value = DriverSettings.OverheadLimitDeg;
             _meridianEastBox.Value = Math.Max(_meridianEastBox.Minimum, Math.Min(_meridianEastBox.Maximum, DriverSettings.MeridianLimitEastMin));
             _meridianWestBox.Value = Math.Max(_meridianWestBox.Minimum, Math.Min(_meridianWestBox.Maximum, DriverSettings.MeridianLimitWestMin));
+            _syncLimitBox.Value = Math.Max(_syncLimitBox.Minimum, Math.Min(_syncLimitBox.Maximum, DriverSettings.SyncLimitDeg));
             _guideRateBox.Value = (decimal)DriverSettings.GuideRateMultiplier;
             _slewSpeedBox.Value = (decimal)DriverSettings.SlewRateDegPerSec;
             _meridianActionBox.SelectedIndex = DriverSettings.MeridianAutoFlip ? 0 : 1;
