@@ -153,20 +153,14 @@ namespace ASCOM.OnStepX.Driver
         public bool CanSetPierSide => TelescopeCapabilities.CanSetPierSide;
         public bool CanMoveAxis(TelescopeAxes Axis) => TelescopeCapabilities.CanMoveAxis;
 
-        // ASCOM + OnStepX convention (firmware Goto.cpp:253-254):
-        //   pierEast  = counterweights east, OTA west, looking at western sky  → HA > 0
-        //   pierWest  = counterweights west, OTA east, looking at eastern sky  → HA < 0
-        // Previously this returned the inverse, which causes NINA's plate-solve-
-        // and-sync flow to trigger a spurious meridian flip on near-meridian
-        // targets (driver reports the opposite pier, NINA "corrects" by flipping
-        // the already-correct mount, ends up pointed the wrong way).
+        // Mount truth, not driver truth. Any driver-side HA prediction can
+        // disagree with firmware's flip logic near the meridian (LST/RA float
+        // jitter at HA≈0), making NINA force a spurious flip that slews into
+        // the legs. Echo the mount's current side — the real flip decision
+        // happens in firmware on the slew itself (:SX95 auto-flip, :SX96
+        // preferred pier, meridian limits).
         public PierSide DestinationSideOfPier(double RightAscension, double Declination)
-        {
-            if (!_clientConnected) return PierSide.pierUnknown;
-            double ha = SafeHours(() => CoordFormat.ParseHours(_protocol.GetSiderealTime())) - RightAscension;
-            while (ha < -12) ha += 24; while (ha > 12) ha -= 24;
-            return ha >= 0 ? PierSide.pierEast : PierSide.pierWest;
-        }
+            => _clientConnected ? SideOfPier : PierSide.pierUnknown;
 
         // ---------- Positions ----------
         // Every read hops over the pipe. Fine at normal ASCOM poll rates
