@@ -25,31 +25,24 @@ namespace ASCOM.OnStepX.Hardware
         public string GetLastError() => _transport.SendAndReceive(":GE#");
 
         // ---------- Site ----------
-        // NOTE on sign convention: OnStepX follows the Meade LX200 spec — :Sg/:Gg
-        // treats longitude as WEST-positive (east = negative). Verified in
-        // firmware Site.command.cpp (:Sg parser negates stored longitude when the
-        // wire value carries a '-') and Site.cpp julianDateToLAST, which computes
-        // LST = GAST − radToHrs(location.longitude); for eastern longitudes the
-        // stored rad value must be NEGATIVE for LST to run ahead of GAST.
-        // ASCOM exposes east-positive, so this layer flips sign at the wire in
-        // both directions. (A prior revision removed this flip on the assumption
-        // upstream had switched to east-positive — it had not, and the resulting
-        // 2·longitude-hours error in LST caused ~6h-early slews.)
+        // Sign convention: west-positive end-to-end. OnStepX :Sg/:Gg uses Meade
+        // west-positive on the wire (east = negative); driver/hub/sites store
+        // the same. No sign flip at this layer — value passes through raw. ASCOM
+        // clients that expect east-positive see west-positive; that is accepted
+        // while we debug meridian/sync behavior and nail down the real bug.
         // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's
         // current precision mode — avoids losing the seconds component in low-prec.
         public string GetLatitude()  => _transport.SendAndReceive(":GtH#");
         public string GetLongitudeRaw() => _transport.SendAndReceive(":GgH#");
-        // East-positive longitude for the rest of the driver.
-        public double GetLongitudeEastPositive()
+        public double GetLongitude()
         {
             if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
-                return -westPos;
+                return westPos;
             throw new FormatException("Mount longitude reply could not be parsed");
         }
-        public bool TryGetLongitudeEastPositive(out double eastPos)
+        public bool TryGetLongitude(out double westPos)
         {
-            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos)) { eastPos = -westPos; return true; }
-            eastPos = 0; return false;
+            return CoordFormat.TryParseDegrees(GetLongitudeRaw(), out westPos);
         }
         public string GetElevation() => _transport.SendAndReceive(":Gv#");
         public string GetUtcOffset() => _transport.SendAndReceive(":GG#");
@@ -66,14 +59,13 @@ namespace ASCOM.OnStepX.Hardware
                 return true;
             return Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
         }
-        // OnStepX :Sg is west-positive (Meade). Flip ASCOM east-positive input at
-        // the wire so LST computes with the correct sign (see note above).
-        public bool SetLongitude(double eastPositiveDeg)
+        // West-positive passthrough (Meade :Sg convention on the wire). Caller
+        // supplies west-positive; no flip here.
+        public bool SetLongitude(double westPositiveDeg)
         {
-            double westPos = -eastPositiveDeg;
-            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPos) + "#")))
+            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPositiveDeg) + "#")))
                 return true;
-            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPos) + "#"));
+            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPositiveDeg) + "#"));
         }
         public bool SetElevation(double m)
         {

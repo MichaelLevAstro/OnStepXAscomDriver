@@ -576,17 +576,17 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        // Compute apparent sidereal time (hours, 0..24) for the given east-positive
+        // Compute apparent sidereal time (hours, 0..24) for the given west-positive
         // longitude at the current UTC. Mean GMST formula (Meeus, ch. 12) — accurate
         // to a few tenths of a second, plenty for diagnosing a sign-convention bug.
-        private static double ComputeSkyLstHours(double eastLonDeg)
+        private static double ComputeSkyLstHours(double westLonDeg)
         {
             var utc = DateTime.UtcNow;
             double jd = utc.ToOADate() + 2415018.5;
             double d = jd - 2451545.0;
             double t = d / 36525.0;
             double gmstDeg = 280.46061837 + 360.98564736629 * d + 0.000387933 * t * t - (t * t * t) / 38710000.0;
-            double lstDeg = gmstDeg + eastLonDeg;
+            double lstDeg = gmstDeg - westLonDeg;
             lstDeg = ((lstDeg % 360.0) + 360.0) % 360.0;
             return lstDeg / 15.0;
         }
@@ -932,9 +932,8 @@ namespace ASCOM.OnStepX.Ui
                     lonRaw = _mount.Protocol.GetLongitudeRaw();
                     if (!CoordFormat.TryParseDegrees(latRaw, out mLat))
                         throw new FormatException("latitude reply '" + latRaw + "'");
-                    if (!CoordFormat.TryParseDegrees(lonRaw, out var westPos))
+                    if (!CoordFormat.TryParseDegrees(lonRaw, out mLon))
                         throw new FormatException("longitude reply '" + lonRaw + "'");
-                    mLon = -westPos;
                     double.TryParse(StripReply(_mount.Protocol.GetElevation()),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out mEle);
                     ok = true;

@@ -11,8 +11,8 @@ namespace ASCOM.OnStepX.Config
     // User-defined site list persisted as JSON in %APPDATA%\OnStepX\sites.json.
     // Lives alongside — not inside — registry DriverSettings because the list
     // must be portable across machines via import/export. Longitudes stored
-    // east-positive to match the rest of the driver (the wire-level sign flip
-    // for :Sg/:Gg happens in LX200Protocol).
+    // west-positive (Meade convention, matches mount :Sg/:Gg wire — no flip
+    // anywhere in the path).
     [DataContract]
     internal sealed class Site
     {

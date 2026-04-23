@@ -386,9 +386,12 @@ namespace ASCOM.OnStepX.Driver
             get { RequireConnected(); return CoordFormat.ParseDegrees(_protocol.GetLatitude()); }
             set { RequireConnected(); _protocol.SetLatitude(value); }
         }
+        // West-positive end-to-end (see LX200Protocol.GetLongitude comment).
+        // ASCOM spec says east-positive; we deliberately expose raw west-positive
+        // while debugging the meridian/sync sign issue.
         public double SiteLongitude
         {
-            get { RequireConnected(); return _protocol.GetLongitudeEastPositive(); }
+            get { RequireConnected(); return _protocol.GetLongitude(); }
             set { RequireConnected(); _protocol.SetLongitude(value); }
         }
         public double SiteElevation

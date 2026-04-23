@@ -68,7 +68,7 @@ namespace ASCOM.OnStepX.Ui
             _latBox = new TextBox { Left = x, Top = 80, Width = 240, Anchor = editAnchor };
             Controls.Add(_latBox);
 
-            Controls.Add(new Label { Text = "Longitude (east-positive):", Left = x, Top = 110, Width = 240, Anchor = editAnchor });
+            Controls.Add(new Label { Text = "Longitude (west-positive, W is +):", Left = x, Top = 110, Width = 260, Anchor = editAnchor });
             _lonBox = new TextBox { Left = x, Top = 128, Width = 240, Anchor = editAnchor };
             Controls.Add(_lonBox);
 
