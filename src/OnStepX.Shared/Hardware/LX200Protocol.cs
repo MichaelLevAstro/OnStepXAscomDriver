@@ -196,6 +196,42 @@ namespace ASCOM.OnStepX.Hardware
             return Strip(s).StartsWith("1");
         }
 
+        // Preferred pier side. OnStepX :SX96 accepts single-char values:
+        //   'B' = Best (stay on current side when possible — recommended for
+        //          plate-solve workflows near the meridian),
+        //   'E' = prefer East pier, 'W' = prefer West pier, 'A' = Auto.
+        // :GX96 reply is one of 'E','W','B','A' (or 'E' if meridian flips
+        // disabled upstream — firmware compat fallback).
+        public enum PreferredPier { Best, East, West, Auto }
+        private static char PreferredPierToChar(PreferredPier p) => p switch
+        {
+            PreferredPier.East => 'E',
+            PreferredPier.West => 'W',
+            PreferredPier.Auto => 'A',
+            _ => 'B',
+        };
+        private static PreferredPier CharToPreferredPier(char c) => c switch
+        {
+            'E' => PreferredPier.East,
+            'W' => PreferredPier.West,
+            'A' => PreferredPier.Auto,
+            _ => PreferredPier.Best,
+        };
+        public bool SetPreferredPierSide(PreferredPier p) =>
+            Bool(_transport.SendAndReceive(":SX96," + PreferredPierToChar(p) + "#"));
+        public PreferredPier GetPreferredPierSide()
+        {
+            var s = Strip(_transport.SendAndReceive(":GX96#"));
+            if (string.IsNullOrEmpty(s)) return PreferredPier.Best;
+            return CharToPreferredPier(char.ToUpperInvariant(s[0]));
+        }
+
+        // Pause at home on meridian flip. :SX98,0|1# write-only in firmware —
+        // no matching :GX98 get in stock OnStepX, so state lives in driver
+        // settings and is re-applied on connect.
+        public bool SetPauseAtHomeOnFlip(bool on) =>
+            Bool(_transport.SendAndReceive(":SX98," + (on ? "1" : "0") + "#"));
+
         // ---------- Meridian limits (minutes of RA past meridian) ----------
         // OnStepX stores the "continue tracking past meridian" window on each side
         // of the pier as minutes of RA (1 min RA = 0.25°). :GXE9# = East, :GXEA# =

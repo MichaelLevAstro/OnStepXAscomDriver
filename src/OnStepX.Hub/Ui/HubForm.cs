@@ -14,6 +14,10 @@ namespace ASCOM.OnStepX.Ui
         private enum ConnState { Disconnected, Connecting, Connected }
         private ConnState _connState = ConnState.Disconnected;
         private readonly System.Collections.Generic.List<Control> _mountActionControls = new System.Collections.Generic.List<Control>();
+        // Controls usable when either disconnected or connected, but locked out
+        // during the transient Connecting state (prevents the user triggering
+        // wire-side operations while the transport is being brought up).
+        private readonly System.Collections.Generic.List<Control> _disableWhileConnectingControls = new System.Collections.Generic.List<Control>();
         private readonly System.Collections.Generic.List<Control> _connectionControls = new System.Collections.Generic.List<Control>();
 
         private ComboBox _transportKind, _portCombo;
@@ -38,7 +42,7 @@ namespace ASCOM.OnStepX.Ui
         private const int ConsoleCollapsedHeight = 40;
 
         private TextBox _latBox, _lonBox, _eleBox;
-        private Button _siteWriteBtn, _siteSyncPcBtn;
+        private Button _siteWriteBtn, _siteSyncPcBtn, _sitesBtn;
 
         private DateTimePicker _datePicker, _timePicker;
         private NumericUpDown _utcOffsetBox;
@@ -51,6 +55,7 @@ namespace ASCOM.OnStepX.Ui
         private DateTime _trackingModeSetAt = DateTime.MinValue;
         private NumericUpDown _guideRateBox, _slewSpeedBox;
         private ComboBox _meridianActionBox;
+        private Button _advancedBtn;
 
         private NumericUpDown _horizonLimitBox, _overheadLimitBox;
         private NumericUpDown _meridianEastBox, _meridianWestBox;
@@ -251,8 +256,11 @@ namespace ASCOM.OnStepX.Ui
             Controls.Add(root);
             Controls.Add(BuildLogPanel());
 
-            var left = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-            var right = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            // NoAutoScrollFlowPanel suppresses ScrollControlIntoView so clicking
+            // a button or focusing a nested control doesn't snap the panel's
+            // scroll position. Manual scrollbar + wheel still work.
+            var left = new NoAutoScrollFlowPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            var right = new NoAutoScrollFlowPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
             root.Controls.Add(left, 0, 0);
             root.Controls.Add(right, 1, 0);
 
@@ -325,8 +333,10 @@ namespace ASCOM.OnStepX.Ui
             _eleBox = new TextBox { Left = 110, Top = 82, Width = 120 };
             _siteSyncPcBtn = new Button { Text = "Sync from PC location", Left = 10, Top = 118, Width = 160 };
             _siteWriteBtn  = new Button { Text = "Write to mount",       Left = 180, Top = 118, Width = 160 };
+            _sitesBtn      = new Button { Text = "Sites...",             Left = 350, Top = 118, Width = 80  };
             _siteSyncPcBtn.Click += (s, e) => DoSyncLocationFromPc();
             _siteWriteBtn.Click  += (s, e) => DoWriteSite();
+            _sitesBtn.Click      += (s, e) => OpenSitesManager();
             g.Controls.Add(new Label { Text = "Latitude:", Left = 10, Top = 30, Width = 100 });
             g.Controls.Add(_latBox);
             g.Controls.Add(new Label { Text = "Longitude:", Left = 10, Top = 58, Width = 100 });
@@ -335,12 +345,35 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_eleBox);
             g.Controls.Add(_siteSyncPcBtn);
             g.Controls.Add(_siteWriteBtn);
+            g.Controls.Add(_sitesBtn);
             _mountActionControls.Add(_latBox);
             _mountActionControls.Add(_lonBox);
             _mountActionControls.Add(_eleBox);
             _mountActionControls.Add(_siteSyncPcBtn);
             _mountActionControls.Add(_siteWriteBtn);
+            // _sitesBtn deliberately NOT in _mountActionControls — the sites
+            // dialog edits a PC-local list and stays usable offline. Apply
+            // button inside the dialog handles its own connection gating.
+            // Still locked during Connecting to avoid wire contention if the
+            // user clicks Apply mid-handshake.
+            _disableWhileConnectingControls.Add(_sitesBtn);
             return g;
+        }
+
+        private void OpenSitesManager()
+        {
+            using (var dlg = new SitesManagerForm(_mount, _hubConnected))
+            {
+                var result = dlg.ShowDialog(this);
+                if (result == DialogResult.OK && dlg.AppliedSite != null)
+                {
+                    // Reflect applied values into the Site group text boxes so
+                    // the user sees what was just written to the mount.
+                    _latBox.Text = CoordFormat.FormatLatitudeDms(dlg.AppliedSite.Latitude);
+                    _lonBox.Text = CoordFormat.FormatLongitudeDms(dlg.AppliedSite.Longitude);
+                    _eleBox.Text = dlg.AppliedSite.Elevation.ToString("F1", CultureInfo.InvariantCulture);
+                }
+            }
         }
 
         private GroupBox BuildTimeGroup()
@@ -439,6 +472,13 @@ namespace ASCOM.OnStepX.Ui
             _meridianActionBox.Items.AddRange(new object[] { "Auto Flip", "Stop at Meridian" });
             _meridianActionBox.SelectedIndexChanged += (s, e) => { if (_hubConnected) _mount.Protocol.SetMeridianAutoFlip(_meridianActionBox.SelectedIndex == 0); };
 
+            // Advanced button exposes runtime-settable OnStepX options that don't
+            // belong on the main form (preferred pier side, pause-at-home). Always
+            // enabled — the dialog itself gates mount writes on _hubConnected and
+            // still lets users edit persisted settings while offline.
+            _advancedBtn = new Button { Text = "Advanced...", Left = 280, Top = 125, Width = 100 };
+            _advancedBtn.Click += (s, e) => OpenAdvancedSettings();
+
             g.Controls.Add(_trackingCheck);
             g.Controls.Add(_stateLabel);
             g.Controls.Add(new Label { Text = "Tracking rate:", Left = 10, Top = 62, Width = 100 });
@@ -449,12 +489,22 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_slewSpeedBox);
             g.Controls.Add(new Label { Text = "At meridian:", Left = 10, Top = 130, Width = 100 });
             g.Controls.Add(_meridianActionBox);
+            g.Controls.Add(_advancedBtn);
             _mountActionControls.Add(_trackingCheck);
             _mountActionControls.Add(_trackingModeBox);
             _mountActionControls.Add(_guideRateBox);
             _mountActionControls.Add(_slewSpeedBox);
             _mountActionControls.Add(_meridianActionBox);
+            _mountActionControls.Add(_advancedBtn);
             return g;
+        }
+
+        private void OpenAdvancedSettings()
+        {
+            using (var dlg = new AdvancedSettingsForm(_mount))
+            {
+                dlg.ShowDialog(this);
+            }
         }
 
         private GroupBox BuildLimitsGroup()
@@ -809,6 +859,7 @@ namespace ASCOM.OnStepX.Ui
                             try { DoSyncTime(); TransportLogger.Note("Auto-synced date/time from PC on connect"); }
                             catch (Exception syncEx) { TransportLogger.Note("Auto-sync time failed: " + syncEx.Message); }
                         }
+                        ReapplyAdvancedSettingsOnConnect();
                     }));
                 }
                 catch { }
@@ -819,6 +870,33 @@ namespace ASCOM.OnStepX.Ui
                     try { cts.Dispose(); } catch { }
                 }
             });
+        }
+
+        // Re-apply advanced pier/flip settings from DriverSettings to the mount.
+        // Needed because OnStepX *_MEMORY flags are typically OFF (compile-time),
+        // so runtime values revert on power cycle. Silent on failure — these are
+        // non-critical and some firmware builds may refuse sub-commands.
+        private void ReapplyAdvancedSettingsOnConnect()
+        {
+            try
+            {
+                var pref = DriverSettings.PreferredPierSide;
+                LX200Protocol.PreferredPier pierEnum;
+                switch (string.IsNullOrEmpty(pref) ? 'B' : char.ToUpperInvariant(pref[0]))
+                {
+                    case 'E': pierEnum = LX200Protocol.PreferredPier.East; break;
+                    case 'W': pierEnum = LX200Protocol.PreferredPier.West; break;
+                    case 'A': pierEnum = LX200Protocol.PreferredPier.Auto; break;
+                    default:  pierEnum = LX200Protocol.PreferredPier.Best; break;
+                }
+                _mount.Protocol.SetPreferredPierSide(pierEnum);
+                _mount.Protocol.SetPauseAtHomeOnFlip(DriverSettings.PauseAtHomeOnFlip);
+                TransportLogger.Note("Re-applied advanced settings (preferred pier=" + pref + ", pauseHome=" + DriverSettings.PauseAtHomeOnFlip + ")");
+            }
+            catch (Exception ex)
+            {
+                TransportLogger.Note("Re-apply advanced settings failed: " + ex.Message);
+            }
         }
 
         // Compare hub-stored site with mount site; if differ, ask user which to keep.
@@ -960,6 +1038,7 @@ namespace ASCOM.OnStepX.Ui
                     _disconnectBtn.Enabled = false;
                     foreach (var c in _connectionControls) c.Enabled = true;
                     foreach (var c in _mountActionControls) c.Enabled = false;
+                    foreach (var c in _disableWhileConnectingControls) c.Enabled = true;
                     if (_cmdInput != null) _cmdInput.Enabled = false;
                     if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
                     break;
@@ -969,6 +1048,7 @@ namespace ASCOM.OnStepX.Ui
                     _disconnectBtn.Enabled = false;
                     foreach (var c in _connectionControls) c.Enabled = false;
                     foreach (var c in _mountActionControls) c.Enabled = false;
+                    foreach (var c in _disableWhileConnectingControls) c.Enabled = false;
                     if (_cmdInput != null) _cmdInput.Enabled = false;
                     if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
                     break;
@@ -978,6 +1058,7 @@ namespace ASCOM.OnStepX.Ui
                     _disconnectBtn.Enabled = true;
                     foreach (var c in _connectionControls) c.Enabled = false;
                     foreach (var c in _mountActionControls) c.Enabled = true;
+                    foreach (var c in _disableWhileConnectingControls) c.Enabled = true;
                     if (_cmdInput != null) _cmdInput.Enabled = true;
                     if (_cmdSendBtn != null) _cmdSendBtn.Enabled = true;
                     break;
@@ -1284,5 +1365,15 @@ namespace ASCOM.OnStepX.Ui
             try { _mount.ForceCloseAll(); } catch { }
             Application.ExitThread();
         }
+    }
+
+    // FlowLayoutPanel subclass with auto-scroll-on-focus disabled. The base
+    // control calls ScrollControlIntoView whenever a child gains focus (e.g.
+    // clicking a button inside a scrolled group), which yanks the visible
+    // window away from where the user clicked. Overriding to a no-op keeps
+    // manual scroll (wheel, scrollbar) working while preventing the jump.
+    internal sealed class NoAutoScrollFlowPanel : FlowLayoutPanel
+    {
+        protected override System.Drawing.Point ScrollToControl(Control activeControl) => DisplayRectangle.Location;
     }
 }

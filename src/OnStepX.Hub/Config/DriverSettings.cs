@@ -28,6 +28,14 @@ namespace ASCOM.OnStepX.Config
         public static double GuideRateMultiplier { get => GetDouble("GuideRateMultiplier", 0.5); set => SetDouble("GuideRateMultiplier", value); }
         public static bool   MeridianAutoFlip { get => GetBool("MeridianAutoFlip", true); set => SetBool("MeridianAutoFlip", value); }
 
+        // Advanced pier/flip policy. Values match OnStepX :SX96 chars: B/E/W/A.
+        // Default "B" (Best) stays on current side when possible — safe for
+        // plate-solve-near-meridian workflows. Pause-at-home on flip is
+        // write-only at firmware level (no :GX98), so driver settings are
+        // authoritative and re-applied on every connect.
+        public static string PreferredPierSide { get => Get("PreferredPierSide", "B"); set => Set("PreferredPierSide", value); }
+        public static bool   PauseAtHomeOnFlip { get => GetBool("PauseAtHomeOnFlip", false); set => SetBool("PauseAtHomeOnFlip", value); }
+
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
