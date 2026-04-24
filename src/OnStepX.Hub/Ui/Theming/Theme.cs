@@ -144,16 +144,15 @@ namespace ASCOM.OnStepX.Ui.Theming
             BtnBgHover       = Hex("#e8ebf0"),
             BtnBgActive      = Hex("#dde1e7"),
             Chip             = Hex("#eef1f5"),
-            // Console stays dark even in light mode per design
-            ConsoleBg        = Hex("#0f1218"),
-            ConsoleLine      = Hex("#161a23"),
+            ConsoleBg        = Hex("#f5f7fa"),
+            ConsoleLine      = Hex("#e6eaef"),
             ScrollTrack      = Hex("#e3e6eb"),
             ScrollThumb      = Hex("#b6bcc6"),
             ScrollThumbHover = Hex("#9aa2ad"),
-            ColTs            = Hex("#6b98e0"),
-            ColCmd           = Hex("#e8b86d"),
-            ColResp          = Hex("#8bd0a0"),
-            ColMeta          = Hex("#8a94a3"),
+            ColTs            = Hex("#2b5aaa"),
+            ColCmd           = Hex("#9a5f00"),
+            ColResp          = Hex("#1d7a44"),
+            ColMeta          = Hex("#5a626c"),
         };
     }
 }

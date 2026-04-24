@@ -985,7 +985,7 @@ namespace ASCOM.OnStepX.Ui
         }
 
         private static SectionPanel NewGroup(string title, int w, int h)
-            => new SectionPanel { Title = title, Width = w, Height = h + 18, Margin = new Padding(0, 0, 0, 8) };
+            => new SectionPanel { Title = title, Width = w, Height = h + 42, Margin = new Padding(0, 0, 0, 8) };
 
         private static string GetVersionString()
         {
@@ -1113,19 +1113,19 @@ namespace ASCOM.OnStepX.Ui
             ioPane.Dock = DockStyle.Fill;
 
             var header = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = Color.Transparent };
-            _consoleToggle = new ThemedCheckBox { Text = "Show console", Left = 0, Top = 8, Width = 110, Checked = true };
+            _consoleToggle = new ThemedCheckBox { Text = "Show console", Left = 0, Top = 8, Width = 130, Checked = true };
             _consoleToggle.CheckedChanged += (s, e) => ApplyConsoleVisibility();
-            var cmdLabel = new Label { Text = "Manual cmd:", Left = 120, Top = 10, Width = 80, BackColor = Color.Transparent, ForeColor = Theme.P.Text };
-            _cmdInput = new TextBox { Left = 205, Top = 6, Width = 260, Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle,
+            var cmdLabel = new Label { Text = "Manual cmd:", Left = 136, Top = 10, Width = 80, BackColor = Color.Transparent, ForeColor = Theme.P.Text };
+            _cmdInput = new TextBox { Left = 218, Top = 6, Width = 256, Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Theme.P.InputBg, ForeColor = Theme.P.Text };
             _cmdInput.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter) { SendManualCommand(); e.Handled = true; e.SuppressKeyPress = true; }
             };
-            _cmdSendBtn = new FlatButton { Text = "Send", Left = 470, Top = 4, Width = 70, Height = 26 };
+            _cmdSendBtn = new FlatButton { Text = "Send", Left = 478, Top = 4, Width = 70, Height = 26 };
             ((FlatButton)_cmdSendBtn).Kind = FlatButton.Variant.Primary;
             _cmdSendBtn.Click += (s, e) => SendManualCommand();
-            var hint = new Label { Text = "(e.g. :GVP#  — leading ':' and trailing '#' auto-added)", Left = 550, Top = 10, Width = 350, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent };
+            var hint = new Label { Text = "(e.g. :GVP#  — leading ':' and trailing '#' auto-added)", Left = 556, Top = 10, Width = 350, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent };
             header.Controls.Add(_consoleToggle);
             header.Controls.Add(cmdLabel);
             header.Controls.Add(_cmdInput);
@@ -1200,9 +1200,9 @@ namespace ASCOM.OnStepX.Ui
             // filter field with its own clear button. Separated rows so Clear/Copy
             // on row 1 can't be mistaken for filter controls.
             var header = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = Theme.P.ConsoleLine, Padding = new Padding(8, 4, 8, 4) };
-            var title = new Label { Text = "CONSOLE", Left = 0, Top = 8, Width = 80, Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
-            _ioEnable = new ThemedCheckBox { Text = "Enabled", Left = 85, Top = 8, Width = 75, Checked = true };
-            _ioAutoScroll = new ThemedCheckBox { Text = "Auto-scroll", Left = 165, Top = 8, Width = 95, Checked = true };
+            var title = new Label { Text = "CONSOLE", Left = 8, Top = 8, Width = 80, Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
+            _ioEnable = new ThemedCheckBox { Text = "Enabled", Left = 94, Top = 8, Width = 80, Checked = true };
+            _ioAutoScroll = new ThemedCheckBox { Text = "Auto-scroll", Left = 180, Top = 8, Width = 110, Checked = true };
             _ioAutoScroll.CheckedChanged += (s, e) =>
             {
                 if (_ioAutoScroll.Checked && _ioBox != null)
@@ -1211,15 +1211,15 @@ namespace ASCOM.OnStepX.Ui
                     _ioBox.ScrollToCaret();
                 }
             };
-            var clearBtn = new FlatButton { Text = "Clear", Left = 525, Top = 4, Width = 70, Height = 24, Sz = FlatButton.ButtonSize.Small };
-            var copyBtn  = new FlatButton { Text = "Copy",  Left = 600, Top = 4, Width = 70, Height = 24, Sz = FlatButton.ButtonSize.Small };
+            var clearBtn = new FlatButton { Text = "Clear", Left = 540, Top = 4, Width = 70, Height = 24, Sz = FlatButton.ButtonSize.Small };
+            var copyBtn  = new FlatButton { Text = "Copy",  Left = 616, Top = 4, Width = 70, Height = 24, Sz = FlatButton.ButtonSize.Small };
             clearBtn.Click += (s, e) => { _ioBox.Clear(); _ioAll.Clear(); while (_ioPending.TryDequeue(out _)) { } };
             copyBtn.Click  += (s, e) => { try { if (!string.IsNullOrEmpty(_ioBox.Text)) Clipboard.SetText(_ioBox.Text); } catch { } };
 
-            var filterLabel = new Label { Text = "Filter:", Left = 0, Top = 34, Width = 40, ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
-            _ioFilter = new TextBox { Left = 40, Top = 30, Width = 555, Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.P.InputBg, ForeColor = Theme.P.Text };
+            var filterLabel = new Label { Text = "Filter:", Left = 8, Top = 36, Width = 46, ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
+            _ioFilter = new TextBox { Left = 56, Top = 31, Width = 546, Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.P.InputBg, ForeColor = Theme.P.Text };
             _ioFilter.TextChanged += (s, e) => RebuildIoView();
-            var filterClearBtn = new FlatButton { Text = "Clear filter", Left = 600, Top = 28, Width = 90, Height = 24, Sz = FlatButton.ButtonSize.Small };
+            var filterClearBtn = new FlatButton { Text = "Clear filter", Left = 608, Top = 29, Width = 90, Height = 24, Sz = FlatButton.ButtonSize.Small };
             filterClearBtn.Click += (s, e) => { _ioFilter.Clear(); _ioFilter.Focus(); };
 
             header.Controls.Add(title);
@@ -1234,6 +1234,17 @@ namespace ASCOM.OnStepX.Ui
             _ioBox = new ConsoleLogBox { Dock = DockStyle.Fill, Font = new Font("Consolas", 9f) };
             pane.Controls.Add(_ioBox);
             pane.Controls.Add(header);
+
+            Theme.Changed += (s, e) =>
+            {
+                pane.BackColor = Theme.P.ConsoleBg;
+                header.BackColor = Theme.P.ConsoleLine;
+                title.ForeColor = Theme.P.TextDim;
+                filterLabel.ForeColor = Theme.P.TextDim;
+                _ioFilter.BackColor = Theme.P.InputBg;
+                _ioFilter.ForeColor = Theme.P.Text;
+            };
+
             return pane;
         }
 

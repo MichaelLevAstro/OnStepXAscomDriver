@@ -22,9 +22,19 @@ namespace ASCOM.OnStepX.Ui.Theming
         public static void Apply(Control c)
         {
             if (c == null) return;
-            void apply() { try { SetWindowTheme(c.Handle, "DarkMode_Explorer", null); } catch { } }
-            if (c.IsHandleCreated) apply();
-            c.HandleCreated += (s, e) => apply();
+            void applyNow()
+            {
+                try
+                {
+                    string app = Theme.Mode == ThemeMode.Dark ? "DarkMode_Explorer" : "";
+                    SetWindowTheme(c.Handle, app, null);
+                    c.Invalidate();
+                }
+                catch { }
+            }
+            if (c.IsHandleCreated) applyNow();
+            c.HandleCreated += (s, e) => applyNow();
+            Theme.Changed += (s, e) => { try { if (c.IsHandleCreated && !c.IsDisposed) applyNow(); } catch { } };
         }
     }
 
