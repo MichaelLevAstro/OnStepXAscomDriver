@@ -491,16 +491,18 @@ namespace ASCOM.OnStepX.Ui
             _transportKind.Items.AddRange(new object[] { "Serial", "TCP" });
             _portCombo = new ComboBox { Left = 110, Top = 58, Width = 100 };
             _portCombo.Items.AddRange(System.IO.Ports.SerialPort.GetPortNames());
-            _baudBox = new NumericUpDown { Left = 260, Top = 58, Width = 90, Minimum = 1200, Maximum = 460800, Increment = 1200 };
+            _baudBox = new NumericUpDown { Left = 272, Top = 58, Width = 90, Minimum = 1200, Maximum = 460800, Increment = 1200 };
             _hostBox = new TextBox { Left = 110, Top = 92, Width = 170 };
             _tcpPortBox = new NumericUpDown { Left = 290, Top = 92, Width = 60, Minimum = 1, Maximum = 65535 };
-            _autoDetectBtn = new FlatButton { Text = "Auto-Detect", Left = 110, Top = 122, Width = 110 };
-            _connectBtn = new FlatButton { Text = "Connect", Left = 228, Top = 122, Width = 90 };
-            _disconnectBtn = new FlatButton { Text = "Disconnect", Left = 326, Top = 122, Width = 100 };
+            _autoDetectBtn = new FlatButton { Text = "Auto-Detect", Left = 10, Top = 122, Width = 110 };
+            _connectBtn = new FlatButton { Text = "Connect", Left = 128, Top = 122, Width = 90 };
+            _disconnectBtn = new FlatButton { Text = "Disconnect", Left = 226, Top = 122, Width = 100 };
             ((FlatButton)_disconnectBtn).Kind = FlatButton.Variant.Primary;
-            _statusLed = new StatusLabel { Left = 10, Top = 122, Width = 100, Height = 24 };
+            _statusLed = new StatusLabel { Width = 170, Height = 28 };
+            _statusLed.LabelFont = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             _statusLed.Kind = PulseDot.StatusKind.Err;
             _statusLed.Text = "Disconnected";
+            g.HeaderRight = _statusLed;
             _autoConnectCheck = new ThemedCheckBox {
                 Text = "Auto-connect to saved port on open", Left = 10, Top = 156, Width = 320,
                 Checked = DriverSettings.AutoConnect
@@ -515,7 +517,7 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_transportKind);
             g.Controls.Add(new Label { Text = "COM port:", Left = 10, Top = 62, Width = 100 });
             g.Controls.Add(_portCombo);
-            g.Controls.Add(new Label { Text = "Baud:", Left = 220, Top = 62, Width = 40 });
+            g.Controls.Add(new Label { Text = "Baud:", Left = 220, Top = 62, Width = 50 });
             g.Controls.Add(_baudBox);
             g.Controls.Add(new Label { Text = "TCP host/port:", Left = 10, Top = 96, Width = 100 });
             g.Controls.Add(_hostBox);
@@ -523,7 +525,6 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_autoDetectBtn);
             g.Controls.Add(_connectBtn);
             g.Controls.Add(_disconnectBtn);
-            g.Controls.Add(_statusLed);
             g.Controls.Add(_autoConnectCheck);
 
             _connectionControls.Add(_transportKind);

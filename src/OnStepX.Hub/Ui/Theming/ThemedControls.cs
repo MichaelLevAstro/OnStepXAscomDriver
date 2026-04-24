@@ -327,6 +327,7 @@ namespace ASCOM.OnStepX.Ui.Theming
             {
                 _headerRightHost = HeaderRight;
                 HeaderRight.Parent = _header;
+                HeaderRight.BringToFront();
                 HeaderRight.Anchor = AnchorStyles.Top | AnchorStyles.Right;
                 PositionHeaderRight();
             }
@@ -542,6 +543,12 @@ namespace ASCOM.OnStepX.Ui.Theming
         }
 
         public bool Pulsing { get => _dot.Pulsing; set => _dot.Pulsing = value; }
+
+        public Font LabelFont
+        {
+            get => _text?.Font;
+            set { if (_text != null) _text.Font = value; }
+        }
 
         public override string Text
         {
