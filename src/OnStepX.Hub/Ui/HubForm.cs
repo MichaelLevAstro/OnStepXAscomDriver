@@ -1,11 +1,13 @@
 using System;
 using System.Drawing;
 using System.Globalization;
+using System.Reflection;
 using System.Windows.Forms;
 using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.State;
 using ASCOM.OnStepX.Hardware.Transport;
+using ASCOM.OnStepX.Ui.Theming;
 
 namespace ASCOM.OnStepX.Ui
 {
@@ -24,7 +26,11 @@ namespace ASCOM.OnStepX.Ui
         private TextBox _hostBox;
         private NumericUpDown _baudBox, _tcpPortBox;
         private Button _autoDetectBtn, _connectBtn, _disconnectBtn;
-        private Label _statusLed, _stateLabel, _clientsLabel;
+        private StatusLabel _statusLed;
+        private StatusLabel _stateLabel;
+        private SlewingBadge _slewingBadge;
+        private Label _clientsLabel;
+        private StatusLabel _clientsStatus;
 
         private RichTextBox _ioBox;
         private CheckBox _ioEnable;
@@ -89,12 +95,17 @@ namespace ASCOM.OnStepX.Ui
 
         public HubForm()
         {
-            Text = "OnStepX ASCOM Driver";
+            Text = "OnStepX ASCOM Driver \u00B7 " + GetVersionString();
             MinimumSize = new Size(1000, 900);
             StartPosition = FormStartPosition.CenterScreen;
             Icon = AppIcons.App;
+            BackColor = Theme.P.Bg;
+            Font = new Font("Segoe UI", 8.75f);
+            ForeColor = Theme.P.Text;
+            Theme.Changed += (s, e) => ApplyFormTheme();
             BuildUi();
             LoadFromSettings();
+            ApplyFormTheme();
 
             _uiTimer.Tick += (s, e) => { RefreshStatus(); DrainIo(); TickLocalTime(); };
             _uiTimer.Start();
@@ -393,6 +404,7 @@ namespace ASCOM.OnStepX.Ui
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
             Controls.Add(root);
             Controls.Add(BuildLogPanel());
+            Controls.Add(BuildAppHeader());
 
             // NoAutoScrollFlowPanel suppresses ScrollControlIntoView so clicking
             // a button or focusing a nested control doesn't snap the panel's
@@ -424,11 +436,14 @@ namespace ASCOM.OnStepX.Ui
             _baudBox = new NumericUpDown { Left = 260, Top = 58, Width = 90, Minimum = 1200, Maximum = 460800, Increment = 1200 };
             _hostBox = new TextBox { Left = 110, Top = 92, Width = 170 };
             _tcpPortBox = new NumericUpDown { Left = 290, Top = 92, Width = 60, Minimum = 1, Maximum = 65535 };
-            _autoDetectBtn = new Button { Text = "Auto-Detect", Left = 110, Top = 122, Width = 110 };
-            _connectBtn = new Button { Text = "Connect", Left = 228, Top = 122, Width = 90 };
-            _disconnectBtn = new Button { Text = "Disconnect", Left = 326, Top = 122, Width = 100 };
-            _statusLed = new Label { Text = "Disconnected", Left = 10, Top = 125, Width = 95, ForeColor = Color.DarkRed, Font = new Font(Font, FontStyle.Bold) };
-            _autoConnectCheck = new CheckBox {
+            _autoDetectBtn = new FlatButton { Text = "Auto-Detect", Left = 110, Top = 122, Width = 110 };
+            _connectBtn = new FlatButton { Text = "Connect", Left = 228, Top = 122, Width = 90 };
+            _disconnectBtn = new FlatButton { Text = "Disconnect", Left = 326, Top = 122, Width = 100 };
+            ((FlatButton)_disconnectBtn).Kind = FlatButton.Variant.Primary;
+            _statusLed = new StatusLabel { Left = 10, Top = 122, Width = 100, Height = 24 };
+            _statusLed.Kind = PulseDot.StatusKind.Err;
+            _statusLed.Text = "Disconnected";
+            _autoConnectCheck = new ThemedCheckBox {
                 Text = "Auto-connect to saved port on open", Left = 10, Top = 156, Width = 320,
                 Checked = DriverSettings.AutoConnect
             };
@@ -469,9 +484,9 @@ namespace ASCOM.OnStepX.Ui
             _latBox = new TextBox { Left = 110, Top = 26, Width = 220 };
             _lonBox = new TextBox { Left = 110, Top = 54, Width = 220 };
             _eleBox = new TextBox { Left = 110, Top = 82, Width = 120 };
-            _siteSyncPcBtn = new Button { Text = "Sync from PC location", Left = 10, Top = 118, Width = 160 };
-            _siteWriteBtn  = new Button { Text = "Upload",               Left = 180, Top = 118, Width = 160 };
-            _sitesBtn      = new Button { Text = "Sites...",             Left = 350, Top = 118, Width = 80  };
+            _siteSyncPcBtn = new FlatButton { Text = "Sync from PC location", Left = 10, Top = 118, Width = 160 };
+            _siteWriteBtn  = new FlatButton { Text = "Upload",               Left = 180, Top = 118, Width = 160 };
+            _sitesBtn      = new FlatButton { Text = "Sites...",             Left = 350, Top = 118, Width = 80  };
             _siteSyncPcBtn.Click += (s, e) => DoSyncLocationFromPc();
             _siteWriteBtn.Click  += (s, e) => DoWriteSite();
             _sitesBtn.Click      += (s, e) => OpenSitesManager();
@@ -524,11 +539,11 @@ namespace ASCOM.OnStepX.Ui
             // convention. UI stays in the intuitive civil sign so users don't have to
             // second-guess.
             _utcOffsetBox = new NumericUpDown { Left = 110, Top = 54, Width = 80, Minimum = -14, Maximum = 14, DecimalPlaces = 1, Increment = 0.5M };
-            _syncFromPcBtn = new Button { Text = "Sync from PC", Left = 210, Top = 52, Width = 140 };
+            _syncFromPcBtn = new FlatButton { Text = "Sync from PC", Left = 210, Top = 52, Width = 140 };
             _syncFromPcBtn.Click += (s, e) => DoSyncTime();
-            _setDateTimeBtn = new Button { Text = "Upload", Left = 110, Top = 84, Width = 240 };
+            _setDateTimeBtn = new FlatButton { Text = "Upload", Left = 110, Top = 84, Width = 240 };
             _setDateTimeBtn.Click += (s, e) => DoWriteDateTime();
-            _autoSyncTimeCheck = new CheckBox {
+            _autoSyncTimeCheck = new ThemedCheckBox {
                 Text = "Auto-sync date/time from PC on connect", Left = 10, Top = 116, Width = 340,
                 Checked = DriverSettings.AutoSyncTimeOnConnect
             };
@@ -553,7 +568,7 @@ namespace ASCOM.OnStepX.Ui
         private GroupBox BuildTrackingGroup()
         {
             var g = NewGroup("Tracking / Slew", 440, 175);
-            _trackingCheck = new CheckBox { Text = "Tracking enabled", Left = 10, Top = 26, Width = 160 };
+            _trackingCheck = new ThemedCheckBox { Text = "Tracking enabled", Left = 10, Top = 26, Width = 160 };
             _trackingCheck.CheckedChanged += (s, e) =>
             {
                 if (_suppressTrackingCheckEvent || !_hubConnected) return;
@@ -582,7 +597,10 @@ namespace ASCOM.OnStepX.Ui
                     CopyableMessage.Show(this, "Tracking", "Tracking command failed:\r\n\r\n" + ex.ToString());
                 }
             };
-            _stateLabel = new Label { Text = "State: —", Left = 180, Top = 28, Width = 170, Font = new Font(Font, FontStyle.Bold) };
+            _stateLabel = new StatusLabel { Left = 180, Top = 24, Width = 170, Height = 22 };
+            _stateLabel.Kind = PulseDot.StatusKind.Neutral;
+            _stateLabel.Text = "State: —";
+            _slewingBadge = new SlewingBadge { Left = 180, Top = 24, Width = 170, Height = 22, Visible = false };
 
             _trackingModeBox = new ComboBox { Left = 110, Top = 58, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
             _trackingModeBox.Items.AddRange(new object[] { "Sidereal", "Lunar", "Solar", "King" });
@@ -637,11 +655,12 @@ namespace ASCOM.OnStepX.Ui
             // belong on the main form (preferred pier side, pause-at-home). Always
             // enabled — the dialog itself gates mount writes on _hubConnected and
             // still lets users edit persisted settings while offline.
-            _advancedBtn = new Button { Text = "Advanced...", Left = 280, Top = 125, Width = 100 };
+            _advancedBtn = new FlatButton { Text = "Advanced...", Left = 280, Top = 125, Width = 100 };
             _advancedBtn.Click += (s, e) => OpenAdvancedSettings();
 
             g.Controls.Add(_trackingCheck);
             g.Controls.Add(_stateLabel);
+            g.Controls.Add(_slewingBadge);
             g.Controls.Add(new Label { Text = "Tracking rate:", Left = 10, Top = 62, Width = 100 });
             g.Controls.Add(_trackingModeBox);
             g.Controls.Add(new Label { Text = "Guide rate (× sid):", Left = 10, Top = 96, Width = 100 });
@@ -686,7 +705,7 @@ namespace ASCOM.OnStepX.Ui
             // conceptually a safety limit on the sync operation.
             _syncLimitBox = new NumericUpDown { Left = 110, Top = 86, Width = 60, Minimum = 0, Maximum = 180, Value = 0 };
             _syncLimitBox.ValueChanged += (s, e) => DriverSettings.SyncLimitDeg = (int)_syncLimitBox.Value;
-            _limitsWriteBtn = new Button { Text = "Upload", Left = 230, Top = 116, Width = 100 };
+            _limitsWriteBtn = new FlatButton { Text = "Upload", Left = 230, Top = 116, Width = 100 };
             _limitsWriteBtn.Click += (s, e) => DoWriteLimits();
             g.Controls.Add(new Label { Text = "Horizon (°):", Left = 10, Top = 30, Width = 100 });
             g.Controls.Add(_horizonLimitBox);
@@ -766,21 +785,22 @@ namespace ASCOM.OnStepX.Ui
         private GroupBox BuildParkHomeGroup()
         {
             var g = NewGroup("Park / Home / Go To", 360, 140);
-            _parkBtn = new Button { Text = "Park", Left = 10, Top = 26, Width = 80 };
-            _unparkBtn = new Button { Text = "Unpark", Left = 100, Top = 26, Width = 80 };
+            _parkBtn = new FlatButton { Text = "Park", Left = 10, Top = 26, Width = 80 };
+            _unparkBtn = new FlatButton { Text = "Unpark", Left = 100, Top = 26, Width = 80 };
             // :hF# per OnStep command reference resets the telescope's home
             // reference to the current axes (mount must be physically at home).
             // Mirrors the "Set Home" action in the OnStepX web UI.
-            _findHomeBtn = new Button { Text = "Set Home", Left = 190, Top = 26, Width = 100 };
-            _goHomeBtn = new Button { Text = "Go Home", Left = 10, Top = 60, Width = 110 };
+            _findHomeBtn = new FlatButton { Text = "Set Home", Left = 190, Top = 26, Width = 100 };
+            _goHomeBtn = new FlatButton { Text = "Go Home", Left = 10, Top = 60, Width = 110 };
             // NOTE: this button sends :hQ# which sets the PARK position at the
             // current axes. It does NOT redefine the mount's home reference —
             // LX200 has no standard "set current as home" command; that calibration
             // is done via the OnStepX web UI / SHC. Previously mislabeled
             // "Reset Home (here)", which caused users to think GoHome would return
             // to this position (it does not, which surfaced as a park-vs-home offset).
-            _resetHomeBtn = new Button { Text = "Set Park Here", Left = 130, Top = 60, Width = 160 };
-            _slewTargetBtn = new Button { Text = "Slew to Target...", Left = 10, Top = 94, Width = 200 };
+            _resetHomeBtn = new FlatButton { Text = "Set Park Here", Left = 130, Top = 60, Width = 160 };
+            _slewTargetBtn = new FlatButton { Text = "Slew to Target...", Left = 10, Top = 94, Width = 200 };
+            ((FlatButton)_slewTargetBtn).Kind = FlatButton.Variant.Primary;
             _parkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Park", _mount.Protocol.Park()));
             _unparkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Unpark", _mount.Protocol.Unpark()));
             _findHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.FindHome());
@@ -817,14 +837,216 @@ namespace ASCOM.OnStepX.Ui
 
         private Panel BuildFooter()
         {
-            var p = new Panel { Width = 360, Height = 30 };
-            _clientsLabel = new Label { Left = 0, Top = 8, Width = 360, Text = "Connected clients: 0", Font = new Font(Font, FontStyle.Bold) };
-            p.Controls.Add(_clientsLabel);
+            var p = new Panel { Width = 360, Height = 30, BackColor = Color.Transparent };
+            _clientsStatus = new StatusLabel { Left = 0, Top = 4, Width = 360, Height = 22 };
+            _clientsStatus.Kind = PulseDot.StatusKind.Info;
+            _clientsStatus.Pulsing = false;
+            _clientsStatus.Text = "Connected clients: 0";
+            _clientsLabel = null;
+            p.Controls.Add(_clientsStatus);
             return p;
         }
 
-        private static GroupBox NewGroup(string title, int w, int h)
-            => new CollapsibleGroupBox { Text = title, Width = w, Height = h, Margin = new Padding(0, 0, 0, 8) };
+        private Panel BuildAppHeader()
+        {
+            var header = new Panel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(12, 6, 10, 6) };
+            header.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                var p = Theme.P;
+                using (var br = new SolidBrush(p.Panel))
+                    g.FillRectangle(br, header.ClientRectangle);
+                using (var pen = new Pen(p.Border, 1))
+                    g.DrawLine(pen, 0, header.Height - 1, header.Width, header.Height - 1);
+            };
+
+            var logo = new AccentGlyph { Left = 12, Top = 11, Width = 20, Height = 20 };
+
+            var title = new Label
+            {
+                Left = 38, Top = 10, AutoSize = true, BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 10f, FontStyle.Regular),
+                Text = "OnStepX ASCOM Driver",
+            };
+            var versionLbl = new Label
+            {
+                Left = title.Left + 180, Top = 12, AutoSize = true, BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 9f, FontStyle.Regular),
+                Text = "\u00B7 " + GetVersionString(),
+            };
+            title.Paint += (s, e) => versionLbl.Left = title.Right + 4;
+
+            var toggle = new ThemeToggle
+            {
+                Width = 62, Height = 28, Top = 7, Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            };
+            toggle.Left = header.Width - toggle.Width - 10;
+            header.Resize += (s, e) => toggle.Left = header.Width - toggle.Width - 10;
+
+            header.Controls.Add(logo);
+            header.Controls.Add(title);
+            header.Controls.Add(versionLbl);
+            header.Controls.Add(toggle);
+            return header;
+        }
+
+        // Small telescope glyph in the app header, tinted with the accent color.
+        private sealed class AccentGlyph : Control
+        {
+            public AccentGlyph()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint
+                       | ControlStyles.OptimizedDoubleBuffer
+                       | ControlStyles.ResizeRedraw
+                       | ControlStyles.UserPaint
+                       | ControlStyles.SupportsTransparentBackColor, true);
+                BackColor = Color.Transparent;
+                Theme.Changed += (s, e) => Invalidate();
+            }
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                var p = Theme.P;
+                using (var pen = new Pen(p.Accent, 1.6f)
+                {
+                    StartCap = System.Drawing.Drawing2D.LineCap.Round,
+                    EndCap = System.Drawing.Drawing2D.LineCap.Round,
+                    LineJoin = System.Drawing.Drawing2D.LineJoin.Round,
+                })
+                {
+                    // stylised telescope: eyepiece tube + mount arm
+                    float s = Math.Min(Width, Height) / 24f;
+                    float cx = Width / 2f, cy = Height / 2f;
+                    PointF P(float x, float y) => new PointF(cx + (x - 12) * s, cy + (y - 12) * s);
+                    g.DrawLines(pen, new[] { P(3, 14), P(11, 11), P(14, 19), P(6, 22), P(3, 14) });
+                    g.DrawLine(pen, P(11, 11).X, P(11, 11).Y, P(19, 8).X, P(19, 8).Y);
+                    g.DrawLine(pen, P(15, 3).X, P(15, 3).Y, P(18, 11).X, P(18, 11).Y);
+                    g.DrawLine(pen, P(9, 20).X, P(9, 20).Y, P(11, 19).X, P(11, 19).Y);
+                    g.DrawLine(pen, P(13, 22).X, P(13, 22).Y, P(15, 18).X, P(15, 18).Y);
+                }
+            }
+        }
+
+        private static SectionPanel NewGroup(string title, int w, int h)
+            => new SectionPanel { Title = title, Width = w, Height = h + 18, Margin = new Padding(0, 0, 0, 8) };
+
+        private static string GetVersionString()
+        {
+            try
+            {
+                var v = Assembly.GetExecutingAssembly().GetName().Version;
+                if (v == null) return "v0.0.0";
+                return "v" + v.Major + "." + v.Minor + "." + v.Build;
+            }
+            catch { return "v0.0.0"; }
+        }
+
+        // Walk the form tree and set BackColor/ForeColor per palette; certain native
+        // controls (ComboBox, NumericUpDown, DateTimePicker, TrackBar) don't support
+        // full dark theming — we still set reasonable colors on them.
+        private void ApplyFormTheme()
+        {
+            var p = Theme.P;
+            BackColor = p.Bg;
+            ForeColor = p.Text;
+            ApplyThemeRecursive(this, p);
+            Invalidate(true);
+        }
+
+        private static void ApplyThemeRecursive(Control parent, ThemePalette p)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is SectionPanel sp)
+                {
+                    sp.BackColor = p.Panel2;
+                }
+                else if (c is FlatButton) { /* self-themed */ }
+                else if (c is ThemedCheckBox cbt)
+                {
+                    cbt.BackColor = Color.Transparent;
+                    cbt.ForeColor = p.Text;
+                }
+                else if (c is StatusLabel) { /* self-themed */ }
+                else if (c is SlewingBadge) { /* self-themed */ }
+                else if (c is PulseDot) { /* self-themed */ }
+                else if (c is ConsoleLogBox) { /* self-themed */ }
+                else if (c is DarkTextBox) { /* self-themed */ }
+                else if (c is TextBox tb)
+                {
+                    tb.BackColor = p.InputBg;
+                    tb.ForeColor = p.Text;
+                    tb.BorderStyle = BorderStyle.FixedSingle;
+                }
+                else if (c is ComboBox cb)
+                {
+                    cb.FlatStyle = FlatStyle.Flat;
+                    cb.BackColor = p.InputBg;
+                    cb.ForeColor = p.Text;
+                }
+                else if (c is NumericUpDown nud)
+                {
+                    nud.BackColor = p.InputBg;
+                    nud.ForeColor = p.Text;
+                    nud.BorderStyle = BorderStyle.FixedSingle;
+                }
+                else if (c is DateTimePicker dtp)
+                {
+                    dtp.CalendarForeColor = p.Text;
+                    dtp.CalendarMonthBackground = p.Panel;
+                    dtp.CalendarTitleBackColor = p.Panel2;
+                    dtp.CalendarTitleForeColor = p.Text;
+                    dtp.CalendarTrailingForeColor = p.TextFaint;
+                }
+                else if (c is TrackBar tbar)
+                {
+                    tbar.BackColor = p.Panel2;
+                }
+                else if (c is RichTextBox rtb)
+                {
+                    rtb.BackColor = p.ConsoleBg;
+                    rtb.ForeColor = p.Text;
+                }
+                else if (c is ListView lv)
+                {
+                    lv.BackColor = p.Panel;
+                    lv.ForeColor = p.Text;
+                }
+                else if (c is GroupBox gb)
+                {
+                    gb.BackColor = p.Panel2;
+                    gb.ForeColor = p.Text;
+                }
+                else if (c is Button b)
+                {
+                    b.FlatStyle = FlatStyle.Flat;
+                    b.FlatAppearance.BorderColor = p.InputBorder;
+                    b.BackColor = p.BtnBg;
+                    b.ForeColor = p.Text;
+                }
+                else if (c is CheckBox chk)
+                {
+                    chk.BackColor = Color.Transparent;
+                    chk.ForeColor = p.Text;
+                }
+                else if (c is Label lb)
+                {
+                    // Grey-ish labels keep a muted color; regular labels stay readable.
+                    if (lb.ForeColor == SystemColors.GrayText || lb.ForeColor == Color.DimGray)
+                        lb.ForeColor = p.TextFaint;
+                    else
+                        lb.ForeColor = p.Text;
+                    lb.BackColor = Color.Transparent;
+                }
+                else if (c is Panel)
+                {
+                    // Leave panel backgrounds alone unless they explicitly tag themselves.
+                }
+
+                if (c.HasChildren) ApplyThemeRecursive(c, p);
+            }
+        }
 
         private Panel BuildLogPanel()
         {
@@ -1253,7 +1475,9 @@ namespace ASCOM.OnStepX.Ui
             switch (s)
             {
                 case ConnState.Disconnected:
-                    _statusLed.Text = "Disconnected"; _statusLed.ForeColor = Color.DarkRed;
+                    _statusLed.Text = "Disconnected";
+                    _statusLed.Kind = PulseDot.StatusKind.Err;
+                    _statusLed.Pulsing = false;
                     _connectBtn.Enabled = true;
                     _disconnectBtn.Enabled = false;
                     foreach (var c in _connectionControls) c.Enabled = true;
@@ -1263,7 +1487,9 @@ namespace ASCOM.OnStepX.Ui
                     if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
                     break;
                 case ConnState.Connecting:
-                    _statusLed.Text = "Connecting..."; _statusLed.ForeColor = Color.DarkOrange;
+                    _statusLed.Text = "Connecting...";
+                    _statusLed.Kind = PulseDot.StatusKind.Warn;
+                    _statusLed.Pulsing = false;
                     _connectBtn.Enabled = false;
                     _disconnectBtn.Enabled = false;
                     foreach (var c in _connectionControls) c.Enabled = false;
@@ -1273,7 +1499,9 @@ namespace ASCOM.OnStepX.Ui
                     if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
                     break;
                 case ConnState.Connected:
-                    _statusLed.Text = "Connected"; _statusLed.ForeColor = Color.ForestGreen;
+                    _statusLed.Text = "Connected";
+                    _statusLed.Kind = PulseDot.StatusKind.Ok;
+                    _statusLed.Pulsing = true;
                     _connectBtn.Enabled = false;
                     _disconnectBtn.Enabled = true;
                     foreach (var c in _connectionControls) c.Enabled = false;

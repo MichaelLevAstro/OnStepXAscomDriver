@@ -47,6 +47,9 @@ namespace ASCOM.OnStepX.Config
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
+        // "dark" or "light". Default dark per redesign.
+        public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
+
         private static string Get(string name, string def)
         {
             using (var k = Registry.CurrentUser.CreateSubKey(RegPath))
