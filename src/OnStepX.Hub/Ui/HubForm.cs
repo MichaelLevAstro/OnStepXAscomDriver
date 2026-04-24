@@ -73,6 +73,7 @@ namespace ASCOM.OnStepX.Ui
         private TrackBar _slewSpeedSlider;
         private bool _suppressSlewSyncEvent;
         private ComboBox _meridianActionBox;
+        private bool _suppressMeridianActionEvent;
         private FlatButton _advancedBtn;
 
         private NumericUpDown _horizonLimitBox, _overheadLimitBox;
@@ -706,7 +707,7 @@ namespace ASCOM.OnStepX.Ui
 
             _meridianActionBox = new ComboBox { Left = 110, Top = 126, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
             _meridianActionBox.Items.AddRange(new object[] { "Auto Flip", "Stop at Meridian" });
-            _meridianActionBox.SelectedIndexChanged += (s, e) => { if (_hubConnected) _mount.Protocol.SetMeridianAutoFlip(_meridianActionBox.SelectedIndex == 0); };
+            _meridianActionBox.SelectedIndexChanged += (s, e) => { if (_hubConnected && !_suppressMeridianActionEvent) _mount.Protocol.SetMeridianAutoFlip(_meridianActionBox.SelectedIndex == 0); };
 
             // Advanced button exposes runtime-settable OnStepX options that don't
             // belong on the main form (preferred pier side, pause-at-home). Always
@@ -1353,6 +1354,14 @@ namespace ASCOM.OnStepX.Ui
                             catch (Exception syncEx) { TransportLogger.Note("Auto-sync time failed: " + syncEx.Message); }
                         }
                         ReapplyAdvancedSettingsOnConnect();
+                        try
+                        {
+                            bool autoFlip = _mount.Protocol.GetMeridianAutoFlip();
+                            _suppressMeridianActionEvent = true;
+                            try { _meridianActionBox.SelectedIndex = autoFlip ? 0 : 1; }
+                            finally { _suppressMeridianActionEvent = false; }
+                        }
+                        catch (Exception mex) { TransportLogger.Note("Meridian flip readback failed: " + mex.Message); }
                     }));
                 }
                 catch { }

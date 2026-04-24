@@ -208,7 +208,7 @@ namespace ASCOM.OnStepX.Ui.Theming
             if (!enabled)
             {
                 bg = Color.FromArgb(115, bg);
-                fg = Color.FromArgb(115, fg);
+                fg = p.TextFaint;
             }
 
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
