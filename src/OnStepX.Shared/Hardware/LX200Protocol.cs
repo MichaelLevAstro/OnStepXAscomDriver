@@ -247,9 +247,47 @@ namespace ASCOM.OnStepX.Hardware
         // ---------- Slew rate query ----------
         // Returns mount's configured max move-axis slew rate in deg/sec, or 0 if the
         // firmware doesn't support the query (pre-OnStepX or older builds).
-        public double GetMaxSlewRateDegPerSec()
+        // Slew rate is expressed in firmware as microseconds per motor step.
+        // Rate is inversely proportional: rate_deg_s ∝ 1 / us_per_step.
+        //   :GX92#  current us/step (settings.usPerStepCurrent)
+        //   :GX93#  base    us/step (usPerStepBase, derived from SLEW_RATE_BASE_DESIRED)
+        //   :GX97#  current step rate in deg/s
+        //   :GX99#  fastest us/step (mechanical lower limit)
+        // Set via :SX92,<us>#  — firmware clamps to [base/2, base*2] ∩ ≥ lower limit.
+        public double GetUsPerStepCurrent() => ParseDouble(_transport.SendAndReceive(":GX92#"));
+        public double GetUsPerStepBase()    => ParseDouble(_transport.SendAndReceive(":GX93#"));
+        // :GX97# occasionally returns the product name ("On-Step#") on the first call
+        // after a cold boot — likely a firmware quirk where a pending :GVP# reply gets
+        // flushed into the next read. Retry until a numeric reply comes back. Safety
+        // cap prevents hang if firmware genuinely doesn't implement the command.
+        public double GetCurrentStepRateDegPerSec()
         {
-            var s = _transport.SendAndReceive(":GX9A#");
+            for (int i = 0; i < 10; i++)
+            {
+                var s = Strip(_transport.SendAndReceive(":GX97#"));
+                if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    return v;
+            }
+            return 0.0;
+        }
+        public double GetUsPerStepLowerLimit() => ParseDouble(_transport.SendAndReceive(":GX99#"));
+
+        // Base slew rate in deg/s, derived from the current-rate readback and the
+        // us/step ratio. Any non-zero current rate works because rate ∝ 1/us_per_step.
+        public double GetBaseSlewRateDegPerSec()
+        {
+            double curRate = GetCurrentStepRateDegPerSec();
+            double usCur   = GetUsPerStepCurrent();
+            double usBase  = GetUsPerStepBase();
+            if (curRate <= 0 || usCur <= 0 || usBase <= 0) return 0.0;
+            return curRate * (usCur / usBase);
+        }
+
+        public bool SetUsPerStepCurrent(double us) =>
+            Bool(_transport.SendAndReceive(string.Format(CultureInfo.InvariantCulture, ":SX92,{0:0.000}#", us)));
+
+        private static double ParseDouble(string s)
+        {
             s = Strip(s);
             if (string.IsNullOrEmpty(s)) return 0.0;
             double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v);

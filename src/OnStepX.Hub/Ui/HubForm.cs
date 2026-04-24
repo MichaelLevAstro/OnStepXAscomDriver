@@ -26,20 +26,28 @@ namespace ASCOM.OnStepX.Ui
         private Button _autoDetectBtn, _connectBtn, _disconnectBtn;
         private Label _statusLed, _stateLabel, _clientsLabel;
 
-        private TextBox _ioBox;
+        private RichTextBox _ioBox;
         private CheckBox _ioEnable;
         private TextBox _ioFilter;
-        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _ioPending = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        // Console entry kinds drive the rendered color. Pair = normal cmd/reply
+        // (green), Invalid = pair whose reply is empty/nan/0 (orange, flags failed
+        // sets and missing data), Note = TransportLogger.Note diagnostics (white).
+        private struct ConsoleEntry { public string Text; public Color Color; }
+        private readonly System.Collections.Concurrent.ConcurrentQueue<ConsoleEntry> _ioPending = new System.Collections.Concurrent.ConcurrentQueue<ConsoleEntry>();
         // Full history (pre-filter); rendered through _ioFilter into _ioBox.
-        private readonly System.Collections.Generic.LinkedList<string> _ioAll = new System.Collections.Generic.LinkedList<string>();
+        private readonly System.Collections.Generic.LinkedList<ConsoleEntry> _ioAll = new System.Collections.Generic.LinkedList<ConsoleEntry>();
         private const int IoHistoryMax = 2000;
+        private static readonly Color ConsoleNormalColor  = Color.LightGreen;
+        private static readonly Color ConsoleInvalidColor = Color.Orange;
+        private static readonly Color ConsoleNoteColor    = Color.White;
 
         private Panel _logPanel;
         private CheckBox _consoleToggle;
         private TextBox _cmdInput;
         private Button _cmdSendBtn;
-        private const int ConsoleExpandedHeight = 256;
+        private const int ConsoleExpandedHeight = 280;
         private const int ConsoleCollapsedHeight = 40;
+        private CheckBox _ioAutoScroll;
 
         private TextBox _latBox, _lonBox, _eleBox;
         private Button _siteWriteBtn, _siteSyncPcBtn, _sitesBtn;
@@ -54,6 +62,8 @@ namespace ASCOM.OnStepX.Ui
         private bool _suppressTrackingModeEvent;
         private DateTime _trackingModeSetAt = DateTime.MinValue;
         private NumericUpDown _guideRateBox, _slewSpeedBox;
+        private TrackBar _slewSpeedSlider;
+        private bool _suppressSlewSyncEvent;
         private ComboBox _meridianActionBox;
         private Button _advancedBtn;
 
@@ -92,7 +102,11 @@ namespace ASCOM.OnStepX.Ui
             ClientRegistry.Changed += OnClientRegistryChanged;
             _mount.ConnectionChanged += OnMountConnectionChanged;
             TransportLogger.Pair += OnTransportPair;
-            FormClosed += (s, e) => { TransportLogger.Pair -= OnTransportPair; };
+            TransportLogger.Line += OnTransportLine;
+            FormClosed += (s, e) => {
+                TransportLogger.Pair -= OnTransportPair;
+                TransportLogger.Line -= OnTransportLine;
+            };
             UpdateClientLabel();
 
             // Reflect the initial Disconnected state on every action control so the UI
@@ -109,57 +123,180 @@ namespace ASCOM.OnStepX.Ui
             string line = DateTime.Now.ToString("HH:mm:ss.fff") + "  " +
                           cmd.PadRight(14) + "  ->  " + reply +
                           (elapsedMs > 0 ? "  (" + elapsedMs + " ms)" : "");
-            _ioPending.Enqueue(line);
+            var color = IsReplyValid(cmd, reply) ? ConsoleNormalColor : ConsoleInvalidColor;
+            EnqueueConsole(line, color);
+        }
+
+        // TransportLogger emits Tx/Rx (-> / <-) and Note (--) lines. The Pair event
+        // already carries the cmd+reply pair in a single line, so routing Tx/Rx here
+        // would just duplicate. Only Notes need surfacing.
+        private void OnTransportLine(string rawLine)
+        {
+            if (_ioEnable != null && !_ioEnable.Checked) return;
+            if (rawLine == null) return;
+            if (!rawLine.StartsWith("-- ")) return;
+            string line = DateTime.Now.ToString("HH:mm:ss.fff") + "  " + rawLine;
+            EnqueueConsole(line, ConsoleNoteColor);
+        }
+
+        private void EnqueueConsole(string line, Color color)
+        {
+            _ioPending.Enqueue(new ConsoleEntry { Text = line, Color = color });
             while (_ioPending.Count > 2000 && _ioPending.TryDequeue(out _)) { }
+        }
+
+        // Per-command reply validation. Generic "reply == 0 is bad" is wrong —
+        // e.g. :GT# (tracking rate) can legitimately return "0.0#", and :MS#
+        // returns "0" *on success*. Classify the command and apply the right
+        // rule. Commands outside the known set stay uncolored (green), so the
+        // console doesn't flag third-party / user-typed probes by mistake.
+        private enum ReplyKind { Unknown, Ack01, SlewAck, Numeric, NonEmpty }
+
+        private static ReplyKind ClassifyReply(string cmdCore)
+        {
+            if (string.IsNullOrEmpty(cmdCore)) return ReplyKind.Unknown;
+            // Any :Sxxxx# set command → "1" on success.
+            if (cmdCore[0] == 'S') return ReplyKind.Ack01;
+            // Track on/off (blind TQ/TS/TL/TK don't reach here — they're "(blind)").
+            if (cmdCore == "Te" || cmdCore == "Td") return ReplyKind.Ack01;
+            // Park / unpark / set-park-here.
+            if (cmdCore == "hP" || cmdCore == "hR" || cmdCore == "hQ") return ReplyKind.Ack01;
+            // Slew: returns "0" on success, non-zero on error.
+            if (cmdCore == "MS" || cmdCore == "MA") return ReplyKind.SlewAck;
+            // Numeric getters (coordinates, times, slew rates, temperature, etc).
+            switch (cmdCore)
+            {
+                case "GT": case "GS": case "GR": case "GRH": case "GD": case "GDH":
+                case "GA": case "GZ": case "GL": case "Gt": case "GtH":
+                case "Gg": case "GgH": case "GG": case "GC": case "Gv": case "Gh":
+                    return ReplyKind.Numeric;
+            }
+            if (cmdCore.StartsWith("GX9", StringComparison.Ordinal)) return ReplyKind.Numeric;
+            if (cmdCore.StartsWith("GXE", StringComparison.Ordinal)) return ReplyKind.Numeric;
+            // String getters (versions, status, pier, home offsets, etc).
+            switch (cmdCore)
+            {
+                case "GVP": case "GVN": case "GVM": case "GVD":
+                case "GU": case "Gm": case "GW": case "GE": case "Go":
+                    return ReplyKind.NonEmpty;
+            }
+            return ReplyKind.Unknown;
+        }
+
+        private static string CmdCore(string cmd)
+        {
+            var c = cmd ?? "";
+            if (c.StartsWith(":")) c = c.Substring(1);
+            if (c.EndsWith("#"))   c = c.Substring(0, c.Length - 1);
+            int comma = c.IndexOf(',');
+            if (comma >= 0) c = c.Substring(0, comma);
+            return c;
+        }
+
+        private static bool IsReplyValid(string cmd, string reply)
+        {
+            if (reply == "(blind)") return true;
+            var r = (reply ?? "").Trim().TrimEnd('#').Trim();
+            var kind = ClassifyReply(CmdCore(cmd));
+            switch (kind)
+            {
+                case ReplyKind.Ack01:    return r == "1";
+                case ReplyKind.SlewAck:  return r.Length > 0 && r[0] == '0';
+                case ReplyKind.Numeric:
+                    if (r.Length == 0) return false;
+                    if (r.Equals("nan", StringComparison.OrdinalIgnoreCase)) return false;
+                    foreach (var ch in r) if (ch >= '0' && ch <= '9') return true;
+                    return false;
+                case ReplyKind.NonEmpty: return r.Length > 0;
+                default: return true;
+            }
         }
 
         private void DrainIo()
         {
             if (_ioBox == null) return;
             if (_ioPending.IsEmpty) return;
-            bool appendedVisible = false;
-            var visible = new System.Text.StringBuilder();
-            string filter = (_ioFilter?.Text ?? "").Trim();
-            while (_ioPending.TryDequeue(out var line))
+            string filter = _ioFilter?.Text ?? "";
+            var toAppend = new System.Collections.Generic.List<ConsoleEntry>();
+            while (_ioPending.TryDequeue(out var entry))
             {
-                _ioAll.AddLast(line);
+                _ioAll.AddLast(entry);
                 if (_ioAll.Count > IoHistoryMax) _ioAll.RemoveFirst();
-                if (LineMatchesFilter(line, filter))
-                {
-                    visible.AppendLine(line);
-                    appendedVisible = true;
-                }
+                if (LineMatchesFilter(entry.Text, filter)) toAppend.Add(entry);
             }
-            if (!appendedVisible) return;
+            if (toAppend.Count == 0) return;
             const int maxChars = 200_000;
-            if (_ioBox.TextLength + visible.Length > maxChars)
+            int incoming = 0;
+            foreach (var e in toAppend) incoming += e.Text.Length + 1;
+            if (_ioBox.TextLength + incoming > maxChars)
             {
-                int keep = Math.Max(0, maxChars - visible.Length);
-                _ioBox.Text = _ioBox.Text.Length > keep ? _ioBox.Text.Substring(_ioBox.Text.Length - keep) : _ioBox.Text;
+                int keep = Math.Max(0, maxChars - incoming);
+                if (_ioBox.TextLength > keep) RebuildIoView();
             }
-            _ioBox.AppendText(visible.ToString());
+            bool autoScroll = _ioAutoScroll?.Checked ?? true;
+            // Snapshot the user's scroll position before appending. AppendText
+            // of a RichTextBox moves the caret to the end, which auto-scrolls.
+            // When auto-scroll is off we restore the pixel-exact scroll offset
+            // via EM_SETSCROLLPOS so the view doesn't jump as new lines land.
+            POINT savedScroll = default;
+            if (!autoScroll && _ioBox.IsHandleCreated)
+                SendMessage(_ioBox.Handle, EM_GETSCROLLPOS, IntPtr.Zero, ref savedScroll);
+            foreach (var e in toAppend) AppendColoredLine(_ioBox, e.Text, e.Color);
+            if (autoScroll)
+            {
+                _ioBox.SelectionStart = _ioBox.TextLength;
+                _ioBox.ScrollToCaret();
+            }
+            else if (_ioBox.IsHandleCreated)
+            {
+                SendMessage(_ioBox.Handle, EM_SETSCROLLPOS, IntPtr.Zero, ref savedScroll);
+            }
         }
 
+        // Filter: case-sensitive substring match over whitespace-separated tokens.
+        // All tokens must be found literally (Ordinal) in the line.
         private static bool LineMatchesFilter(string line, string filter)
         {
             if (string.IsNullOrEmpty(filter)) return true;
-            // Loose substring search, case-insensitive, space-separated tokens all-must-match.
             foreach (var tok in filter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
-                if (line.IndexOf(tok, StringComparison.OrdinalIgnoreCase) < 0) return false;
+                if (line.IndexOf(tok, StringComparison.Ordinal) < 0) return false;
             return true;
         }
 
         private void RebuildIoView()
         {
             if (_ioBox == null) return;
-            string filter = (_ioFilter?.Text ?? "").Trim();
-            var sb = new System.Text.StringBuilder();
-            foreach (var l in _ioAll)
-                if (LineMatchesFilter(l, filter)) sb.AppendLine(l);
-            _ioBox.Text = sb.ToString();
+            string filter = _ioFilter?.Text ?? "";
+            _ioBox.SuspendLayout();
+            try
+            {
+                _ioBox.Clear();
+                foreach (var e in _ioAll)
+                    if (LineMatchesFilter(e.Text, filter)) AppendColoredLine(_ioBox, e.Text, e.Color);
+            }
+            finally { _ioBox.ResumeLayout(); }
             _ioBox.SelectionStart = _ioBox.TextLength;
             _ioBox.ScrollToCaret();
         }
+
+        private static void AppendColoredLine(RichTextBox rtb, string line, Color color)
+        {
+            rtb.SelectionStart = rtb.TextLength;
+            rtb.SelectionLength = 0;
+            rtb.SelectionColor = color;
+            rtb.AppendText(line + Environment.NewLine);
+            rtb.SelectionColor = rtb.ForeColor;
+        }
+
+        // P/Invoke for precise scroll preservation when auto-scroll is off.
+        // RichTextBox has no managed API to read or set the scroll offset as
+        // a pixel/line coordinate — ScrollToCaret only centers on a caret.
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref POINT lParam);
+        private const int EM_GETSCROLLPOS = 0x04DD;
+        private const int EM_SETSCROLLPOS = 0x04DE;
 
         private void OnMountConnectionChanged(object sender, EventArgs e)
         {
@@ -333,7 +470,7 @@ namespace ASCOM.OnStepX.Ui
             _lonBox = new TextBox { Left = 110, Top = 54, Width = 220 };
             _eleBox = new TextBox { Left = 110, Top = 82, Width = 120 };
             _siteSyncPcBtn = new Button { Text = "Sync from PC location", Left = 10, Top = 118, Width = 160 };
-            _siteWriteBtn  = new Button { Text = "Write to mount",       Left = 180, Top = 118, Width = 160 };
+            _siteWriteBtn  = new Button { Text = "Upload",               Left = 180, Top = 118, Width = 160 };
             _sitesBtn      = new Button { Text = "Sites...",             Left = 350, Top = 118, Width = 80  };
             _siteSyncPcBtn.Click += (s, e) => DoSyncLocationFromPc();
             _siteWriteBtn.Click  += (s, e) => DoWriteSite();
@@ -389,7 +526,7 @@ namespace ASCOM.OnStepX.Ui
             _utcOffsetBox = new NumericUpDown { Left = 110, Top = 54, Width = 80, Minimum = -14, Maximum = 14, DecimalPlaces = 1, Increment = 0.5M };
             _syncFromPcBtn = new Button { Text = "Sync from PC", Left = 210, Top = 52, Width = 140 };
             _syncFromPcBtn.Click += (s, e) => DoSyncTime();
-            _setDateTimeBtn = new Button { Text = "Set Date/Time on mount", Left = 110, Top = 84, Width = 240 };
+            _setDateTimeBtn = new Button { Text = "Upload", Left = 110, Top = 84, Width = 240 };
             _setDateTimeBtn.Click += (s, e) => DoWriteDateTime();
             _autoSyncTimeCheck = new CheckBox {
                 Text = "Auto-sync date/time from PC on connect", Left = 10, Top = 116, Width = 340,
@@ -467,7 +604,30 @@ namespace ASCOM.OnStepX.Ui
             _guideRateBox = new NumericUpDown { Left = 110, Top = 92, Width = 60, Minimum = 0.01M, Maximum = 1.0M, DecimalPlaces = 2, Increment = 0.05M };
             _guideRateBox.ValueChanged += (s, e) => { if (_hubConnected) _mount.Protocol.SetGuideRateMultiplier((double)_guideRateBox.Value); };
 
-            _slewSpeedBox = new NumericUpDown { Left = 260, Top = 92, Width = 90, Minimum = 0.1M, Maximum = 10M, DecimalPlaces = 2, Increment = 0.25M };
+            // Slew rate: slider + numeric bound one-to-one. Slider stores deg/s*100
+            // as int; numeric is the source-of-truth value read by OnDirPress and
+            // SaveSettings. On connect, bounds tighten to firmware's [base/2, base*2].
+            _slewSpeedBox = new NumericUpDown { Left = 370, Top = 92, Width = 60, Minimum = 0.1M, Maximum = 10M, DecimalPlaces = 2, Increment = 0.25M };
+            _slewSpeedSlider = new TrackBar {
+                AutoSize = false,
+                Left = 245, Top = 88, Width = 120, Height = 28,
+                Minimum = 10, Maximum = 1000, TickStyle = TickStyle.None,
+                SmallChange = 5, LargeChange = 25,
+            };
+            _slewSpeedSlider.ValueChanged += (s, e) =>
+            {
+                if (_suppressSlewSyncEvent) return;
+                _suppressSlewSyncEvent = true;
+                try { _slewSpeedBox.Value = Math.Max(_slewSpeedBox.Minimum, Math.Min(_slewSpeedBox.Maximum, _slewSpeedSlider.Value / 100M)); }
+                finally { _suppressSlewSyncEvent = false; }
+            };
+            _slewSpeedBox.ValueChanged += (s, e) =>
+            {
+                if (_suppressSlewSyncEvent) return;
+                _suppressSlewSyncEvent = true;
+                try { _slewSpeedSlider.Value = Math.Max(_slewSpeedSlider.Minimum, Math.Min(_slewSpeedSlider.Maximum, (int)Math.Round(_slewSpeedBox.Value * 100M))); }
+                finally { _suppressSlewSyncEvent = false; }
+            };
 
             _meridianActionBox = new ComboBox { Left = 110, Top = 126, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
             _meridianActionBox.Items.AddRange(new object[] { "Auto Flip", "Stop at Meridian" });
@@ -486,7 +646,8 @@ namespace ASCOM.OnStepX.Ui
             g.Controls.Add(_trackingModeBox);
             g.Controls.Add(new Label { Text = "Guide rate (× sid):", Left = 10, Top = 96, Width = 100 });
             g.Controls.Add(_guideRateBox);
-            g.Controls.Add(new Label { Text = "Slew (°/s):", Left = 185, Top = 96, Width = 70 });
+            g.Controls.Add(new Label { Text = "Slew (°/s):", Left = 185, Top = 96, Width = 60 });
+            g.Controls.Add(_slewSpeedSlider);
             g.Controls.Add(_slewSpeedBox);
             g.Controls.Add(new Label { Text = "At meridian:", Left = 10, Top = 130, Width = 100 });
             g.Controls.Add(_meridianActionBox);
@@ -495,6 +656,7 @@ namespace ASCOM.OnStepX.Ui
             _mountActionControls.Add(_trackingModeBox);
             _mountActionControls.Add(_guideRateBox);
             _mountActionControls.Add(_slewSpeedBox);
+            _mountActionControls.Add(_slewSpeedSlider);
             _mountActionControls.Add(_meridianActionBox);
             _mountActionControls.Add(_advancedBtn);
             return g;
@@ -524,7 +686,7 @@ namespace ASCOM.OnStepX.Ui
             // conceptually a safety limit on the sync operation.
             _syncLimitBox = new NumericUpDown { Left = 110, Top = 86, Width = 60, Minimum = 0, Maximum = 180, Value = 0 };
             _syncLimitBox.ValueChanged += (s, e) => DriverSettings.SyncLimitDeg = (int)_syncLimitBox.Value;
-            _limitsWriteBtn = new Button { Text = "Write limits", Left = 230, Top = 116, Width = 100 };
+            _limitsWriteBtn = new Button { Text = "Upload", Left = 230, Top = 116, Width = 100 };
             _limitsWriteBtn.Click += (s, e) => DoWriteLimits();
             g.Controls.Add(new Label { Text = "Horizon (°):", Left = 10, Top = 30, Width = 100 });
             g.Controls.Add(_horizonLimitBox);
@@ -549,24 +711,24 @@ namespace ASCOM.OnStepX.Ui
 
         private GroupBox BuildPositionGroup()
         {
-            var g = NewGroup("Current Position", 360, 180);
+            var g = NewGroup("Current Position", 360, 195);
             _raLabel = new Label { Left = 110, Top = 28, Width = 230, Text = "—" };
             _decLabel = new Label { Left = 110, Top = 54, Width = 230, Text = "—" };
             _altLabel = new Label { Left = 110, Top = 80, Width = 230, Text = "—" };
             _azLabel = new Label { Left = 110, Top = 106, Width = 230, Text = "—" };
-            _pierLabel = new Label { Left = 110, Top = 124, Width = 230, Text = "—" };
+            _pierLabel = new Label { Left = 110, Top = 132, Width = 230, Text = "—" };
             // Diagnostic: mount-reported LST alongside computed sky LST for the
             // stored site longitude. A large Δ (> a few seconds) points at a
             // longitude-sign or UTC-offset convention mismatch — which directly
             // corrupts pier-side selection on slews (pier choice uses sign of
             // HA = LST − RA).
-            _lstLabel = new Label { Left = 110, Top = 150, Width = 230, Text = "—" };
+            _lstLabel = new Label { Left = 110, Top = 160, Width = 230, Text = "—" };
             g.Controls.Add(new Label { Text = "RA:", Left = 10, Top = 28, Width = 100 });
             g.Controls.Add(new Label { Text = "Dec:", Left = 10, Top = 54, Width = 100 });
             g.Controls.Add(new Label { Text = "Altitude:", Left = 10, Top = 80, Width = 100 });
             g.Controls.Add(new Label { Text = "Azimuth:", Left = 10, Top = 106, Width = 100 });
-            g.Controls.Add(new Label { Text = "Pier side:", Left = 10, Top = 124, Width = 100 });
-            g.Controls.Add(new Label { Text = "LST (mount / sky):", Left = 10, Top = 150, Width = 100 });
+            g.Controls.Add(new Label { Text = "Pier side:", Left = 10, Top = 132, Width = 100 });
+            g.Controls.Add(new Label { Text = "LST (mount / sky):", Left = 10, Top = 160, Width = 100 });
             g.Controls.Add(_raLabel);
             g.Controls.Add(_decLabel);
             g.Controls.Add(_altLabel);
@@ -662,7 +824,7 @@ namespace ASCOM.OnStepX.Ui
         }
 
         private static GroupBox NewGroup(string title, int w, int h)
-            => new GroupBox { Text = title, Width = w, Height = h, Margin = new Padding(0, 0, 0, 8) };
+            => new CollapsibleGroupBox { Text = title, Width = w, Height = h, Margin = new Padding(0, 0, 0, 8) };
 
         private Panel BuildLogPanel()
         {
@@ -737,41 +899,58 @@ namespace ASCOM.OnStepX.Ui
             });
         }
 
-        // Paired command -> response view, one line per completed exchange.
-        // Filter textbox performs loose (space-tokenised, case-insensitive substring)
-        // matching over the full history so the user can narrow to e.g. ":GU" or
-        // ":TQ 60.164" without touching the capture stream.
+        // Paired command -> response view plus diagnostic notes. One line per
+        // exchange or note. Filter is a case-sensitive, whitespace-tokenised
+        // substring match — every token must appear literally in the line.
         private Panel BuildIoPane()
         {
             var pane = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
 
-            var header = new Panel { Dock = DockStyle.Top, Height = 26 };
-            var title = new Label { Text = "Mount I/O (cmd -> reply)", Left = 0, Top = 4, Width = 170, Font = new Font(Font, FontStyle.Bold) };
-            _ioEnable = new CheckBox { Text = "Enabled", Left = 175, Top = 4, Width = 75, Checked = true };
-            var filterLabel = new Label { Text = "Filter:", Left = 255, Top = 6, Width = 40 };
-            _ioFilter = new TextBox { Left = 295, Top = 2, Width = 220, Font = new Font(FontFamily.GenericMonospace, 9f) };
-            _ioFilter.TextChanged += (s, e) => RebuildIoView();
-            var clearBtn = new Button { Text = "Clear", Left = 525, Top = 0, Width = 70, Height = 24 };
-            var copyBtn  = new Button { Text = "Copy",  Left = 600, Top = 0, Width = 70, Height = 24 };
+            // Two-row header. Row 1: title/toggles/log-level actions. Row 2:
+            // filter field with its own clear button. Separated rows so Clear/Copy
+            // on row 1 can't be mistaken for filter controls.
+            var header = new Panel { Dock = DockStyle.Top, Height = 54 };
+            var title = new Label { Text = "Console", Left = 0, Top = 6, Width = 80, Font = new Font(Font, FontStyle.Bold) };
+            _ioEnable = new CheckBox { Text = "Enabled", Left = 85, Top = 6, Width = 75, Checked = true };
+            _ioAutoScroll = new CheckBox { Text = "Auto-scroll", Left = 165, Top = 6, Width = 95, Checked = true };
+            _ioAutoScroll.CheckedChanged += (s, e) =>
+            {
+                if (_ioAutoScroll.Checked && _ioBox != null)
+                {
+                    _ioBox.SelectionStart = _ioBox.TextLength;
+                    _ioBox.ScrollToCaret();
+                }
+            };
+            var clearBtn = new Button { Text = "Clear", Left = 525, Top = 2, Width = 70, Height = 24 };
+            var copyBtn  = new Button { Text = "Copy",  Left = 600, Top = 2, Width = 70, Height = 24 };
             clearBtn.Click += (s, e) => { _ioBox.Clear(); _ioAll.Clear(); while (_ioPending.TryDequeue(out _)) { } };
             copyBtn.Click  += (s, e) => { try { if (!string.IsNullOrEmpty(_ioBox.Text)) Clipboard.SetText(_ioBox.Text); } catch { } };
+
+            var filterLabel = new Label { Text = "Filter:", Left = 0, Top = 32, Width = 40 };
+            _ioFilter = new TextBox { Left = 40, Top = 28, Width = 555, Font = new Font(FontFamily.GenericMonospace, 9f) };
+            _ioFilter.TextChanged += (s, e) => RebuildIoView();
+            var filterClearBtn = new Button { Text = "Clear filter", Left = 600, Top = 26, Width = 90, Height = 24 };
+            filterClearBtn.Click += (s, e) => { _ioFilter.Clear(); _ioFilter.Focus(); };
+
             header.Controls.Add(title);
             header.Controls.Add(_ioEnable);
-            header.Controls.Add(filterLabel);
-            header.Controls.Add(_ioFilter);
+            header.Controls.Add(_ioAutoScroll);
             header.Controls.Add(clearBtn);
             header.Controls.Add(copyBtn);
+            header.Controls.Add(filterLabel);
+            header.Controls.Add(_ioFilter);
+            header.Controls.Add(filterClearBtn);
 
-            _ioBox = new TextBox
+            _ioBox = new RichTextBox
             {
                 Dock = DockStyle.Fill,
-                Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
                 WordWrap = false,
+                DetectUrls = false,
                 Font = new Font(FontFamily.GenericMonospace, 8.5f),
                 BackColor = Color.Black,
-                ForeColor = Color.LightGreen
+                ForeColor = ConsoleNormalColor,
             };
             pane.Controls.Add(_ioBox);
             pane.Controls.Add(header);
@@ -815,7 +994,7 @@ namespace ASCOM.OnStepX.Ui
             {
                 Exception err = null;
                 bool canceled = false;
-                double mountMaxSlew = 0.0;
+                double mountBaseSlew = 0.0;
                 try
                 {
                     ITransport t = kind == "TCP"
@@ -826,9 +1005,11 @@ namespace ASCOM.OnStepX.Ui
                     // then :GVP# probe loop until responsive -> ConnectionChanged (UI flips to
                     // Connected via SyncConnectionStateFromMount). Throws OCE on cancellation.
                     _mount.Open(cts.Token);
-                    // Mount's configured max slew rate. :GX9A# returns deg/sec; returns 0 if
-                    // firmware doesn't support it (pre-OnStepX).
-                    try { mountMaxSlew = _mount.Protocol.GetMaxSlewRateDegPerSec(); } catch { }
+                    // Firmware clamps :SX92 us/step to [base/2, base*2], so the practical
+                    // slew rate range is [0.5*base, 2*base] deg/s derived from
+                    // SLEW_RATE_BASE_DESIRED. :GX97# cold-boot quirk is handled inside
+                    // GetCurrentStepRateDegPerSec.
+                    try { mountBaseSlew = _mount.Protocol.GetBaseSlewRateDegPerSec(); } catch { }
                 }
                 catch (OperationCanceledException) { canceled = true; }
                 catch (Exception ex) { err = ex; }
@@ -852,15 +1033,25 @@ namespace ASCOM.OnStepX.Ui
                         _hubConnected = true;
                         SaveSettings();
 
-                        // Clamp slew speed box to mount's reported max. If the mount
-                        // doesn't expose a max (returns 0), leave the UI limit unchanged
-                        // and let the firmware silently clamp the rate at runtime.
-                        if (mountMaxSlew > 0.1)
+                        // Retune slew controls to mount's reported range [base/2, base*2].
+                        // If the mount doesn't expose base (returns 0), leave UI limits
+                        // alone and let the firmware silently clamp at runtime.
+                        if (mountBaseSlew > 0.1)
                         {
-                            decimal mountMaxDec = (decimal)Math.Round(mountMaxSlew, 2);
-                            _slewSpeedBox.Maximum = mountMaxDec;
-                            if (_slewSpeedBox.Value > mountMaxDec)
-                                _slewSpeedBox.Value = mountMaxDec;
+                            decimal minDec = (decimal)Math.Round(mountBaseSlew * 0.5, 2);
+                            decimal maxDec = (decimal)Math.Round(mountBaseSlew * 2.0, 2);
+                            _suppressSlewSyncEvent = true;
+                            try
+                            {
+                                _slewSpeedBox.Minimum = minDec;
+                                _slewSpeedBox.Maximum = maxDec;
+                                if (_slewSpeedBox.Value < minDec) _slewSpeedBox.Value = minDec;
+                                if (_slewSpeedBox.Value > maxDec) _slewSpeedBox.Value = maxDec;
+                                _slewSpeedSlider.Minimum = (int)Math.Round(minDec * 100M);
+                                _slewSpeedSlider.Maximum = (int)Math.Round(maxDec * 100M);
+                                _slewSpeedSlider.Value = (int)Math.Round(_slewSpeedBox.Value * 100M);
+                            }
+                            finally { _suppressSlewSyncEvent = false; }
                         }
 
                         ApplyConnState(ConnState.Connected);
@@ -903,6 +1094,25 @@ namespace ASCOM.OnStepX.Ui
                 _mount.Protocol.SetPreferredPierSide(pierEnum);
                 _mount.Protocol.SetPauseAtHomeOnFlip(DriverSettings.PauseAtHomeOnFlip);
                 TransportLogger.Note("Re-applied advanced settings (preferred pier=" + pref + ", pauseHome=" + DriverSettings.PauseAtHomeOnFlip + ")");
+
+                // Probe: slew rate family. :GX92# current us/step, :GX93# base us/step
+                // (derived from SLEW_RATE_BASE_DESIRED), :GX97# current deg/s, :GX99#
+                // mechanical lower-limit us/step. base deg/s = curDegPerSec * (usCur / usBase).
+                try
+                {
+                    double usCur  = _mount.Protocol.GetUsPerStepCurrent();
+                    double usBase = _mount.Protocol.GetUsPerStepBase();
+                    double curDps = _mount.Protocol.GetCurrentStepRateDegPerSec();
+                    double usLim  = _mount.Protocol.GetUsPerStepLowerLimit();
+                    double baseDps = _mount.Protocol.GetBaseSlewRateDegPerSec();
+                    TransportLogger.Note(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "Slew rate probe: :GX92#={0:0.000} us/step cur ; :GX93#={1:0.000} us/step base ; :GX97#={2:0.###} deg/s cur ; :GX99#={3:0.000} us/step limit ; derived base={4:0.###} deg/s",
+                        usCur, usBase, curDps, usLim, baseDps));
+                }
+                catch (Exception probeEx)
+                {
+                    TransportLogger.Note("Slew rate probe failed: " + probeEx.Message);
+                }
             }
             catch (Exception ex)
             {
@@ -1107,7 +1317,7 @@ namespace ASCOM.OnStepX.Ui
                 {
                     string err = "";
                     try { err = _mount.Protocol.GetLastError(); } catch { }
-                    CopyableMessage.Show(this, "Write site",
+                    CopyableMessage.Show(this, "Upload site",
                         "Mount rejected one or more site values.\r\n" +
                         "  Latitude:  " + (latOk ? "OK" : "REJECTED") + "\r\n" +
                         "  Longitude: " + (lonOk ? "OK" : "REJECTED") + "\r\n" +
@@ -1118,10 +1328,12 @@ namespace ASCOM.OnStepX.Ui
                 DriverSettings.SiteLatitude = lat;
                 DriverSettings.SiteLongitude = lon;
                 DriverSettings.SiteElevation = ele;
+                MessageBox.Show(this, "Site uploaded to mount.", "Upload site",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                CopyableMessage.Show(this, "Write site", "Write failed:\r\n\r\n" + ex.ToString());
+                CopyableMessage.Show(this, "Upload site", "Upload failed:\r\n\r\n" + ex.ToString());
             }
         }
 
@@ -1206,22 +1418,65 @@ namespace ASCOM.OnStepX.Ui
                 .AddHours(_timePicker.Value.Hour)
                 .AddMinutes(_timePicker.Value.Minute)
                 .AddSeconds(_timePicker.Value.Second);
-            _mount.Protocol.SetUtcOffset(offsetH);
-            _mount.Protocol.SetLocalDate(local);
-            _mount.Protocol.SetLocalTime(local);
+            try
+            {
+                bool offOk  = _mount.Protocol.SetUtcOffset(offsetH);
+                bool dateOk = _mount.Protocol.SetLocalDate(local);
+                bool timeOk = _mount.Protocol.SetLocalTime(local);
+                if (!offOk || !dateOk || !timeOk)
+                {
+                    string err = "";
+                    try { err = _mount.Protocol.GetLastError(); } catch { }
+                    CopyableMessage.Show(this, "Upload date/time",
+                        "Mount rejected one or more values.\r\n" +
+                        "  UTC offset: " + (offOk  ? "OK" : "REJECTED") + "\r\n" +
+                        "  Date:       " + (dateOk ? "OK" : "REJECTED") + "\r\n" +
+                        "  Time:       " + (timeOk ? "OK" : "REJECTED") +
+                        (string.IsNullOrWhiteSpace(err) ? "" : "\r\n\r\nMount error: " + err));
+                    return;
+                }
+                MessageBox.Show(this, "Date/time uploaded to mount.", "Upload date/time",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                CopyableMessage.Show(this, "Upload date/time", "Upload failed:\r\n\r\n" + ex.ToString());
+            }
         }
 
         private void DoWriteLimits()
         {
             if (!_hubConnected) return;
-            _mount.Protocol.SetHorizonLimit((int)_horizonLimitBox.Value);
-            _mount.Protocol.SetOverheadLimit((int)_overheadLimitBox.Value);
-            _mount.Protocol.SetMeridianLimitEastMinutes((int)_meridianEastBox.Value);
-            _mount.Protocol.SetMeridianLimitWestMinutes((int)_meridianWestBox.Value);
-            DriverSettings.HorizonLimitDeg = (int)_horizonLimitBox.Value;
-            DriverSettings.OverheadLimitDeg = (int)_overheadLimitBox.Value;
-            DriverSettings.MeridianLimitEastMin = (int)_meridianEastBox.Value;
-            DriverSettings.MeridianLimitWestMin = (int)_meridianWestBox.Value;
+            try
+            {
+                bool hOk = _mount.Protocol.SetHorizonLimit((int)_horizonLimitBox.Value);
+                bool oOk = _mount.Protocol.SetOverheadLimit((int)_overheadLimitBox.Value);
+                bool eOk = _mount.Protocol.SetMeridianLimitEastMinutes((int)_meridianEastBox.Value);
+                bool wOk = _mount.Protocol.SetMeridianLimitWestMinutes((int)_meridianWestBox.Value);
+                DriverSettings.HorizonLimitDeg = (int)_horizonLimitBox.Value;
+                DriverSettings.OverheadLimitDeg = (int)_overheadLimitBox.Value;
+                DriverSettings.MeridianLimitEastMin = (int)_meridianEastBox.Value;
+                DriverSettings.MeridianLimitWestMin = (int)_meridianWestBox.Value;
+                if (!hOk || !oOk || !eOk || !wOk)
+                {
+                    string err = "";
+                    try { err = _mount.Protocol.GetLastError(); } catch { }
+                    CopyableMessage.Show(this, "Upload limits",
+                        "Mount rejected one or more values.\r\n" +
+                        "  Horizon:       " + (hOk ? "OK" : "REJECTED") + "\r\n" +
+                        "  Overhead:      " + (oOk ? "OK" : "REJECTED") + "\r\n" +
+                        "  Meridian east: " + (eOk ? "OK" : "REJECTED") + "\r\n" +
+                        "  Meridian west: " + (wOk ? "OK" : "REJECTED") +
+                        (string.IsNullOrWhiteSpace(err) ? "" : "\r\n\r\nMount error: " + err));
+                    return;
+                }
+                MessageBox.Show(this, "Limits uploaded to mount.", "Upload limits",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                CopyableMessage.Show(this, "Upload limits", "Upload failed:\r\n\r\n" + ex.ToString());
+            }
         }
 
         private void OnDirPress(string dir)
@@ -1335,7 +1590,7 @@ namespace ASCOM.OnStepX.Ui
             _meridianWestBox.Value = Math.Max(_meridianWestBox.Minimum, Math.Min(_meridianWestBox.Maximum, DriverSettings.MeridianLimitWestMin));
             _syncLimitBox.Value = Math.Max(_syncLimitBox.Minimum, Math.Min(_syncLimitBox.Maximum, DriverSettings.SyncLimitDeg));
             _guideRateBox.Value = (decimal)DriverSettings.GuideRateMultiplier;
-            _slewSpeedBox.Value = (decimal)DriverSettings.SlewRateDegPerSec;
+            _slewSpeedBox.Value = Math.Max(_slewSpeedBox.Minimum, Math.Min(_slewSpeedBox.Maximum, (decimal)DriverSettings.SlewRateDegPerSec));
             _meridianActionBox.SelectedIndex = DriverSettings.MeridianAutoFlip ? 0 : 1;
         }
         private void SaveSettings()
@@ -1386,5 +1641,72 @@ namespace ASCOM.OnStepX.Ui
     internal sealed class NoAutoScrollFlowPanel : FlowLayoutPanel
     {
         protected override System.Drawing.Point ScrollToControl(Control activeControl) => DisplayRectangle.Location;
+    }
+
+    // GroupBox with a top-right toggle button that collapses the box to a
+    // header-only strip so the user can hide sections they don't care about.
+    // Children aren't removed, just hidden by clipping to the reduced Height —
+    // re-expand restores exactly what was there, no rebuild. Parent is a
+    // FlowLayoutPanel which reflows automatically on SizeChanged.
+    internal sealed class CollapsibleGroupBox : GroupBox
+    {
+        private readonly Button _toggle;
+        private int _expandedHeight;
+        private const int CollapsedHeight = 22;
+
+        public CollapsibleGroupBox()
+        {
+            // Distinct button (raised border + darker fill) so it reads as a
+            // control rather than blending into the group-box header. Chevron
+            // glyph points down when expanded, right when collapsed.
+            _toggle = new Button
+            {
+                Text = "\u25BC",
+                Width = 24, Height = 20,
+                Top = 0,
+                FlatStyle = FlatStyle.Flat,
+                TabStop = false,
+                UseVisualStyleBackColor = false,
+                Margin = new Padding(0),
+                Padding = new Padding(0),
+                BackColor = SystemColors.ControlDark,
+                ForeColor = SystemColors.ControlLightLight,
+                Font = new Font(System.Drawing.FontFamily.GenericSansSerif, 8f, FontStyle.Bold),
+            };
+            _toggle.FlatAppearance.BorderSize = 1;
+            _toggle.FlatAppearance.BorderColor = SystemColors.ControlDarkDark;
+            _toggle.FlatAppearance.MouseOverBackColor = SystemColors.Highlight;
+            _toggle.Click += (s, e) => Toggle();
+            Controls.Add(_toggle);
+            SizeChanged += (s, e) => PositionToggle();
+        }
+
+        private void PositionToggle()
+        {
+            _toggle.Left = Math.Max(0, Width - _toggle.Width - 4);
+            _toggle.BringToFront();
+        }
+
+        public bool IsCollapsed => Height <= CollapsedHeight + 1;
+
+        public void Toggle()
+        {
+            if (IsCollapsed) Expand(); else Collapse();
+        }
+
+        public void Collapse()
+        {
+            if (IsCollapsed) return;
+            if (Height > CollapsedHeight) _expandedHeight = Height;
+            Height = CollapsedHeight;
+            _toggle.Text = "\u25B6";
+        }
+
+        public void Expand()
+        {
+            if (!IsCollapsed) return;
+            Height = _expandedHeight > CollapsedHeight ? _expandedHeight : 100;
+            _toggle.Text = "\u25BC";
+        }
     }
 }

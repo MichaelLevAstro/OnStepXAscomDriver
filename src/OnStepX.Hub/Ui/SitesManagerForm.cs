@@ -24,6 +24,7 @@ namespace ASCOM.OnStepX.Ui
         private TextBox _nameBox, _latBox, _lonBox, _eleBox;
         private Button _addBtn, _updateBtn, _removeBtn;
         private Button _importBtn, _exportBtn;
+        private Button _loadCurrentBtn;
         private Button _applyBtn, _closeBtn;
         private Label _status;
 
@@ -60,25 +61,31 @@ namespace ASCOM.OnStepX.Ui
 
             var editAnchor = AnchorStyles.Top | AnchorStyles.Right;
             int x = 420;
-            Controls.Add(new Label { Text = "Name:", Left = x, Top = 14, Width = 80, Anchor = editAnchor });
+            // AutoSize labels so the default 23 px label height doesn't overlap
+            // the TextBox below them (what looked like a "background clipping").
+            Controls.Add(new Label { Text = "Name:", Left = x, Top = 14, AutoSize = true, Anchor = editAnchor });
             _nameBox = new TextBox { Left = x, Top = 32, Width = 240, Anchor = editAnchor };
             Controls.Add(_nameBox);
 
-            Controls.Add(new Label { Text = "Latitude (DMS or decimal):", Left = x, Top = 62, Width = 240, Anchor = editAnchor });
+            Controls.Add(new Label { Text = "Latitude (DMS or decimal):", Left = x, Top = 62, AutoSize = true, Anchor = editAnchor });
             _latBox = new TextBox { Left = x, Top = 80, Width = 240, Anchor = editAnchor };
             Controls.Add(_latBox);
 
-            Controls.Add(new Label { Text = "Longitude (west-positive, W is +):", Left = x, Top = 110, Width = 260, Anchor = editAnchor });
+            Controls.Add(new Label { Text = "Longitude (west-positive, W is +):", Left = x, Top = 110, AutoSize = true, Anchor = editAnchor });
             _lonBox = new TextBox { Left = x, Top = 128, Width = 240, Anchor = editAnchor };
             Controls.Add(_lonBox);
 
-            Controls.Add(new Label { Text = "Elevation (m):", Left = x, Top = 158, Width = 240, Anchor = editAnchor });
+            Controls.Add(new Label { Text = "Elevation (m):", Left = x, Top = 158, AutoSize = true, Anchor = editAnchor });
             _eleBox = new TextBox { Left = x, Top = 176, Width = 120, Anchor = editAnchor };
             Controls.Add(_eleBox);
 
-            _addBtn    = new Button { Text = "Add",    Left = x,       Top = 212, Width = 76, Anchor = editAnchor };
-            _updateBtn = new Button { Text = "Update", Left = x + 82,  Top = 212, Width = 76, Anchor = editAnchor };
-            _removeBtn = new Button { Text = "Remove", Left = x + 164, Top = 212, Width = 76, Anchor = editAnchor };
+            _loadCurrentBtn = new Button { Text = "Load from current", Left = x, Top = 204, Width = 240, Anchor = editAnchor };
+            _loadCurrentBtn.Click += (s, e) => OnLoadFromCurrent();
+            Controls.Add(_loadCurrentBtn);
+
+            _addBtn    = new Button { Text = "Add",    Left = x,       Top = 236, Width = 76, Anchor = editAnchor };
+            _updateBtn = new Button { Text = "Update", Left = x + 82,  Top = 236, Width = 76, Anchor = editAnchor };
+            _removeBtn = new Button { Text = "Remove", Left = x + 164, Top = 236, Width = 76, Anchor = editAnchor };
             _addBtn.Click    += (s, e) => OnAdd();
             _updateBtn.Click += (s, e) => OnUpdate();
             _removeBtn.Click += (s, e) => OnRemove();
@@ -86,8 +93,8 @@ namespace ASCOM.OnStepX.Ui
             Controls.Add(_updateBtn);
             Controls.Add(_removeBtn);
 
-            _importBtn = new Button { Text = "Import...", Left = x,      Top = 252, Width = 118, Anchor = editAnchor };
-            _exportBtn = new Button { Text = "Export...", Left = x + 122, Top = 252, Width = 118, Anchor = editAnchor };
+            _importBtn = new Button { Text = "Import...", Left = x,      Top = 272, Width = 118, Anchor = editAnchor };
+            _exportBtn = new Button { Text = "Export...", Left = x + 122, Top = 272, Width = 118, Anchor = editAnchor };
             _importBtn.Click += (s, e) => OnImport();
             _exportBtn.Click += (s, e) => OnExport();
             Controls.Add(_importBtn);
@@ -149,6 +156,17 @@ namespace ASCOM.OnStepX.Ui
             { error = "Invalid elevation (metres)."; return false; }
             site = new Site { Name = name, Latitude = lat, Longitude = lon, Elevation = ele };
             return true;
+        }
+
+        // Populate fields from the hub's current site (DriverSettings mirror is
+        // the one reconciled with the mount on connect / after Apply). Leaves
+        // Name blank so the user can type the new entry's label.
+        private void OnLoadFromCurrent()
+        {
+            _latBox.Text = CoordFormat.FormatLatitudeDms(DriverSettings.SiteLatitude);
+            _lonBox.Text = CoordFormat.FormatLongitudeDms(DriverSettings.SiteLongitude);
+            _eleBox.Text = DriverSettings.SiteElevation.ToString("F1", CultureInfo.InvariantCulture);
+            _status.Text = "Loaded current site into fields — enter a name and Add.";
         }
 
         private void OnAdd()
