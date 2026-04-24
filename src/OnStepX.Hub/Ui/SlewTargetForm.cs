@@ -20,6 +20,7 @@ namespace ASCOM.OnStepX.Ui
         private FlatButton _slewBtn, _refreshBtn, _closeBtn;
         private IReadOnlyList<CelestialTarget> _currentCatalog;
         private string _listStatus = "";
+        private Panel _topPanel, _bottomPanel;
 
         public SlewTargetForm(MountSession mount)
         {
@@ -41,7 +42,8 @@ namespace ASCOM.OnStepX.Ui
         private void BuildUi()
         {
             var p = Theme.P;
-            var top = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(8), BackColor = p.Panel2 };
+            _topPanel = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(8), BackColor = p.Panel2 };
+            var top = _topPanel;
             top.Controls.Add(new Label { Text = "Catalog:", Left = 10, Top = 14, Width = 60, BackColor = Color.Transparent });
             _catalogCombo = new ComboBox { Left = 70, Top = 10, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat,
                 BackColor = p.InputBg, ForeColor = p.Text };
@@ -79,23 +81,31 @@ namespace ASCOM.OnStepX.Ui
                     new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height),
                     pal.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
             };
-            _list.DrawItem += (s, e) =>
-            {
-                var pal = Theme.P;
-                Color bg = e.Item.Selected ? pal.AccentSoft : pal.Panel;
-                using (var br = new SolidBrush(bg)) e.Graphics.FillRectangle(br, e.Bounds);
-                if (e.Item.Selected)
-                    using (var br = new SolidBrush(pal.Accent)) e.Graphics.FillRectangle(br, e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height);
-                e.DrawDefault = false;
-            };
+            _list.DrawItem += (s, e) => e.DrawDefault = false;
             _list.DrawSubItem += (s, e) =>
             {
+                var pal = Theme.P;
+                bool sel = e.Item.Selected;
+                // Blend AccentSoft (12% accent) over Panel for selection highlight.
+                // Compute as solid color so GDI FillRectangle is unambiguous.
+                Color bg = sel
+                    ? Color.FromArgb(
+                        (int)Math.Round(pal.Panel.R + (pal.Accent.R - pal.Panel.R) * (31 / 255.0)),
+                        (int)Math.Round(pal.Panel.G + (pal.Accent.G - pal.Panel.G) * (31 / 255.0)),
+                        (int)Math.Round(pal.Panel.B + (pal.Accent.B - pal.Panel.B) * (31 / 255.0)))
+                    : pal.Panel;
+                using (var br = new SolidBrush(bg))
+                    e.Graphics.FillRectangle(br, e.Bounds);
+                if (sel && e.ColumnIndex == 0)
+                    using (var br = new SolidBrush(pal.Accent))
+                        e.Graphics.FillRectangle(br, e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height);
                 TextRenderer.DrawText(e.Graphics, e.SubItem.Text ?? "", _list.Font,
                     new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height),
-                    Theme.P.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                    pal.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
             };
 
-            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 120, Padding = new Padding(8), BackColor = p.Panel2 };
+            _bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 120, Padding = new Padding(8), BackColor = p.Panel2 };
+            var bottom = _bottomPanel;
             _selectedLabel = new Label { Left = 10, Top = 12, Width = 640, Height = 20, Text = "No target selected",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), BackColor = Color.Transparent };
             _coordsLabel = new Label { Left = 10, Top = 38, Width = 640, Height = 20, Text = "",
@@ -121,10 +131,13 @@ namespace ASCOM.OnStepX.Ui
             var p = Theme.P;
             BackColor = p.Bg;
             ForeColor = p.Text;
+            if (_topPanel != null) _topPanel.BackColor = p.Panel2;
+            if (_bottomPanel != null) _bottomPanel.BackColor = p.Panel2;
             if (_list != null) { _list.BackColor = p.Panel; _list.ForeColor = p.Text; _list.Invalidate(); }
             if (_catalogCombo != null) { _catalogCombo.BackColor = p.InputBg; _catalogCombo.ForeColor = p.Text; }
             if (_filterBox != null) { _filterBox.BackColor = p.InputBg; _filterBox.ForeColor = p.Text; }
             if (_coordsLabel != null) _coordsLabel.ForeColor = p.TextDim;
+            if (_selectedLabel != null) _selectedLabel.ForeColor = p.Text;
         }
 
         private void RefreshList()
