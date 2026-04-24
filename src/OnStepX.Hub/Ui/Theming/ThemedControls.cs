@@ -3,10 +3,31 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace ASCOM.OnStepX.Ui.Theming
 {
+    // Apply the DarkMode_Explorer Windows theme to a control's HWND so OS-rendered
+    // scrollbars (on Panel, RichTextBox, ListView, etc.) pick up dark colors on
+    // Windows 10 1809+. No-op on older Windows — uxtheme returns non-zero and the
+    // control silently falls back to the light theme. Must be called after the
+    // handle is created; the helper auto-subscribes HandleCreated so callers can
+    // invoke it at construction time.
+    internal static class DarkScroll
+    {
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        private static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
+
+        public static void Apply(Control c)
+        {
+            if (c == null) return;
+            void apply() { try { SetWindowTheme(c.Handle, "DarkMode_Explorer", null); } catch { } }
+            if (c.IsHandleCreated) apply();
+            c.HandleCreated += (s, e) => apply();
+        }
+    }
+
     // Rounded-rect helper.
     internal static class GdiExt
     {
@@ -32,8 +53,12 @@ namespace ASCOM.OnStepX.Ui.Theming
         }
     }
 
-    // Flat, themed button. Variants: Default, Primary, Danger. Sizes: Normal, Small.
-    internal class FlatButton : Button
+    // Flat, themed button. Inherits Control (not Button) so native Windows visual
+    // styling never paints text/glyphs on top of our custom render — fixes duplicate
+    // text artifacts when Enabled toggles under Visual Styles.
+    // Implements IButtonControl so Form.AcceptButton/CancelButton + DialogResult
+    // auto-close semantics still work in dialogs.
+    internal class FlatButton : Control, IButtonControl
     {
         public enum Variant { Default, Primary, Danger, Ghost }
         public enum ButtonSize { Normal, Small }
@@ -41,6 +66,7 @@ namespace ASCOM.OnStepX.Ui.Theming
         private Variant _variant = Variant.Default;
         private ButtonSize _size = ButtonSize.Normal;
         private bool _hover, _down;
+        private DialogResult _dialogResult = DialogResult.None;
 
         public Variant Kind
         {
@@ -54,18 +80,32 @@ namespace ASCOM.OnStepX.Ui.Theming
             set { _size = value; ApplySize(); Invalidate(); }
         }
 
+        public DialogResult DialogResult
+        {
+            get => _dialogResult;
+            set => _dialogResult = value;
+        }
+
+        public void NotifyDefault(bool value) { }
+
+        public void PerformClick()
+        {
+            if (CanSelect) OnClick(EventArgs.Empty);
+        }
+
         public FlatButton()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint
                    | ControlStyles.OptimizedDoubleBuffer
                    | ControlStyles.ResizeRedraw
                    | ControlStyles.UserPaint
+                   | ControlStyles.Selectable
+                   | ControlStyles.StandardClick
                    | ControlStyles.SupportsTransparentBackColor, true);
-            FlatStyle = FlatStyle.Flat;
-            FlatAppearance.BorderSize = 0;
-            UseVisualStyleBackColor = false;
+            TabStop = true;
             Font = new Font("Segoe UI", 8.75f, FontStyle.Regular);
             Cursor = Cursors.Hand;
+            BackColor = Color.Transparent;
             ApplySize();
             Theme.Changed += (s, e) => Invalidate();
         }
@@ -76,15 +116,54 @@ namespace ASCOM.OnStepX.Ui.Theming
             if (Height != h) Height = h;
         }
 
+        protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); Invalidate(); }
+        protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+
         protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); _hover = true; Invalidate(); }
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); _hover = false; _down = false; Invalidate(); }
-        protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); _down = true; Invalidate(); }
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Left) { Focus(); _down = true; Invalidate(); }
+        }
         protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); _down = false; Invalidate(); }
+
+        protected override bool IsInputKey(Keys keyData)
+        {
+            if (keyData == Keys.Space || keyData == Keys.Enter) return true;
+            return base.IsInputKey(keyData);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.Space) { _down = true; Invalidate(); }
+        }
+
+        protected override void OnKeyUp(KeyEventArgs e)
+        {
+            base.OnKeyUp(e);
+            if (e.KeyCode == Keys.Space && _down) { _down = false; Invalidate(); OnClick(EventArgs.Empty); }
+            else if (e.KeyCode == Keys.Enter) { OnClick(EventArgs.Empty); }
+        }
+
+        protected override void OnClick(EventArgs e)
+        {
+            if (_dialogResult != DialogResult.None)
+            {
+                var form = FindForm();
+                if (form != null) form.DialogResult = _dialogResult;
+            }
+            base.OnClick(e);
+        }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             var p = Theme.P;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
             GdiExt.SmoothText(g);
 
             Color bg, border, fg;
@@ -136,6 +215,13 @@ namespace ASCOM.OnStepX.Ui.Theming
 
             TextRenderer.DrawText(g, Text, Font, new Rectangle(Padding.Left, Padding.Top, Width - Padding.Horizontal, Height - Padding.Vertical),
                 fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            if (Focused && enabled)
+            {
+                var fr = new Rectangle(2, 2, Width - 5, Height - 5);
+                using (var pen = new Pen(Color.FromArgb(80, p.Accent), 1) { DashStyle = DashStyle.Dot })
+                    g.DrawRectangle(pen, fr);
+            }
         }
     }
 
@@ -712,23 +798,74 @@ namespace ASCOM.OnStepX.Ui.Theming
         }
     }
 
-    // Themed checkbox: custom box + label.
-    internal class ThemedCheckBox : CheckBox
+    // Themed checkbox: custom box + label. Inherits Control (not CheckBox) so native
+    // Visual Styles never double-paint text/glyphs on top of our custom render — fixes
+    // duplicate-text artifacts seen on toggle labels under Visual Styles.
+    internal class ThemedCheckBox : Control
     {
+        private bool _checked;
+        private bool _hover;
+
+        public event EventHandler CheckedChanged;
+
+        public bool Checked
+        {
+            get => _checked;
+            set
+            {
+                if (_checked == value) return;
+                _checked = value;
+                Invalidate();
+                CheckedChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
         public ThemedCheckBox()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint
                    | ControlStyles.OptimizedDoubleBuffer
                    | ControlStyles.ResizeRedraw
                    | ControlStyles.UserPaint
+                   | ControlStyles.Selectable
+                   | ControlStyles.StandardClick
                    | ControlStyles.SupportsTransparentBackColor, true);
-            FlatStyle = FlatStyle.Flat;
-            AutoSize = false;
+            TabStop = true;
             Height = 20;
-            UseVisualStyleBackColor = false;
             BackColor = Color.Transparent;
             Font = new Font("Segoe UI", 8.75f);
+            Cursor = Cursors.Hand;
             Theme.Changed += (s, e) => Invalidate();
+        }
+
+        protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); Invalidate(); }
+        protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+        protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); _hover = true; Invalidate(); }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); _hover = false; Invalidate(); }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Left) Focus();
+        }
+
+        protected override void OnClick(EventArgs e)
+        {
+            Checked = !_checked;
+            base.OnClick(e);
+        }
+
+        protected override bool IsInputKey(Keys keyData)
+        {
+            if (keyData == Keys.Space) return true;
+            return base.IsInputKey(keyData);
+        }
+
+        protected override void OnKeyUp(KeyEventArgs e)
+        {
+            base.OnKeyUp(e);
+            if (e.KeyCode == Keys.Space) { Checked = !_checked; }
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -740,15 +877,15 @@ namespace ASCOM.OnStepX.Ui.Theming
 
             int bx = 0, by = (Height - 14) / 2;
             var box = new Rectangle(bx, by, 14, 14);
-            Color fill = Checked ? p.Accent : p.InputBg;
-            Color border = Checked ? p.Accent : (Enabled ? p.InputBorder : p.Border);
+            Color fill = _checked ? p.Accent : p.InputBg;
+            Color border = _checked ? p.Accent : (_hover ? p.InputBorderHover : (Enabled ? p.InputBorder : p.Border));
             using (var path = GdiExt.Rounded(box, 3))
             using (var br = new SolidBrush(fill))
                 g.FillPath(br, path);
             using (var path = GdiExt.Rounded(box, 3))
             using (var pen = new Pen(border, 1.2f))
                 g.DrawPath(pen, path);
-            if (Checked)
+            if (_checked)
             {
                 using (var pen = new Pen(p.AccentInk, 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
                 {
@@ -765,6 +902,13 @@ namespace ASCOM.OnStepX.Ui.Theming
             TextRenderer.DrawText(g, Text, Font, textRect,
                 Enabled ? p.Text : p.TextFaint,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+
+            if (Focused && Enabled)
+            {
+                var fr = new Rectangle(bx - 1, by - 1, 16, 16);
+                using (var pen = new Pen(Color.FromArgb(90, p.Accent), 1) { DashStyle = DashStyle.Dot })
+                    g.DrawRectangle(pen, fr);
+            }
         }
     }
 
@@ -843,6 +987,7 @@ namespace ASCOM.OnStepX.Ui.Theming
             Font = new Font("Consolas", 9f);
             Theme.Changed += (s, e) => ApplyTheme();
             ApplyTheme();
+            DarkScroll.Apply(this);
         }
 
         private void ApplyTheme()

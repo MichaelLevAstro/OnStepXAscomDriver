@@ -25,15 +25,14 @@ namespace ASCOM.OnStepX.Ui
         private ComboBox _transportKind, _portCombo;
         private TextBox _hostBox;
         private NumericUpDown _baudBox, _tcpPortBox;
-        private Button _autoDetectBtn, _connectBtn, _disconnectBtn;
+        private FlatButton _autoDetectBtn, _connectBtn, _disconnectBtn;
         private StatusLabel _statusLed;
         private StatusLabel _stateLabel;
         private SlewingBadge _slewingBadge;
-        private Label _clientsLabel;
         private StatusLabel _clientsStatus;
 
         private RichTextBox _ioBox;
-        private CheckBox _ioEnable;
+        private ThemedCheckBox _ioEnable;
         private TextBox _ioFilter;
         // Console entry kinds drive the rendered color. Pair = normal cmd/reply
         // (green), Invalid = pair whose reply is empty/nan/0 (orange, flags failed
@@ -43,26 +42,29 @@ namespace ASCOM.OnStepX.Ui
         // Full history (pre-filter); rendered through _ioFilter into _ioBox.
         private readonly System.Collections.Generic.LinkedList<ConsoleEntry> _ioAll = new System.Collections.Generic.LinkedList<ConsoleEntry>();
         private const int IoHistoryMax = 2000;
-        private static readonly Color ConsoleNormalColor  = Color.LightGreen;
-        private static readonly Color ConsoleInvalidColor = Color.Orange;
-        private static readonly Color ConsoleNoteColor    = Color.White;
+        // Colors resolved at emit time from the theme palette (ColResp/Danger/ColMeta)
+        // so a theme switch immediately colors subsequent lines. Old constants kept
+        // as name-tags in the call sites and resolved below.
+        private static Color ConsoleNormalColor  => Theme.P.ColResp;
+        private static Color ConsoleInvalidColor => Theme.P.Danger;
+        private static Color ConsoleNoteColor    => Theme.P.ColMeta;
 
         private Panel _logPanel;
-        private CheckBox _consoleToggle;
+        private ThemedCheckBox _consoleToggle;
         private TextBox _cmdInput;
-        private Button _cmdSendBtn;
+        private FlatButton _cmdSendBtn;
         private const int ConsoleExpandedHeight = 280;
         private const int ConsoleCollapsedHeight = 40;
-        private CheckBox _ioAutoScroll;
+        private ThemedCheckBox _ioAutoScroll;
 
         private TextBox _latBox, _lonBox, _eleBox;
-        private Button _siteWriteBtn, _siteSyncPcBtn, _sitesBtn;
+        private FlatButton _siteWriteBtn, _siteSyncPcBtn, _sitesBtn;
 
         private DateTimePicker _datePicker, _timePicker;
         private NumericUpDown _utcOffsetBox;
-        private Button _syncFromPcBtn, _setDateTimeBtn;
+        private FlatButton _syncFromPcBtn, _setDateTimeBtn;
 
-        private CheckBox _trackingCheck;
+        private ThemedCheckBox _trackingCheck;
         private bool _suppressTrackingCheckEvent;
         private ComboBox _trackingModeBox;
         private bool _suppressTrackingModeEvent;
@@ -71,20 +73,20 @@ namespace ASCOM.OnStepX.Ui
         private TrackBar _slewSpeedSlider;
         private bool _suppressSlewSyncEvent;
         private ComboBox _meridianActionBox;
-        private Button _advancedBtn;
+        private FlatButton _advancedBtn;
 
         private NumericUpDown _horizonLimitBox, _overheadLimitBox;
         private NumericUpDown _meridianEastBox, _meridianWestBox;
         private NumericUpDown _syncLimitBox;
-        private Button _limitsWriteBtn;
+        private FlatButton _limitsWriteBtn;
 
         private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel, _lstLabel;
 
-        private CheckBox _autoConnectCheck;
-        private CheckBox _autoSyncTimeCheck;
+        private ThemedCheckBox _autoConnectCheck;
+        private ThemedCheckBox _autoSyncTimeCheck;
 
-        private Button _parkBtn, _unparkBtn, _findHomeBtn, _goHomeBtn, _resetHomeBtn;
-        private Button _slewTargetBtn;
+        private FlatButton _parkBtn, _unparkBtn, _findHomeBtn, _goHomeBtn, _resetHomeBtn;
+        private FlatButton _slewTargetBtn;
 
         private SlewPadControl _slewPad;
 
@@ -290,13 +292,64 @@ namespace ASCOM.OnStepX.Ui
             _ioBox.ScrollToCaret();
         }
 
-        private static void AppendColoredLine(RichTextBox rtb, string line, Color color)
+        private static void AppendColoredLine(RichTextBox rtb, string line, Color fallback)
+        {
+            var p = Theme.P;
+            // Expected shape: "HH:mm:ss.fff  CMD..  ->  REPLY  (Nms)" (pair) or
+            // "HH:mm:ss.fff  -- note text" (note/meta). Anything else falls back to 'fallback'.
+            // Segment coloring:
+            //   ts  -> ColTs   cmd -> ColCmd   -> arrow -> TextFaint
+            //   reply -> fallback (valid=ColResp, invalid=Danger, note=ColMeta)
+            //   elapsed (Nms) -> ColMeta
+            int first = line.IndexOf("  ", StringComparison.Ordinal);
+            if (first < 13) { EmitSingle(rtb, line, fallback); return; }
+            string ts = line.Substring(0, first);
+            string rest = line.Substring(first + 2);
+            // Note?
+            if (rest.StartsWith("-- ", StringComparison.Ordinal))
+            {
+                EmitSeg(rtb, ts + "  ", p.ColTs);
+                EmitSeg(rtb, rest, p.ColMeta);
+                rtb.AppendText(Environment.NewLine);
+                return;
+            }
+            int arrow = rest.IndexOf("  ->  ", StringComparison.Ordinal);
+            if (arrow < 0) { EmitSingle(rtb, line, fallback); return; }
+            string cmd = rest.Substring(0, arrow).TrimEnd();
+            string cmdPad = rest.Substring(0, arrow);
+            string after = rest.Substring(arrow + 6);
+            // Split trailing "  (Nms)" if present.
+            string reply = after;
+            string elapsed = "";
+            int paren = after.LastIndexOf("  (", StringComparison.Ordinal);
+            if (paren >= 0 && after.EndsWith(")", StringComparison.Ordinal))
+            {
+                reply = after.Substring(0, paren);
+                elapsed = after.Substring(paren);
+            }
+            EmitSeg(rtb, ts + "  ", p.ColTs);
+            EmitSeg(rtb, cmdPad, p.ColCmd);
+            EmitSeg(rtb, "  ->  ", p.TextFaint);
+            EmitSeg(rtb, reply, fallback == p.ColResp ? p.ColResp : fallback);
+            if (elapsed.Length > 0) EmitSeg(rtb, elapsed, p.ColMeta);
+            rtb.AppendText(Environment.NewLine);
+        }
+
+        private static void EmitSeg(RichTextBox rtb, string s, Color color)
+        {
+            if (string.IsNullOrEmpty(s)) return;
+            rtb.SelectionStart = rtb.TextLength;
+            rtb.SelectionLength = 0;
+            rtb.SelectionColor = color;
+            rtb.AppendText(s);
+        }
+
+        private static void EmitSingle(RichTextBox rtb, string line, Color color)
         {
             rtb.SelectionStart = rtb.TextLength;
             rtb.SelectionLength = 0;
             rtb.SelectionColor = color;
             rtb.AppendText(line + Environment.NewLine);
-            rtb.SelectionColor = rtb.ForeColor;
         }
 
         // P/Invoke for precise scroll preservation when auto-scroll is off.
@@ -409,8 +462,12 @@ namespace ASCOM.OnStepX.Ui
             // NoAutoScrollFlowPanel suppresses ScrollControlIntoView so clicking
             // a button or focusing a nested control doesn't snap the panel's
             // scroll position. Manual scrollbar + wheel still work.
-            var left = new NoAutoScrollFlowPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-            var right = new NoAutoScrollFlowPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            var left = new NoAutoScrollFlowPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, BackColor = Theme.P.Bg };
+            var right = new NoAutoScrollFlowPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, BackColor = Theme.P.Bg };
+            ASCOM.OnStepX.Ui.Theming.DarkScroll.Apply(left);
+            ASCOM.OnStepX.Ui.Theming.DarkScroll.Apply(right);
+            Theme.Changed += (s, e) => { left.BackColor = Theme.P.Bg; right.BackColor = Theme.P.Bg; root.BackColor = Theme.P.Bg; };
+            root.BackColor = Theme.P.Bg;
             root.Controls.Add(left, 0, 0);
             root.Controls.Add(right, 1, 0);
 
@@ -426,7 +483,7 @@ namespace ASCOM.OnStepX.Ui
             right.Controls.Add(BuildFooter());
         }
 
-        private GroupBox BuildConnectionGroup()
+        private SectionPanel BuildConnectionGroup()
         {
             var g = NewGroup("Connection", 440, 190);
             _transportKind = new ComboBox { Left = 110, Top = 24, Width = 80, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -478,7 +535,7 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        private GroupBox BuildSiteGroup()
+        private SectionPanel BuildSiteGroup()
         {
             var g = NewGroup("Site", 440, 160);
             _latBox = new TextBox { Left = 110, Top = 26, Width = 220 };
@@ -529,7 +586,7 @@ namespace ASCOM.OnStepX.Ui
             }
         }
 
-        private GroupBox BuildTimeGroup()
+        private SectionPanel BuildTimeGroup()
         {
             var g = NewGroup("Date / Time", 440, 168);
             _datePicker = new DateTimePicker { Left = 110, Top = 24, Width = 120, Format = DateTimePickerFormat.Short };
@@ -565,7 +622,7 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        private GroupBox BuildTrackingGroup()
+        private SectionPanel BuildTrackingGroup()
         {
             var g = NewGroup("Tracking / Slew", 440, 175);
             _trackingCheck = new ThemedCheckBox { Text = "Tracking enabled", Left = 10, Top = 26, Width = 160 };
@@ -689,7 +746,7 @@ namespace ASCOM.OnStepX.Ui
             }
         }
 
-        private GroupBox BuildLimitsGroup()
+        private SectionPanel BuildLimitsGroup()
         {
             var g = NewGroup("Limits", 440, 150);
             _horizonLimitBox = new NumericUpDown { Left = 110, Top = 26, Width = 60, Minimum = -30, Maximum = 30 };
@@ -728,7 +785,7 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        private GroupBox BuildPositionGroup()
+        private SectionPanel BuildPositionGroup()
         {
             var g = NewGroup("Current Position", 360, 195);
             _raLabel = new Label { Left = 110, Top = 28, Width = 230, Text = "—" };
@@ -782,7 +839,7 @@ namespace ASCOM.OnStepX.Ui
             return string.Format(CultureInfo.InvariantCulture, "{0:00}:{1:00}:{2:00.0}", hh, mm, ss);
         }
 
-        private GroupBox BuildParkHomeGroup()
+        private SectionPanel BuildParkHomeGroup()
         {
             var g = NewGroup("Park / Home / Go To", 360, 140);
             _parkBtn = new FlatButton { Text = "Park", Left = 10, Top = 26, Width = 80 };
@@ -823,7 +880,7 @@ namespace ASCOM.OnStepX.Ui
             using (var f = new SlewTargetForm(_mount)) f.ShowDialog(this);
         }
 
-        private GroupBox BuildSlewPadGroup()
+        private SectionPanel BuildSlewPadGroup()
         {
             var g = NewGroup("Manual Slew", 360, 260);
             _slewPad = new SlewPadControl { Left = 20, Top = 24, Width = 320, Height = 220 };
@@ -842,7 +899,6 @@ namespace ASCOM.OnStepX.Ui
             _clientsStatus.Kind = PulseDot.StatusKind.Info;
             _clientsStatus.Pulsing = false;
             _clientsStatus.Text = "Connected clients: 0";
-            _clientsLabel = null;
             p.Controls.Add(_clientsStatus);
             return p;
         }
@@ -1051,27 +1107,39 @@ namespace ASCOM.OnStepX.Ui
         private Panel BuildLogPanel()
         {
             _logPanel = new Panel { Dock = DockStyle.Bottom, Height = ConsoleExpandedHeight, Padding = new Padding(8, 0, 8, 8) };
+            _logPanel.BackColor = Theme.P.Bg;
 
             var ioPane = BuildIoPane();
             ioPane.Dock = DockStyle.Fill;
 
-            var header = new Panel { Dock = DockStyle.Top, Height = 32 };
-            _consoleToggle = new CheckBox { Text = "Show console", Left = 0, Top = 8, Width = 110, Checked = true };
+            var header = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = Color.Transparent };
+            _consoleToggle = new ThemedCheckBox { Text = "Show console", Left = 0, Top = 8, Width = 110, Checked = true };
             _consoleToggle.CheckedChanged += (s, e) => ApplyConsoleVisibility();
-            var cmdLabel = new Label { Text = "Manual cmd:", Left = 120, Top = 10, Width = 80 };
-            _cmdInput = new TextBox { Left = 205, Top = 6, Width = 260, Font = new Font(FontFamily.GenericMonospace, 9f) };
+            var cmdLabel = new Label { Text = "Manual cmd:", Left = 120, Top = 10, Width = 80, BackColor = Color.Transparent, ForeColor = Theme.P.Text };
+            _cmdInput = new TextBox { Left = 205, Top = 6, Width = 260, Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Theme.P.InputBg, ForeColor = Theme.P.Text };
             _cmdInput.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter) { SendManualCommand(); e.Handled = true; e.SuppressKeyPress = true; }
             };
-            _cmdSendBtn = new Button { Text = "Send", Left = 470, Top = 4, Width = 70, Height = 26 };
+            _cmdSendBtn = new FlatButton { Text = "Send", Left = 470, Top = 4, Width = 70, Height = 26 };
+            ((FlatButton)_cmdSendBtn).Kind = FlatButton.Variant.Primary;
             _cmdSendBtn.Click += (s, e) => SendManualCommand();
-            var hint = new Label { Text = "(e.g. :GVP#  — leading ':' and trailing '#' auto-added)", Left = 550, Top = 10, Width = 350, ForeColor = Color.DimGray };
+            var hint = new Label { Text = "(e.g. :GVP#  — leading ':' and trailing '#' auto-added)", Left = 550, Top = 10, Width = 350, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent };
             header.Controls.Add(_consoleToggle);
             header.Controls.Add(cmdLabel);
             header.Controls.Add(_cmdInput);
             header.Controls.Add(_cmdSendBtn);
             header.Controls.Add(hint);
+
+            Theme.Changed += (s, e) =>
+            {
+                _logPanel.BackColor = Theme.P.Bg;
+                cmdLabel.ForeColor = Theme.P.Text;
+                _cmdInput.BackColor = Theme.P.InputBg;
+                _cmdInput.ForeColor = Theme.P.Text;
+                hint.ForeColor = Theme.P.TextFaint;
+            };
 
             _logPanel.Controls.Add(ioPane);
             _logPanel.Controls.Add(header);
@@ -1126,15 +1194,15 @@ namespace ASCOM.OnStepX.Ui
         // substring match — every token must appear literally in the line.
         private Panel BuildIoPane()
         {
-            var pane = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
+            var pane = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0), BackColor = Theme.P.ConsoleBg, Padding = new Padding(1) };
 
             // Two-row header. Row 1: title/toggles/log-level actions. Row 2:
             // filter field with its own clear button. Separated rows so Clear/Copy
             // on row 1 can't be mistaken for filter controls.
-            var header = new Panel { Dock = DockStyle.Top, Height = 54 };
-            var title = new Label { Text = "Console", Left = 0, Top = 6, Width = 80, Font = new Font(Font, FontStyle.Bold) };
-            _ioEnable = new CheckBox { Text = "Enabled", Left = 85, Top = 6, Width = 75, Checked = true };
-            _ioAutoScroll = new CheckBox { Text = "Auto-scroll", Left = 165, Top = 6, Width = 95, Checked = true };
+            var header = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = Theme.P.ConsoleLine, Padding = new Padding(8, 4, 8, 4) };
+            var title = new Label { Text = "CONSOLE", Left = 0, Top = 8, Width = 80, Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
+            _ioEnable = new ThemedCheckBox { Text = "Enabled", Left = 85, Top = 8, Width = 75, Checked = true };
+            _ioAutoScroll = new ThemedCheckBox { Text = "Auto-scroll", Left = 165, Top = 8, Width = 95, Checked = true };
             _ioAutoScroll.CheckedChanged += (s, e) =>
             {
                 if (_ioAutoScroll.Checked && _ioBox != null)
@@ -1143,15 +1211,15 @@ namespace ASCOM.OnStepX.Ui
                     _ioBox.ScrollToCaret();
                 }
             };
-            var clearBtn = new Button { Text = "Clear", Left = 525, Top = 2, Width = 70, Height = 24 };
-            var copyBtn  = new Button { Text = "Copy",  Left = 600, Top = 2, Width = 70, Height = 24 };
+            var clearBtn = new FlatButton { Text = "Clear", Left = 525, Top = 4, Width = 70, Height = 24, Sz = FlatButton.ButtonSize.Small };
+            var copyBtn  = new FlatButton { Text = "Copy",  Left = 600, Top = 4, Width = 70, Height = 24, Sz = FlatButton.ButtonSize.Small };
             clearBtn.Click += (s, e) => { _ioBox.Clear(); _ioAll.Clear(); while (_ioPending.TryDequeue(out _)) { } };
             copyBtn.Click  += (s, e) => { try { if (!string.IsNullOrEmpty(_ioBox.Text)) Clipboard.SetText(_ioBox.Text); } catch { } };
 
-            var filterLabel = new Label { Text = "Filter:", Left = 0, Top = 32, Width = 40 };
-            _ioFilter = new TextBox { Left = 40, Top = 28, Width = 555, Font = new Font(FontFamily.GenericMonospace, 9f) };
+            var filterLabel = new Label { Text = "Filter:", Left = 0, Top = 34, Width = 40, ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
+            _ioFilter = new TextBox { Left = 40, Top = 30, Width = 555, Font = new Font("Consolas", 9f), BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.P.InputBg, ForeColor = Theme.P.Text };
             _ioFilter.TextChanged += (s, e) => RebuildIoView();
-            var filterClearBtn = new Button { Text = "Clear filter", Left = 600, Top = 26, Width = 90, Height = 24 };
+            var filterClearBtn = new FlatButton { Text = "Clear filter", Left = 600, Top = 28, Width = 90, Height = 24, Sz = FlatButton.ButtonSize.Small };
             filterClearBtn.Click += (s, e) => { _ioFilter.Clear(); _ioFilter.Focus(); };
 
             header.Controls.Add(title);
@@ -1163,17 +1231,7 @@ namespace ASCOM.OnStepX.Ui
             header.Controls.Add(_ioFilter);
             header.Controls.Add(filterClearBtn);
 
-            _ioBox = new RichTextBox
-            {
-                Dock = DockStyle.Fill,
-                ReadOnly = true,
-                ScrollBars = RichTextBoxScrollBars.Vertical,
-                WordWrap = false,
-                DetectUrls = false,
-                Font = new Font(FontFamily.GenericMonospace, 8.5f),
-                BackColor = Color.Black,
-                ForeColor = ConsoleNormalColor,
-            };
+            _ioBox = new ConsoleLogBox { Dock = DockStyle.Fill, Font = new Font("Consolas", 9f) };
             pane.Controls.Add(_ioBox);
             pane.Controls.Add(header);
             return pane;
@@ -1485,6 +1543,14 @@ namespace ASCOM.OnStepX.Ui
                     foreach (var c in _disableWhileConnectingControls) c.Enabled = true;
                     if (_cmdInput != null) _cmdInput.Enabled = false;
                     if (_cmdSendBtn != null) _cmdSendBtn.Enabled = false;
+                    if (_slewingBadge != null) _slewingBadge.Visible = false;
+                    if (_stateLabel != null)
+                    {
+                        _stateLabel.Visible = true;
+                        _stateLabel.Text = "State: \u2014";
+                        _stateLabel.Kind = PulseDot.StatusKind.Neutral;
+                        _stateLabel.Pulsing = false;
+                    }
                     break;
                 case ConnState.Connecting:
                     _statusLed.Text = "Connecting...";
@@ -1766,12 +1832,28 @@ namespace ASCOM.OnStepX.Ui
             _lstLabel.Text = FormatHours(mountLst) + "  /  " + FormatHours(skyLst)
                 + "   Δ " + deltaMin.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) + " min";
             string mode;
-            if (st.AtPark) mode = "Parked";
-            else if (st.Slewing) mode = "Slewing";
-            else if (st.Tracking) mode = "Tracking";
-            else if (st.AtHome) mode = "At Home";
-            else mode = "Idle";
-            _stateLabel.Text = "State: " + mode;
+            PulseDot.StatusKind stateKind;
+            bool pulse = false;
+            if (st.AtPark)       { mode = "Parked";   stateKind = PulseDot.StatusKind.Warn; }
+            else if (st.Slewing) { mode = "Slewing";  stateKind = PulseDot.StatusKind.Info; }
+            else if (st.Tracking){ mode = "Tracking"; stateKind = PulseDot.StatusKind.Ok; pulse = true; }
+            else if (st.AtHome)  { mode = "At Home";  stateKind = PulseDot.StatusKind.Info; }
+            else                 { mode = "Idle";     stateKind = PulseDot.StatusKind.Neutral; }
+            // Slewing badge replaces the state label while the mount is moving.
+            bool showBadge = st.Slewing;
+            if (_slewingBadge != null)
+            {
+                if (_slewingBadge.Visible != showBadge) _slewingBadge.Visible = showBadge;
+                if (showBadge)
+                    _slewingBadge.Coord = CoordFormat.FormatHoursHighPrec(st.RightAscension) + " " + CoordFormat.FormatDegreesHighPrec(st.Declination);
+            }
+            if (_stateLabel != null)
+            {
+                _stateLabel.Visible = !showBadge;
+                _stateLabel.Text = "State: " + mode;
+                _stateLabel.Kind = stateKind;
+                _stateLabel.Pulsing = pulse;
+            }
 
             if (_trackingCheck.Checked != st.Tracking)
             {
@@ -1799,7 +1881,14 @@ namespace ASCOM.OnStepX.Ui
             }
         }
 
-        private void UpdateClientLabel() { _clientsLabel.Text = "Connected clients: " + ClientRegistry.Count; }
+        private void UpdateClientLabel()
+        {
+            if (_clientsStatus == null) return;
+            int n = ClientRegistry.Count;
+            _clientsStatus.Text = "Connected clients: " + n;
+            _clientsStatus.Kind = n > 0 ? PulseDot.StatusKind.Ok : PulseDot.StatusKind.Info;
+            _clientsStatus.Pulsing = n > 0;
+        }
 
         // ---------- Settings ----------
         private void LoadFromSettings()

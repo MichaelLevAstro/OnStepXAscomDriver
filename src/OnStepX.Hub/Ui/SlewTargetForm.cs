@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using ASCOM.OnStepX.Astronomy;
 using ASCOM.OnStepX.Hardware;
+using ASCOM.OnStepX.Ui.Theming;
 
 namespace ASCOM.OnStepX.Ui
 {
@@ -16,7 +17,7 @@ namespace ASCOM.OnStepX.Ui
         private TextBox _filterBox;
         private ListView _list;
         private Label _selectedLabel, _coordsLabel;
-        private Button _slewBtn, _refreshBtn, _closeBtn;
+        private FlatButton _slewBtn, _refreshBtn, _closeBtn;
         private IReadOnlyList<CelestialTarget> _currentCatalog;
         private string _listStatus = "";
 
@@ -24,54 +25,106 @@ namespace ASCOM.OnStepX.Ui
         {
             _mount = mount;
             Text = "Slew to Target";
-            MinimumSize = new Size(640, 480);
+            MinimumSize = new Size(700, 520);
             StartPosition = FormStartPosition.CenterParent;
+            BackColor = Theme.P.Bg;
+            ForeColor = Theme.P.Text;
+            Font = new Font("Segoe UI", 8.75f);
+            try { Icon = AppIcons.App; } catch { }
+            Theme.Changed += (s, e) => ApplyTheme();
             BuildUi();
+            ApplyTheme();
             _catalogCombo.SelectedIndex = 0;
             RefreshList();
         }
 
         private void BuildUi()
         {
-            var top = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(8) };
-            top.Controls.Add(new Label { Text = "Catalog:", Left = 10, Top = 10, Width = 60 });
-            _catalogCombo = new ComboBox { Left = 70, Top = 6, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList };
+            var p = Theme.P;
+            var top = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(8), BackColor = p.Panel2 };
+            top.Controls.Add(new Label { Text = "Catalog:", Left = 10, Top = 14, Width = 60, BackColor = Color.Transparent });
+            _catalogCombo = new ComboBox { Left = 70, Top = 10, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat,
+                BackColor = p.InputBg, ForeColor = p.Text };
             _catalogCombo.Items.AddRange(new object[] { "Planets", "Messier", "NGC", "IC", "SH2", "LDN" });
             _catalogCombo.SelectedIndexChanged += (s, e) => RefreshList();
             top.Controls.Add(_catalogCombo);
 
-            top.Controls.Add(new Label { Text = "Filter:", Left = 230, Top = 10, Width = 50 });
-            _filterBox = new TextBox { Left = 280, Top = 6, Width = 200 };
+            top.Controls.Add(new Label { Text = "Filter:", Left = 230, Top = 14, Width = 50, BackColor = Color.Transparent });
+            _filterBox = new TextBox { Left = 280, Top = 10, Width = 200, BorderStyle = BorderStyle.FixedSingle,
+                BackColor = p.InputBg, ForeColor = p.Text };
             _filterBox.TextChanged += (s, e) => ApplyFilter();
             top.Controls.Add(_filterBox);
 
-            _refreshBtn = new Button { Text = "Refresh", Left = 490, Top = 4, Width = 80 };
+            _refreshBtn = new FlatButton { Text = "Refresh", Left = 490, Top = 8, Width = 80 };
             _refreshBtn.Click += (s, e) => RefreshList();
             top.Controls.Add(_refreshBtn);
 
-            _list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false, GridLines = true };
-            _list.Columns.Add("ID", 60);
-            _list.Columns.Add("Name", 220);
-            _list.Columns.Add("Type", 110);
-            _list.Columns.Add("RA (hh:mm)", 90);
-            _list.Columns.Add("Dec (±dd:mm)", 90);
+            _list = new ListView {
+                Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false,
+                GridLines = false, OwnerDraw = true, BorderStyle = BorderStyle.FixedSingle,
+                BackColor = p.Panel, ForeColor = p.Text,
+            };
+            _list.Columns.Add("ID", 70);
+            _list.Columns.Add("Name", 240);
+            _list.Columns.Add("Type", 130);
+            _list.Columns.Add("RA (hh:mm)", 100);
+            _list.Columns.Add("Dec (\u00B1dd:mm)", 100);
             _list.SelectedIndexChanged += (s, e) => UpdateSelection();
+            _list.DrawColumnHeader += (s, e) =>
+            {
+                var pal = Theme.P;
+                using (var br = new SolidBrush(pal.Panel2)) e.Graphics.FillRectangle(br, e.Bounds);
+                using (var pen = new Pen(pal.Border, 1)) e.Graphics.DrawLine(pen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+                TextRenderer.DrawText(e.Graphics, e.Header.Text ?? "", new Font("Segoe UI", 8.25f, FontStyle.Bold),
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height),
+                    pal.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+            };
+            _list.DrawItem += (s, e) =>
+            {
+                var pal = Theme.P;
+                Color bg = e.Item.Selected ? pal.AccentSoft : pal.Panel;
+                using (var br = new SolidBrush(bg)) e.Graphics.FillRectangle(br, e.Bounds);
+                if (e.Item.Selected)
+                    using (var br = new SolidBrush(pal.Accent)) e.Graphics.FillRectangle(br, e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height);
+                e.DrawDefault = false;
+            };
+            _list.DrawSubItem += (s, e) =>
+            {
+                TextRenderer.DrawText(e.Graphics, e.SubItem.Text ?? "", _list.Font,
+                    new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height),
+                    Theme.P.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+            };
 
-            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 120, Padding = new Padding(8) };
-            _selectedLabel = new Label { Left = 10, Top = 8, Width = 580, Height = 20, Text = "No target selected", Font = new Font(Font, FontStyle.Bold) };
-            _coordsLabel = new Label { Left = 10, Top = 34, Width = 580, Height = 20, Text = "" };
-            _slewBtn = new Button { Text = "Slew to Target", Left = 10, Top = 68, Width = 150, Height = 32, Enabled = false };
+            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 120, Padding = new Padding(8), BackColor = p.Panel2 };
+            _selectedLabel = new Label { Left = 10, Top = 12, Width = 640, Height = 20, Text = "No target selected",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), BackColor = Color.Transparent };
+            _coordsLabel = new Label { Left = 10, Top = 38, Width = 640, Height = 20, Text = "",
+                BackColor = Color.Transparent, ForeColor = p.TextDim };
+            _slewBtn = new FlatButton { Text = "Slew to Target", Left = 10, Top = 72, Width = 160, Height = 32, Enabled = false, Kind = FlatButton.Variant.Primary };
             _slewBtn.Click += (s, e) => DoSlew();
-            _closeBtn = new Button { Text = "Close", Left = 170, Top = 68, Width = 90, Height = 32 };
+            _closeBtn = new FlatButton { Text = "Close", Left = 180, Top = 72, Width = 90, Height = 32 };
             _closeBtn.Click += (s, e) => Close();
             bottom.Controls.Add(_selectedLabel);
             bottom.Controls.Add(_coordsLabel);
             bottom.Controls.Add(_slewBtn);
             bottom.Controls.Add(_closeBtn);
 
+            Theming.DarkScroll.Apply(_list);
+
             Controls.Add(_list);
             Controls.Add(bottom);
             Controls.Add(top);
+        }
+
+        private void ApplyTheme()
+        {
+            var p = Theme.P;
+            BackColor = p.Bg;
+            ForeColor = p.Text;
+            if (_list != null) { _list.BackColor = p.Panel; _list.ForeColor = p.Text; _list.Invalidate(); }
+            if (_catalogCombo != null) { _catalogCombo.BackColor = p.InputBg; _catalogCombo.ForeColor = p.Text; }
+            if (_filterBox != null) { _filterBox.BackColor = p.InputBg; _filterBox.ForeColor = p.Text; }
+            if (_coordsLabel != null) _coordsLabel.ForeColor = p.TextDim;
         }
 
         private void RefreshList()
