@@ -74,6 +74,7 @@ namespace ASCOM.OnStepX.Ui
         private bool _suppressSlewSyncEvent;
         private ComboBox _meridianActionBox;
         private bool _suppressMeridianActionEvent;
+        private DateTime _meridianActionSetAt = DateTime.MinValue;
         private FlatButton _advancedBtn;
 
         private NumericUpDown _horizonLimitBox, _overheadLimitBox;
@@ -708,7 +709,14 @@ namespace ASCOM.OnStepX.Ui
 
             _meridianActionBox = new ComboBox { Left = 110, Top = 126, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
             _meridianActionBox.Items.AddRange(new object[] { "Auto Flip", "Stop at Meridian" });
-            _meridianActionBox.SelectedIndexChanged += (s, e) => { if (_hubConnected && !_suppressMeridianActionEvent) _mount.Protocol.SetMeridianAutoFlip(_meridianActionBox.SelectedIndex == 0); };
+            _meridianActionBox.SelectedIndexChanged += (s, e) =>
+            {
+                if (_suppressMeridianActionEvent) return;
+                // Stamp before the write so the poll-driven readback (which reflects the
+                // PRE-write state for up to one cycle) doesn't snap the combo back.
+                _meridianActionSetAt = DateTime.UtcNow;
+                if (_hubConnected) _mount.Protocol.SetMeridianAutoFlip(_meridianActionBox.SelectedIndex == 0);
+            };
 
             // Advanced button exposes runtime-settable OnStepX options that don't
             // belong on the main form (preferred pier side, pause-at-home). Always
@@ -1898,6 +1906,21 @@ namespace ASCOM.OnStepX.Ui
                     _suppressTrackingModeEvent = true;
                     try { _trackingModeBox.SelectedIndex = idx; }
                     finally { _suppressTrackingModeEvent = false; }
+                }
+            }
+
+            // Mirror auto-meridian-flip state from the same :GU# 'a' char OnStep's web
+            // view reads — keeps the combo in sync when another client (web view, INDI,
+            // ASCOM) toggles it. Same 3 s debounce + dropped-down skip as tracking mode.
+            bool meridianDebouncing = (DateTime.UtcNow - _meridianActionSetAt).TotalMilliseconds < 3000;
+            if (!meridianDebouncing && !_meridianActionBox.DroppedDown)
+            {
+                int desiredIdx = st.AutoMeridianFlip ? 0 : 1;
+                if (desiredIdx != _meridianActionBox.SelectedIndex)
+                {
+                    _suppressMeridianActionEvent = true;
+                    try { _meridianActionBox.SelectedIndex = desiredIdx; }
+                    finally { _suppressMeridianActionEvent = false; }
                 }
             }
         }

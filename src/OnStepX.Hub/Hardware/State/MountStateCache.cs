@@ -15,6 +15,7 @@ namespace ASCOM.OnStepX.Hardware.State
         public bool Slewing;
         public bool AtPark;
         public bool AtHome;
+        public bool AutoMeridianFlip;   // parsed from :GU# 'a' char (matches OnStep web view)
         public string SideOfPier;       // "E" or "W" or ""
         public string TrackingMode;     // "Sidereal" | "Solar" | "Lunar" | "King" | ""
         public string LastStatusString; // raw :GU# reply
@@ -87,11 +88,15 @@ namespace ASCOM.OnStepX.Hardware.State
                     //   'P' = parked              'p' = not parked
                     //   'I' = park in progress    'F' = park failed
                     //   'H' = at home
+                    //   'a' = auto-meridian-flip enabled (only on equatorial mounts that support flips)
                     var raw = LastStatusString.TrimEnd('#');
                     Tracking = raw.IndexOf('n') < 0;
                     Slewing  = raw.IndexOf('N') < 0 || raw.IndexOf('I') >= 0;
                     AtPark   = raw.IndexOf('P') >= 0;
                     AtHome   = raw.IndexOf('H') >= 0;
+                    // 'a' is unique in :GU# (no other field uses lowercase 'a'); same source
+                    // OnStep's web view reads, and matches firmware's isAutoFlipEnabled().
+                    AutoMeridianFlip = raw.IndexOf('a') >= 0;
                     TrackingMode = ClassifyTrackingRate(rateHz);
 
                     LastUpdateUtc = DateTime.UtcNow;
