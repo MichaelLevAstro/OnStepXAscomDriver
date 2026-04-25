@@ -89,6 +89,8 @@ namespace ASCOM.OnStepX.Ui
 
         private FlatButton _parkBtn, _unparkBtn, _findHomeBtn, _goHomeBtn, _resetHomeBtn;
         private FlatButton _slewTargetBtn;
+        private FlatButton _nvResetBtn;
+        private FlatButton _slewInfoBtn;
 
         private SlewPadControl _slewPad;
 
@@ -851,7 +853,7 @@ namespace ASCOM.OnStepX.Ui
 
         private SectionPanel BuildParkHomeGroup()
         {
-            var g = NewGroup("Park / Home / Go To", 360, 140);
+            var g = NewGroup("Park / Home / Go To", 360, 180);
             _parkBtn = new FlatButton { Text = "Park", Left = 10, Top = 26, Width = 80 };
             _unparkBtn = new FlatButton { Text = "Unpark", Left = 100, Top = 26, Width = 80 };
             // :hF# per OnStep command reference resets the telescope's home
@@ -868,20 +870,25 @@ namespace ASCOM.OnStepX.Ui
             _resetHomeBtn = new FlatButton { Text = "Set Park Here", Left = 130, Top = 60, Width = 160 };
             _slewTargetBtn = new FlatButton { Text = "Slew to Target...", Left = 10, Top = 94, Width = 200 };
             ((FlatButton)_slewTargetBtn).Kind = FlatButton.Variant.Primary;
+            // Destructive: wipes mount NV memory (factory reset) then reboots.
+            _nvResetBtn = new FlatButton { Text = "NV Reset...", Left = 10, Top = 134, Width = 200 };
             _parkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Park", _mount.Protocol.Park()));
             _unparkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Unpark", _mount.Protocol.Unpark()));
             _findHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.FindHome());
             _goHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.GoHome());
             _resetHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.SetParkHere());
             _slewTargetBtn.Click += (s, e) => OpenSlewTarget();
+            _nvResetBtn.Click += (s, e) => DoNvReset();
             g.Controls.Add(_parkBtn); g.Controls.Add(_unparkBtn); g.Controls.Add(_findHomeBtn); g.Controls.Add(_goHomeBtn); g.Controls.Add(_resetHomeBtn);
             g.Controls.Add(_slewTargetBtn);
+            g.Controls.Add(_nvResetBtn);
             _mountActionControls.Add(_parkBtn);
             _mountActionControls.Add(_unparkBtn);
             _mountActionControls.Add(_findHomeBtn);
             _mountActionControls.Add(_goHomeBtn);
             _mountActionControls.Add(_resetHomeBtn);
             _mountActionControls.Add(_slewTargetBtn);
+            _mountActionControls.Add(_nvResetBtn);
             return g;
         }
 
@@ -892,13 +899,17 @@ namespace ASCOM.OnStepX.Ui
 
         private SectionPanel BuildSlewPadGroup()
         {
-            var g = NewGroup("Manual Slew", 360, 260);
+            var g = NewGroup("Manual Slew", 360, 294);
             _slewPad = new SlewPadControl { Left = 20, Top = 24, Width = 320, Height = 220 };
             _slewPad.DirectionPressed += OnDirPress;
             _slewPad.DirectionReleased += OnDirRelease;
             _slewPad.Stop += () => Guard(() => _mount.Protocol.AbortSlew());
+            _slewInfoBtn = new FlatButton { Text = "Slew Rate Info...", Left = 20, Top = 252, Width = 320 };
+            _slewInfoBtn.Click += (s, e) => DoSlewRateInfo();
             g.Controls.Add(_slewPad);
+            g.Controls.Add(_slewInfoBtn);
             _mountActionControls.Add(_slewPad);
+            _mountActionControls.Add(_slewInfoBtn);
             return g;
         }
 
@@ -1407,21 +1418,8 @@ namespace ASCOM.OnStepX.Ui
                 // Probe: slew rate family. :GX92# current us/step, :GX93# base us/step
                 // (derived from SLEW_RATE_BASE_DESIRED), :GX97# current deg/s, :GX99#
                 // mechanical lower-limit us/step. base deg/s = curDegPerSec * (usCur / usBase).
-                try
-                {
-                    double usCur  = _mount.Protocol.GetUsPerStepCurrent();
-                    double usBase = _mount.Protocol.GetUsPerStepBase();
-                    double curDps = _mount.Protocol.GetCurrentStepRateDegPerSec();
-                    double usLim  = _mount.Protocol.GetUsPerStepLowerLimit();
-                    double baseDps = _mount.Protocol.GetBaseSlewRateDegPerSec();
-                    TransportLogger.Note(string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                        "Slew rate probe: :GX92#={0:0.000} us/step cur ; :GX93#={1:0.000} us/step base ; :GX97#={2:0.###} deg/s cur ; :GX99#={3:0.000} us/step limit ; derived base={4:0.###} deg/s",
-                        usCur, usBase, curDps, usLim, baseDps));
-                }
-                catch (Exception probeEx)
-                {
-                    TransportLogger.Note("Slew rate probe failed: " + probeEx.Message);
-                }
+                try { TransportLogger.Note("Slew rate probe: " + FormatSlewRateProbe()); }
+                catch (Exception probeEx) { TransportLogger.Note("Slew rate probe failed: " + probeEx.Message); }
             }
             catch (Exception ex)
             {
@@ -1554,6 +1552,63 @@ namespace ASCOM.OnStepX.Ui
             try { _mount.Close(); } catch { }
             _hubConnected = false;
             ApplyConnState(ConnState.Disconnected);
+        }
+
+        private void DoNvReset()
+        {
+            if (!_hubConnected) return;
+            var r = MessageBox.Show(this,
+                "This will WIPE the mount's non-volatile memory to factory defaults.\r\n\r\n" +
+                "All saved configuration on the mount (axis settings, park position, " +
+                "limits, site, time, slew rates) will be lost.\r\n\r\n" +
+                "The mount will reboot and the driver will disconnect.\r\n\r\n" +
+                "Continue?",
+                "NV Reset \u2014 Destructive",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (r != DialogResult.Yes) return;
+
+            try
+            {
+                _mount.Protocol.ResetNvMemory();
+                // Brief settle so firmware commits NV write before reboot.
+                System.Threading.Thread.Sleep(250);
+                _mount.Protocol.RebootMount();
+            }
+            catch (Exception ex)
+            {
+                CopyableMessage.Show(this, "NV Reset", "Send failed:\r\n\r\n" + ex.ToString());
+            }
+            DoDisconnect();
+            MessageBox.Show(this,
+                "NV reset and reboot sent. Mount is restarting.\r\n" +
+                "Wait ~10 seconds, then reconnect.",
+                "NV Reset", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private string FormatSlewRateProbe()
+        {
+            double usCur  = _mount.Protocol.GetUsPerStepCurrent();
+            double usBase = _mount.Protocol.GetUsPerStepBase();
+            double curDps = _mount.Protocol.GetCurrentStepRateDegPerSec();
+            double usLim  = _mount.Protocol.GetUsPerStepLowerLimit();
+            double baseDps = _mount.Protocol.GetBaseSlewRateDegPerSec();
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                ":GX92#={0:0.000} us/step cur ; :GX93#={1:0.000} us/step base ; :GX97#={2:0.###} deg/s cur ; :GX99#={3:0.000} us/step limit ; derived base={4:0.###} deg/s",
+                usCur, usBase, curDps, usLim, baseDps);
+        }
+
+        private void DoSlewRateInfo()
+        {
+            if (!_hubConnected) return;
+            try
+            {
+                CopyableMessage.Show(this, "Slew Rate Diagnostics", FormatSlewRateProbe());
+            }
+            catch (Exception ex)
+            {
+                CopyableMessage.Show(this, "Slew Rate Diagnostics", "Probe failed:\r\n\r\n" + ex.ToString());
+            }
         }
 
         private void ApplyConnState(ConnState s)
