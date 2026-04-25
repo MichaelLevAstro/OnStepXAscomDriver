@@ -27,3 +27,4 @@ Desktop.ini
 
 ## Claude / agent workspace
 .claude/
+.handoff/
