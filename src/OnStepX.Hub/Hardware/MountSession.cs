@@ -21,6 +21,13 @@ namespace ASCOM.OnStepX.Hardware
 
         public event EventHandler ConnectionChanged;
 
+        // Broadcast when a slew is rejected by the firmware with a limit-related
+        // code (rc=1 horizon, 2 overhead, 6 outside limits). HubForm subscribes
+        // and surfaces a sticky warning in the Limits section. Decoupled from
+        // the call site so any UI that issues slews can raise it.
+        public event Action<string> LimitWarning;
+        public void RaiseLimitWarning(string reason) => LimitWarning?.Invoke(reason);
+
         // Two-stage connection:
         //   Stage 1 (transport up): USB/TCP handle is open. Useful for UI to show
         //     "Connecting..." with the wire held, but commands to the mount will race

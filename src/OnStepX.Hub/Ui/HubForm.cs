@@ -81,6 +81,12 @@ namespace ASCOM.OnStepX.Ui
         private NumericUpDown _meridianEastBox, _meridianWestBox;
         private NumericUpDown _syncLimitBox;
         private FlatButton _limitsWriteBtn;
+        private StatusLabel _limitsStatusLed;
+        // Sticky slew-rejection warning. Set when MountSession.LimitWarning fires
+        // (rc=1/2/6) and held for 10 s so the user sees it after dismissing the
+        // MessageBox. Live Alt/HA limit checks bypass this and update each tick.
+        private DateTime _limitRejectionUntilUtc = DateTime.MinValue;
+        private string _limitRejectionMsg;
 
         private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel, _lstLabel;
 
@@ -118,6 +124,7 @@ namespace ASCOM.OnStepX.Ui
 
             ClientRegistry.Changed += OnClientRegistryChanged;
             _mount.ConnectionChanged += OnMountConnectionChanged;
+            _mount.LimitWarning += OnMountLimitWarning;
             TransportLogger.Pair += OnTransportPair;
             TransportLogger.Line += OnTransportLine;
             FormClosed += (s, e) => {
@@ -374,6 +381,14 @@ namespace ASCOM.OnStepX.Ui
                 BeginInvoke(new Action(SyncConnectionStateFromMount));
             }
             catch { }
+        }
+
+        // Sticky-warn for ~10 s after a slew rejection. RefreshStatus picks it
+        // up on the next 250 ms tick — no direct UI mutation needed here.
+        private void OnMountLimitWarning(string reason)
+        {
+            _limitRejectionMsg = reason;
+            _limitRejectionUntilUtc = DateTime.UtcNow.AddSeconds(10);
         }
 
         private void SyncConnectionStateFromMount()
@@ -761,6 +776,11 @@ namespace ASCOM.OnStepX.Ui
         private SectionPanel BuildLimitsGroup()
         {
             var g = NewGroup("Limits", 440, 150);
+            _limitsStatusLed = new StatusLabel { Width = 220, Height = 28 };
+            _limitsStatusLed.LabelFont = new Font("Segoe UI", 10.5f, FontStyle.Bold);
+            _limitsStatusLed.Kind = PulseDot.StatusKind.Neutral;
+            _limitsStatusLed.Text = "—";
+            g.HeaderRight = _limitsStatusLed;
             _horizonLimitBox = new NumericUpDown { Left = 110, Top = 26, Width = 60, Minimum = -30, Maximum = 30 };
             _overheadLimitBox = new NumericUpDown { Left = 260, Top = 26, Width = 60, Minimum = 60, Maximum = 90, Value = 85 };
             // OnStepX meridian limits are minutes of RA (1 min = 0.25°). Typical
@@ -1635,6 +1655,14 @@ namespace ASCOM.OnStepX.Ui
                         _stateLabel.Kind = PulseDot.StatusKind.Neutral;
                         _stateLabel.Pulsing = false;
                     }
+                    if (_limitsStatusLed != null)
+                    {
+                        _limitsStatusLed.Text = "\u2014";
+                        _limitsStatusLed.Kind = PulseDot.StatusKind.Neutral;
+                        _limitsStatusLed.Pulsing = false;
+                    }
+                    _limitRejectionMsg = null;
+                    _limitRejectionUntilUtc = DateTime.MinValue;
                     break;
                 case ConnState.Connecting:
                     _statusLed.Text = "Connecting...";
@@ -1977,6 +2005,59 @@ namespace ASCOM.OnStepX.Ui
                     try { _meridianActionBox.SelectedIndex = desiredIdx; }
                     finally { _suppressMeridianActionEvent = false; }
                 }
+            }
+
+            RefreshLimitsStatus(st);
+        }
+
+        // Drives the Limits-section header status indicator. Sticky slew-rejection
+        // warning takes priority over live drift checks — a rejected goto is the
+        // most actionable thing to surface, and live Alt may have already been
+        // back inside the limit by the next poll cycle.
+        private void RefreshLimitsStatus(MountStateCache st)
+        {
+            if (_limitsStatusLed == null) return;
+
+            string reason = null;
+
+            if (DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg))
+                reason = "Slew rejected: " + _limitRejectionMsg;
+
+            if (reason == null)
+            {
+                int horizon = (int)_horizonLimitBox.Value;
+                if (st.Altitude <= horizon)
+                    reason = "Below horizon (" + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°)";
+            }
+
+            if (reason == null && !string.IsNullOrEmpty(st.SideOfPier))
+            {
+                // HA in minutes of RA, signed: positive = west of meridian.
+                // 1 min RA = 0.25°. OnStep's per-pier meridian limit caps how
+                // far past the meridian (positive HA) the mount may continue
+                // tracking before refusing further motion / requesting a flip.
+                double haHours = st.SiderealTime - st.RightAscension;
+                while (haHours > 12) haHours -= 24;
+                while (haHours < -12) haHours += 24;
+                double haMin = haHours * 60.0;
+                if (st.SideOfPier == "E" && haMin > (int)_meridianEastBox.Value)
+                    reason = "Past meridian limit (E pier, " + haMin.ToString("F0", CultureInfo.InvariantCulture) + " min)";
+                else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
+                    reason = "Past meridian limit (W pier, " + haMin.ToString("F0", CultureInfo.InvariantCulture) + " min)";
+            }
+
+            if (reason != null)
+            {
+                string text = "LIMIT: " + reason;
+                if (_limitsStatusLed.Text != text) _limitsStatusLed.Text = text;
+                if (_limitsStatusLed.Kind != PulseDot.StatusKind.Err) _limitsStatusLed.Kind = PulseDot.StatusKind.Err;
+                if (!_limitsStatusLed.Pulsing) _limitsStatusLed.Pulsing = true;
+            }
+            else
+            {
+                if (_limitsStatusLed.Text != "Within limits") _limitsStatusLed.Text = "Within limits";
+                if (_limitsStatusLed.Kind != PulseDot.StatusKind.Ok) _limitsStatusLed.Kind = PulseDot.StatusKind.Ok;
+                if (_limitsStatusLed.Pulsing) _limitsStatusLed.Pulsing = false;
             }
         }
 

@@ -284,8 +284,11 @@ namespace ASCOM.OnStepX.Ui
                     {
                         case 1: msg = "Below horizon"; break;
                         case 2: msg = "Above overhead limit"; break;
+                        case 6: msg = "Outside meridian limits"; break;
                         default: msg = "Slew rejected (code " + rc + ")"; break;
                     }
+                    if (rc == 1 || rc == 2 || rc == 6)
+                        _mount.RaiseLimitWarning(msg);
                     MessageBox.Show(this, msg, "Slew error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }

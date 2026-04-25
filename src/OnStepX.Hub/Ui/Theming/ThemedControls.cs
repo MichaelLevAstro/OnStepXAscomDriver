@@ -471,7 +471,7 @@ namespace ASCOM.OnStepX.Ui.Theming
 
         private void UpdatePulseRegistration()
         {
-            bool shouldPulse = _pulse && _kind == StatusKind.Ok;
+            bool shouldPulse = _pulse && (_kind == StatusKind.Ok || _kind == StatusKind.Err);
             if (shouldPulse)
             {
                 if (_active.Add(this) && _active.Count == 1) _tick.Start();
@@ -498,7 +498,7 @@ namespace ASCOM.OnStepX.Ui.Theming
             }
             int cx = Width / 2, cy = Height / 2;
             // Outer ring (either static halo or animated pulse).
-            if (_pulse && _kind == StatusKind.Ok)
+            if (_pulse && (_kind == StatusKind.Ok || _kind == StatusKind.Err))
             {
                 float ph = _phase;
                 float haloR = 3 + ph * 5;
