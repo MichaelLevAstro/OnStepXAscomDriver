@@ -29,6 +29,7 @@ namespace ASCOM.OnStepX.Astronomy
                 Name = name,
                 Kind = b == Body.Sun || b == Body.Moon ? b.ToString() : "Planet",
                 Constellation = "",
+                SolarSystemBody = b,
                 Coords = utc =>
                 {
                     double ra, dec;

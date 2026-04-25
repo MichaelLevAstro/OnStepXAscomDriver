@@ -9,6 +9,11 @@ namespace ASCOM.OnStepX.Astronomy
         public string Kind { get; set; }        // "Planet", "Galaxy", "Globular", ...
         public string Constellation { get; set; }
 
+        // Solar-system identity for targets whose position must be computed at
+        // slew time and whose tracking rate differs from sidereal. null for
+        // deep-sky / catalog objects (M, NGC, IC, SH2, LDN).
+        public Body? SolarSystemBody { get; set; }
+
         // Produces (RA hours, Dec degrees) at given UTC instant.
         public Func<DateTime, ValueTuple<double, double>> Coords;
     }

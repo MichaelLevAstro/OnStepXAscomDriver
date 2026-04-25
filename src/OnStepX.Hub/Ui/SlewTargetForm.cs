@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using ASCOM.OnStepX.Astronomy;
+using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Ui.Theming;
 
@@ -22,6 +23,12 @@ namespace ASCOM.OnStepX.Ui
         private string _listStatus = "";
         private Panel _topPanel, _bottomPanel;
 
+        // Live-refresh ticker for solar-system targets (Sun/Moon/planets) only.
+        // Refresh interval picked so Moon's ~0.5°/h drift is visible without
+        // hammering the Schlyter math; <10 LV row updates per tick.
+        private Timer _liveTimer;
+        private const int LiveTickMs = 2000;
+
         public SlewTargetForm(MountSession mount)
         {
             _mount = mount;
@@ -35,8 +42,16 @@ namespace ASCOM.OnStepX.Ui
             Theme.Changed += (s, e) => ApplyTheme();
             BuildUi();
             ApplyTheme();
+            _liveTimer = new Timer { Interval = LiveTickMs };
+            _liveTimer.Tick += (s, e) => OnLiveTick();
             _catalogCombo.SelectedIndex = 0;
             RefreshList();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            try { _liveTimer?.Stop(); _liveTimer?.Dispose(); } catch { }
+            base.OnFormClosed(e);
         }
 
         private void BuildUi()
@@ -164,6 +179,11 @@ namespace ASCOM.OnStepX.Ui
             }
             finally { UseWaitCursor = false; }
             ApplyFilter();
+            // Live tick is meaningful only when the catalog has solar-system
+            // bodies. Saves CPU + reduces serial chatter (mount-UTC refresh).
+            bool hasPlanets = _currentCatalog != null &&
+                              _currentCatalog.Any(t => t.SolarSystemBody.HasValue);
+            if (hasPlanets) _liveTimer?.Start(); else _liveTimer?.Stop();
         }
 
         private const int MaxDisplayRows = 3000;
@@ -176,7 +196,7 @@ namespace ASCOM.OnStepX.Ui
             try
             {
                 _list.Items.Clear();
-                var utc = DateTime.UtcNow;
+                var utc = MountTime.NowUtc(_mount);
                 var buf = new List<ListViewItem>(Math.Min(MaxDisplayRows, _currentCatalog.Count));
                 foreach (var t in _currentCatalog)
                 {
@@ -219,7 +239,7 @@ namespace ASCOM.OnStepX.Ui
                 return;
             }
             var t = (CelestialTarget)_list.SelectedItems[0].Tag;
-            var (ra, dec) = t.Coords(DateTime.UtcNow);
+            var (ra, dec) = t.Coords(MountTime.NowUtc(_mount));
             _selectedLabel.Text = t.Name + (string.IsNullOrEmpty(t.Constellation) ? "" : " · " + t.Constellation);
             _coordsLabel.Text = string.Format(CultureInfo.InvariantCulture,
                 "RA {0}  Dec {1}  ({2})",
@@ -234,14 +254,21 @@ namespace ASCOM.OnStepX.Ui
             if (_list.SelectedItems.Count == 0) return;
             if (!_mount.IsOpen) { MessageBox.Show(this, "Mount not connected."); return; }
             var t = (CelestialTarget)_list.SelectedItems[0].Tag;
-            var (ra, dec) = t.Coords(DateTime.UtcNow);
+            var (ra, dec) = t.Coords(MountTime.NowUtc(_mount));
 
-            var confirm = MessageBox.Show(this,
-                string.Format(CultureInfo.InvariantCulture,
-                    "Slew mount to {0}?\r\nRA {1}\r\nDec {2}",
-                    t.Name,
-                    CoordFormat.FormatHoursHighPrec(ra),
-                    CoordFormat.FormatDegreesHighPrec(dec)),
+            string rateName = null;
+            bool willSwitchRate = t.SolarSystemBody.HasValue && DriverSettings.AutoSwitchPlanetTrackingRate;
+            if (willSwitchRate) rateName = TrackingRateNameFor(t.SolarSystemBody.Value);
+
+            string confirmText = string.Format(CultureInfo.InvariantCulture,
+                "Slew mount to {0}?\r\nRA {1}\r\nDec {2}",
+                t.Name,
+                CoordFormat.FormatHoursHighPrec(ra),
+                CoordFormat.FormatDegreesHighPrec(dec));
+            if (willSwitchRate)
+                confirmText += "\r\n\r\nTracking rate will switch to " + rateName + ".";
+
+            var confirm = MessageBox.Show(this, confirmText,
                 "Confirm slew", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
             if (confirm != DialogResult.OK) return;
 
@@ -260,11 +287,70 @@ namespace ASCOM.OnStepX.Ui
                         default: msg = "Slew rejected (code " + rc + ")"; break;
                     }
                     MessageBox.Show(this, msg, "Slew error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
+                // Mount is moving. Switch rate so post-slew tracking matches the
+                // body's apparent motion. Failure here is non-fatal — sidereal
+                // is the wrong rate but the slew itself succeeded.
+                if (willSwitchRate)
+                    TryApplyTrackingRate(t.SolarSystemBody.Value);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(this, "Slew failed: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private static string TrackingRateNameFor(Body b)
+        {
+            if (b == Body.Sun)  return "Solar";
+            if (b == Body.Moon) return "Lunar";
+            return "Sidereal";
+        }
+
+        private void TryApplyTrackingRate(Body b)
+        {
+            try
+            {
+                if      (b == Body.Sun)  _mount.Protocol.SetTrackingSolar();
+                else if (b == Body.Moon) _mount.Protocol.SetTrackingLunar();
+                else                     _mount.Protocol.SetTrackingSidereal();
+            }
+            catch { /* mount-state poll in HubForm will fix combo within ~3s */ }
+        }
+
+        private void OnLiveTick()
+        {
+            if (_currentCatalog == null || _list.Items.Count == 0) return;
+            var utc = MountTime.NowUtc(_mount);
+            _list.BeginUpdate();
+            try
+            {
+                foreach (ListViewItem li in _list.Items)
+                {
+                    var t = li.Tag as CelestialTarget;
+                    if (t == null || !t.SolarSystemBody.HasValue) continue;
+                    var (ra, dec) = t.Coords(utc);
+                    // Columns 3 = RA, 4 = Dec (see BuildUi). Avoid touching name/type so
+                    // the user-visible row identity doesn't flicker.
+                    string raStr = FormatRaShort(ra);
+                    string decStr = FormatDecShort(dec);
+                    if (li.SubItems[3].Text != raStr) li.SubItems[3].Text = raStr;
+                    if (li.SubItems[4].Text != decStr) li.SubItems[4].Text = decStr;
+                }
+            }
+            finally { _list.EndUpdate(); }
+
+            // Refresh selected-target coords too (high-prec readout).
+            if (_list.SelectedItems.Count > 0 &&
+                _list.SelectedItems[0].Tag is CelestialTarget sel && sel.SolarSystemBody.HasValue)
+            {
+                var (ra, dec) = sel.Coords(utc);
+                _coordsLabel.Text = string.Format(CultureInfo.InvariantCulture,
+                    "RA {0}  Dec {1}  ({2})",
+                    CoordFormat.FormatHoursHighPrec(ra),
+                    CoordFormat.FormatDegreesHighPrec(dec),
+                    sel.Kind);
             }
         }
 

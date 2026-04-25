@@ -47,6 +47,12 @@ namespace ASCOM.OnStepX.Config
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
+        // When slewing to a Sun/Moon/planet from the Slew dialog, switch the
+        // mount tracking rate (:TS#/:TL#/:TQ#) to match. Without this the
+        // mount keeps sidereal and Moon/Sun visibly drift off frame within
+        // minutes. Default ON; off for users who manage tracking rate manually.
+        public static bool   AutoSwitchPlanetTrackingRate { get => GetBool("AutoSwitchPlanetTrackingRate", true); set => SetBool("AutoSwitchPlanetTrackingRate", value); }
+
         // "dark" or "light". Default dark per redesign.
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
 
