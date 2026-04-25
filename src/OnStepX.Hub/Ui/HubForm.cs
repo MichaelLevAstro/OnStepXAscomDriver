@@ -1146,7 +1146,7 @@ namespace ASCOM.OnStepX.Ui
             _cmdSendBtn = new FlatButton { Text = "Send", Left = 478, Top = 4, Width = 70, Height = 26 };
             ((FlatButton)_cmdSendBtn).Kind = FlatButton.Variant.Primary;
             _cmdSendBtn.Click += (s, e) => SendManualCommand();
-            var hint = new Label { Text = "(e.g. :GVP#  — leading ':' and trailing '#' auto-added)", Left = 556, Top = 10, Width = 350, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent };
+            var hint = new Label { Text = "(e.g. :GVP#  — leading ':' and trailing '#' auto-added)", Left = 556, Top = 10, Width = 440, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent };
             header.Controls.Add(_consoleToggle);
             header.Controls.Add(cmdLabel);
             header.Controls.Add(_cmdInput);
@@ -1222,8 +1222,8 @@ namespace ASCOM.OnStepX.Ui
             // on row 1 can't be mistaken for filter controls.
             var header = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = Theme.P.ConsoleLine, Padding = new Padding(8, 4, 8, 4) };
             var title = new Label { Text = "CONSOLE", Left = 8, Top = 8, Width = 80, Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.P.TextDim, BackColor = Color.Transparent };
-            _ioEnable = new ThemedCheckBox { Text = "Enabled", Left = 94, Top = 8, Width = 80, Checked = true };
-            _ioAutoScroll = new ThemedCheckBox { Text = "Auto-scroll", Left = 180, Top = 8, Width = 110, Checked = true };
+            _ioEnable = new ThemedCheckBox { Text = "Enabled", Left = 94, Top = 8, Width = 100, Checked = true };
+            _ioAutoScroll = new ThemedCheckBox { Text = "Auto-scroll", Left = 200, Top = 8, Width = 110, Checked = true };
             _ioAutoScroll.CheckedChanged += (s, e) =>
             {
                 if (_ioAutoScroll.Checked && _ioBox != null)
