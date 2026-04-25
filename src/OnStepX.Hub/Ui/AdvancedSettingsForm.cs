@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Hardware;
+using ASCOM.OnStepX.Ui.Theming;
 
 namespace ASCOM.OnStepX.Ui
 {
@@ -14,8 +15,8 @@ namespace ASCOM.OnStepX.Ui
     {
         private readonly MountSession _mount;
         private ComboBox _preferredPierBox;
-        private CheckBox _pauseAtHomeBox;
-        private Button _applyBtn, _okBtn, _cancelBtn;
+        private ThemedCheckBox _pauseAtHomeBox;
+        private FlatButton _applyBtn, _okBtn, _cancelBtn;
         private Label _statusLabel;
 
         public AdvancedSettingsForm(MountSession mount)
@@ -26,16 +27,23 @@ namespace ASCOM.OnStepX.Ui
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(420, 180);
+            ClientSize = new Size(440, 220);
+            BackColor = Theme.P.Bg;
+            ForeColor = Theme.P.Text;
+            Font = new Font("Segoe UI", 8.75f);
+            try { Icon = AppIcons.App; } catch { }
+            Theme.Changed += (s, e) => ApplyTheme();
             BuildUi();
             LoadValues();
+            ApplyTheme();
         }
 
         private void BuildUi()
         {
-            var pierGroup = new GroupBox { Text = "Pier / Meridian Policy", Left = 10, Top = 10, Width = 400, Height = 120 };
-            pierGroup.Controls.Add(new Label { Text = "Preferred pier side:", Left = 10, Top = 28, Width = 140 });
-            _preferredPierBox = new ComboBox { Left = 160, Top = 24, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+            var pierGroup = new SectionPanel { Title = "Pier / Meridian Policy", Left = 10, Top = 10, Width = 420, Height = 158 };
+            pierGroup.Controls.Add(new Label { Text = "Preferred pier side:", Left = 10, Top = 14, Width = 140, BackColor = Color.Transparent });
+            _preferredPierBox = new ComboBox { Left = 160, Top = 10, Width = 240, DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.P.InputBg, ForeColor = Theme.P.Text };
             _preferredPierBox.Items.AddRange(new object[] {
                 "Best (stay on current side)",
                 "East",
@@ -45,16 +53,16 @@ namespace ASCOM.OnStepX.Ui
             pierGroup.Controls.Add(_preferredPierBox);
             pierGroup.Controls.Add(new Label {
                 Text = "Recommended: Best. Prevents spurious flips from plate-solve\ncorrections near the meridian.",
-                Left = 10, Top = 54, Width = 380, Height = 34, ForeColor = SystemColors.GrayText,
+                Left = 10, Top = 42, Width = 400, Height = 34, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent,
             });
 
-            _pauseAtHomeBox = new CheckBox { Text = "Pause at home on meridian flip", Left = 10, Top = 92, Width = 300 };
+            _pauseAtHomeBox = new ThemedCheckBox { Text = "Pause at home on meridian flip", Left = 10, Top = 86, Width = 320 };
             pierGroup.Controls.Add(_pauseAtHomeBox);
 
-            _statusLabel = new Label { Left = 10, Top = 148, Width = 220, Height = 20, ForeColor = SystemColors.GrayText };
-            _applyBtn = new Button { Text = "Apply", Left = 220, Top = 144, Width = 60, DialogResult = DialogResult.None };
-            _okBtn = new Button { Text = "OK", Left = 286, Top = 144, Width = 60, DialogResult = DialogResult.OK };
-            _cancelBtn = new Button { Text = "Cancel", Left = 352, Top = 144, Width = 60, DialogResult = DialogResult.Cancel };
+            _statusLabel = new Label { Left = 10, Top = 184, Width = 240, Height = 20, ForeColor = Theme.P.TextFaint, BackColor = Color.Transparent };
+            _applyBtn = new FlatButton { Text = "Apply", Left = 236, Top = 180, Width = 60, DialogResult = DialogResult.None };
+            _okBtn = new FlatButton { Text = "OK", Left = 302, Top = 180, Width = 60, DialogResult = DialogResult.OK, Kind = FlatButton.Variant.Primary };
+            _cancelBtn = new FlatButton { Text = "Cancel", Left = 368, Top = 180, Width = 62, DialogResult = DialogResult.Cancel };
             _applyBtn.Click += (s, e) => Apply();
             _okBtn.Click += (s, e) => { if (Apply()) DialogResult = DialogResult.OK; };
 
@@ -65,6 +73,15 @@ namespace ASCOM.OnStepX.Ui
             Controls.Add(_cancelBtn);
             AcceptButton = _okBtn;
             CancelButton = _cancelBtn;
+        }
+
+        private void ApplyTheme()
+        {
+            var p = Theme.P;
+            BackColor = p.Bg;
+            ForeColor = p.Text;
+            if (_preferredPierBox != null) { _preferredPierBox.BackColor = p.InputBg; _preferredPierBox.ForeColor = p.Text; }
+            if (_statusLabel != null) _statusLabel.ForeColor = p.TextFaint;
         }
 
         private void LoadValues()

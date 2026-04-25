@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using ASCOM.OnStepX.Ui.Theming;
 
 namespace ASCOM.OnStepX.Ui
 {
@@ -10,6 +11,7 @@ namespace ASCOM.OnStepX.Ui
     {
         public static void Show(IWin32Window owner, string title, string body)
         {
+            var p = Theme.P;
             using (var f = new Form())
             {
                 f.Text = title ?? "";
@@ -18,10 +20,14 @@ namespace ASCOM.OnStepX.Ui
                 f.MaximizeBox = false;
                 f.ShowInTaskbar = false;
                 f.FormBorderStyle = FormBorderStyle.Sizable;
-                f.Width = 520;
-                f.Height = 260;
+                f.Width = 540;
+                f.Height = 280;
                 f.MinimumSize = new Size(360, 180);
+                f.BackColor = p.Bg;
+                f.ForeColor = p.Text;
+                f.Font = new Font("Segoe UI", 8.75f);
 
+                var textHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10), BackColor = p.Bg };
                 var text = new TextBox
                 {
                     Multiline = true,
@@ -30,18 +36,23 @@ namespace ASCOM.OnStepX.Ui
                     WordWrap = true,
                     Dock = DockStyle.Fill,
                     Text = body ?? "",
-                    BackColor = SystemColors.Window
+                    BackColor = p.InputBg,
+                    ForeColor = p.Text,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    Font = new Font("Consolas", 9f),
                 };
+                textHost.Controls.Add(text);
 
                 var bottom = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Bottom,
                     FlowDirection = FlowDirection.RightToLeft,
-                    Height = 40,
-                    Padding = new Padding(8)
+                    Height = 46,
+                    Padding = new Padding(10),
+                    BackColor = p.Panel2,
                 };
-                var ok = new Button { Text = "OK", Width = 90, DialogResult = DialogResult.OK };
-                var copy = new Button { Text = "Copy", Width = 90 };
+                var ok = new FlatButton { Text = "OK", Width = 90, DialogResult = DialogResult.OK, Kind = FlatButton.Variant.Primary };
+                var copy = new FlatButton { Text = "Copy", Width = 90 };
                 copy.Click += (s, e) =>
                 {
                     try { Clipboard.SetText(text.Text ?? ""); } catch { }
@@ -49,7 +60,7 @@ namespace ASCOM.OnStepX.Ui
                 bottom.Controls.Add(ok);
                 bottom.Controls.Add(copy);
 
-                f.Controls.Add(text);
+                f.Controls.Add(textHost);
                 f.Controls.Add(bottom);
                 f.AcceptButton = ok;
                 f.CancelButton = ok;

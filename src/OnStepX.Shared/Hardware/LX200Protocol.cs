@@ -224,6 +224,14 @@ namespace ASCOM.OnStepX.Hardware
         public bool SetPauseAtHomeOnFlip(bool on) =>
             Bool(_transport.SendAndReceive(":SX98," + (on ? "1" : "0") + "#"));
 
+        // ---------- Admin / NV ----------
+        // :ENVRESET#  Wipes mount non-volatile memory to factory defaults.
+        // :ERESET#    Triggers MCU reboot. Send after :ENVRESET# so reset takes
+        //             effect cleanly; transport will drop on the firmware's reboot.
+        // Both blind — firmware does not return a reply (mount is busy resetting).
+        public void ResetNvMemory() => _transport.SendBlind(":ENVRESET#");
+        public void RebootMount()   => _transport.SendBlind(":ERESET#");
+
         // ---------- Meridian limits (minutes of RA past meridian) ----------
         // OnStepX stores the "continue tracking past meridian" window on each side
         // of the pier as minutes of RA (1 min RA = 0.25°). :GXE9# = East, :GXEA# =
