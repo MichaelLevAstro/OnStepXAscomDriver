@@ -77,17 +77,13 @@ installer\unregister.cmd
 ## Build installer
 
 ```
-build-installer.cmd 0.4.0
+build-installer.cmd 0.5.12
 ```
 
-Output: `installer\OnStepX-Setup-0.4.0.exe`. Writes InprocServer32 keys + `HKLM\SOFTWARE\OnStepX\Hub\InstallPath` (consumed by the driver's auto-launcher), kills any residual v0.3.x LocalServer on upgrade.
+Output: `installer\OnStepX-Setup-0.5.12.exe`. Writes InprocServer32 keys + `HKLM\SOFTWARE\OnStepX\Hub\InstallPath` (consumed by the driver's auto-launcher).
 
 ## Running
 
 1. Launch **OnStepX Hub** from the Start menu. Connect to your mount (Auto-Detect or select COM/baud or TCP host).
 2. In NINA / SGP / etc., pick **OnStepX Telescope Driver** from the Chooser and hit Connect. Driver auto-launches the hub in tray mode if it isn't already running.
 3. The hub stays running after clients disconnect — it's a useful standalone tool (catalogs, slew pad, manual LX200 console). Exit from the tray menu.
-
-## Status
-
-v0.4.0 — split from monolithic v0.3.16. Driver + Hub separation, generic pipe envelope, multi-client, auto-launch.
