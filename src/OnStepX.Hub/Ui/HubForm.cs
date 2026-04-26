@@ -87,11 +87,18 @@ namespace ASCOM.OnStepX.Ui
         // MessageBox. Live Alt/HA limit checks bypass this and update each tick.
         private DateTime _limitRejectionUntilUtc = DateTime.MinValue;
         private string _limitRejectionMsg;
+        // Edge-trigger guard: live alt/HA-derived limit state from RefreshLimitsStatus.
+        // Flips false->true when the mount first crosses into a configured limit
+        // (manual pad, ASCOM client, autonomous tracking) and back when it returns
+        // to within limits. Used to fire MountSession.LimitWarning exactly once per
+        // entry, regardless of which subsystem issued the offending move.
+        private bool _liveLimitActive;
 
         private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel, _lstLabel;
 
         private ThemedCheckBox _autoConnectCheck;
         private ThemedCheckBox _autoSyncTimeCheck;
+        private ThemedCheckBox _notificationsEnabledCheck;
 
         private FlatButton _parkBtn, _unparkBtn, _findHomeBtn, _goHomeBtn, _resetHomeBtn;
         private FlatButton _slewTargetBtn;
@@ -495,6 +502,7 @@ namespace ASCOM.OnStepX.Ui
             left.Controls.Add(BuildTimeGroup());
             left.Controls.Add(BuildTrackingGroup());
             left.Controls.Add(BuildLimitsGroup());
+            left.Controls.Add(BuildAdvancedGroup());
 
             right.Controls.Add(BuildPositionGroup());
             right.Controls.Add(BuildParkHomeGroup());
@@ -776,7 +784,7 @@ namespace ASCOM.OnStepX.Ui
         private SectionPanel BuildLimitsGroup()
         {
             var g = NewGroup("Limits", 440, 150);
-            _limitsStatusLed = new StatusLabel { Width = 220, Height = 28 };
+            _limitsStatusLed = new StatusLabel { Width = 320, Height = 28 };
             _limitsStatusLed.LabelFont = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             _limitsStatusLed.Kind = PulseDot.StatusKind.Neutral;
             _limitsStatusLed.Text = "—";
@@ -814,6 +822,24 @@ namespace ASCOM.OnStepX.Ui
             _mountActionControls.Add(_meridianWestBox);
             _mountActionControls.Add(_limitsWriteBtn);
             _mountActionControls.Add(_syncLimitBox);
+            return g;
+        }
+
+        // Collapsed-by-default catch-all for power-user toggles. Future settings
+        // (extra notification triggers, diagnostic flags, etc.) land here so the
+        // main form stays focused on day-to-day controls.
+        private SectionPanel BuildAdvancedGroup()
+        {
+            var g = NewGroup("Advanced Settings", 440, 50);
+            g.Collapsed = true;
+            _notificationsEnabledCheck = new ThemedCheckBox
+            {
+                Text = "Notify on limits",
+                Left = 10, Top = 14, Width = 240,
+            };
+            _notificationsEnabledCheck.CheckedChanged += (s, e) =>
+                DriverSettings.NotificationsEnabled = _notificationsEnabledCheck.Checked;
+            g.Controls.Add(_notificationsEnabledCheck);
             return g;
         }
 
@@ -2018,19 +2044,31 @@ namespace ASCOM.OnStepX.Ui
         {
             if (_limitsStatusLed == null) return;
 
-            string reason = null;
-
-            if (DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg))
-                reason = "Slew rejected: " + _limitRejectionMsg;
-
-            if (reason == null)
+            // Gate live limit checks until the state cache has at least one
+            // successful poll. Before that, Altitude/RA/Dec are 0.0 from
+            // their default initializers and a 0° horizon limit would falsely
+            // flag "Below horizon 0.0°" the moment the form first ticks
+            // post-connect, dragging the toast service with it.
+            if (st.LastUpdateUtc == DateTime.MinValue)
             {
-                int horizon = (int)_horizonLimitBox.Value;
-                if (st.Altitude <= horizon)
-                    reason = "Below horizon (" + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°)";
+                if (_limitsStatusLed.Text != "—") _limitsStatusLed.Text = "—";
+                if (_limitsStatusLed.Kind != PulseDot.StatusKind.Neutral) _limitsStatusLed.Kind = PulseDot.StatusKind.Neutral;
+                if (_limitsStatusLed.Pulsing) _limitsStatusLed.Pulsing = false;
+                _liveLimitActive = false;
+                return;
             }
 
-            if (reason == null && !string.IsNullOrEmpty(st.SideOfPier))
+            string reason = null;
+            string liveReason = null;
+
+            if (DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg))
+                reason = _limitRejectionMsg;
+
+            int horizon = (int)_horizonLimitBox.Value;
+            if (st.Altitude <= horizon)
+                liveReason = "Below horizon " + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°";
+
+            if (liveReason == null && !string.IsNullOrEmpty(st.SideOfPier))
             {
                 // HA in minutes of RA, signed: positive = west of meridian.
                 // 1 min RA = 0.25°. OnStep's per-pier meridian limit caps how
@@ -2041,10 +2079,24 @@ namespace ASCOM.OnStepX.Ui
                 while (haHours < -12) haHours += 24;
                 double haMin = haHours * 60.0;
                 if (st.SideOfPier == "E" && haMin > (int)_meridianEastBox.Value)
-                    reason = "Past meridian limit (E pier, " + haMin.ToString("F0", CultureInfo.InvariantCulture) + " min)";
+                    liveReason = "Past meridian E " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
                 else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
-                    reason = "Past meridian limit (W pier, " + haMin.ToString("F0", CultureInfo.InvariantCulture) + " min)";
+                    liveReason = "Past meridian W " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
             }
+
+            // Edge-trigger MountSession.LimitWarning when the live alt/HA check
+            // crosses ok->limit. Catches manual-pad slews, ASCOM client slews,
+            // and autonomous tracking past meridian — all paths that bypass
+            // SlewTargetForm's slew-rejection plumbing. NotificationService
+            // owns the toast debounce, so re-arming is safe.
+            bool nowInLiveLimit = liveReason != null;
+            if (nowInLiveLimit && !_liveLimitActive)
+            {
+                try { _mount.RaiseLimitWarning(liveReason); } catch { }
+            }
+            _liveLimitActive = nowInLiveLimit;
+
+            if (reason == null) reason = liveReason;
 
             if (reason != null)
             {
@@ -2089,6 +2141,7 @@ namespace ASCOM.OnStepX.Ui
             _guideRateBox.Value = (decimal)DriverSettings.GuideRateMultiplier;
             _slewSpeedBox.Value = Math.Max(_slewSpeedBox.Minimum, Math.Min(_slewSpeedBox.Maximum, (decimal)DriverSettings.SlewRateDegPerSec));
             _meridianActionBox.SelectedIndex = DriverSettings.MeridianAutoFlip ? 0 : 1;
+            if (_notificationsEnabledCheck != null) _notificationsEnabledCheck.Checked = DriverSettings.NotificationsEnabled;
         }
         private void SaveSettings()
         {

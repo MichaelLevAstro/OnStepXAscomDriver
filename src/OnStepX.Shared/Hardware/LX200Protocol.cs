@@ -100,6 +100,11 @@ namespace ASCOM.OnStepX.Hardware
             Bool(_transport.SendAndReceive(":Sa" + CoordFormat.FormatDegreesMount(deg) + "#"));
         public bool SetTargetAz(double deg) =>
             Bool(_transport.SendAndReceive(":Sz" + CoordFormat.FormatLongitudeHighPrec(deg) + "#"));
+        // Read whatever target the firmware currently holds — set via :Sr/:Sd
+        // through any path (ASCOM setter, raw command, prior client, hub UI).
+        // Used by the sync guard so the check is path-agnostic.
+        public string GetTargetRA()  => _transport.SendAndReceive(":Gr#");
+        public string GetTargetDec() => _transport.SendAndReceive(":Gd#");
 
         // ---------- Slew / motion ----------
         // Returns 0 on success, otherwise a Meade-style error code.

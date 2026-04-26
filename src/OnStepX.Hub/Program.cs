@@ -5,6 +5,7 @@ using System.Threading;
 using System.Windows.Forms;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.Transport;
+using ASCOM.OnStepX.Notifications;
 using ASCOM.OnStepX.Ui;
 
 namespace ASCOM.OnStepX
@@ -48,6 +49,7 @@ namespace ASCOM.OnStepX
             _pipeServer.Start();
 
             BuildTray();
+            MountAlertBridge.Attach(MountSession.Instance);
 
             if (startInTray)
             {

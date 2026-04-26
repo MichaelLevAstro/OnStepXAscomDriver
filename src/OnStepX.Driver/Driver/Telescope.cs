@@ -249,78 +249,9 @@ namespace ASCOM.OnStepX.Driver
         public void SyncToTarget()
         {
             RequireConnected();
-            EnforceSyncLimit();
             if (!_protocol.Sync()) throw new ASCOM.DriverException("Sync failed: " + _protocol.GetLastError());
         }
 
-        // Driver-side sync distance guardrail. Reads SyncLimitDeg from the same
-        // HKCU\Software\ASCOM\OnStepX key the hub writes via DriverSettings.
-        // 0 disables. If the angular separation between the mount's current
-        // position and the target sync position exceeds the limit, show a
-        // confirmation popup in the driver process; Cancel throws so NINA et al.
-        // treat the sync as failed rather than silently succeeding.
-        private void EnforceSyncLimit()
-        {
-            int limit = ReadSyncLimitDeg();
-            if (limit <= 0) return;
-            if (!_targetRaSet || !_targetDecSet) return;
-
-            double curRa, curDec;
-            try
-            {
-                curRa  = CoordFormat.ParseHours(_protocol.GetRA());
-                curDec = CoordFormat.ParseDegrees(_protocol.GetDec());
-            }
-            catch
-            {
-                return; // Can't read current position — allow sync to proceed.
-            }
-
-            double dist = AngularSeparationDeg(curRa, curDec, _targetRA, _targetDec);
-            if (dist <= limit) return;
-
-            string msg = string.Format(CultureInfo.InvariantCulture,
-                "Sync will move the mount by {0:F2}°, which exceeds the configured sync limit of {1}°.\n\n" +
-                "A large sync usually means the mount's location or date/time is wrong — " +
-                "verify those first. Proceeding with a bad site will slew the wrong way.\n\n" +
-                "Continue with the sync?",
-                dist, limit);
-            var res = System.Windows.Forms.MessageBox.Show(msg,
-                "OnStepX sync limit exceeded",
-                System.Windows.Forms.MessageBoxButtons.OKCancel,
-                System.Windows.Forms.MessageBoxIcon.Warning,
-                System.Windows.Forms.MessageBoxDefaultButton.Button2);
-            if (res != System.Windows.Forms.DialogResult.OK)
-                throw new ASCOM.DriverException(string.Format(CultureInfo.InvariantCulture,
-                    "Sync cancelled by user — distance {0:F2}° exceeded configured limit of {1}°.", dist, limit));
-        }
-
-        private static int ReadSyncLimitDeg()
-        {
-            try
-            {
-                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\ASCOM\OnStepX"))
-                {
-                    if (k == null) return 0;
-                    var v = k.GetValue("SyncLimitDeg");
-                    if (v == null) return 0;
-                    return int.TryParse(Convert.ToString(v, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0;
-                }
-            }
-            catch { return 0; }
-        }
-
-        // Great-circle angular separation. RA in hours, Dec in degrees.
-        private static double AngularSeparationDeg(double ra1Hours, double dec1Deg, double ra2Hours, double dec2Deg)
-        {
-            double ra1 = ra1Hours * Math.PI / 12.0;
-            double ra2 = ra2Hours * Math.PI / 12.0;
-            double d1 = dec1Deg * Math.PI / 180.0;
-            double d2 = dec2Deg * Math.PI / 180.0;
-            double cos = Math.Sin(d1) * Math.Sin(d2) + Math.Cos(d1) * Math.Cos(d2) * Math.Cos(ra1 - ra2);
-            if (cos > 1) cos = 1; else if (cos < -1) cos = -1;
-            return Math.Acos(cos) * 180.0 / Math.PI;
-        }
         public void SyncToAltAz(double Azimuth, double Altitude) => throw new ASCOM.MethodNotImplementedException("SyncToAltAz");
 
         public void AbortSlew() { RequireConnected(); _protocol.AbortSlew(); }
