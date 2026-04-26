@@ -47,6 +47,11 @@ namespace ASCOM.OnStepX.Config
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
+        // Master switch for Windows toast notifications emitted by the hub
+        // (limit reached, etc). Default ON; users who want a silent hub can flip
+        // this in the collapsed Notifications section.
+        public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
+
         // When slewing to a Sun/Moon/planet from the Slew dialog, switch the
         // mount tracking rate (:TS#/:TL#/:TQ#) to match. Without this the
         // mount keeps sidereal and Moon/Sun visibly drift off frame within

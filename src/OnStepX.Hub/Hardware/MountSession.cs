@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using ASCOM.OnStepX.Hardware.State;
 using ASCOM.OnStepX.Hardware.Transport;
+using ASCOM.OnStepX.Notifications;
 
 namespace ASCOM.OnStepX.Hardware
 {
@@ -195,10 +196,19 @@ namespace ASCOM.OnStepX.Hardware
             ConnectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        // Raw command pass-throughs for the manual-command UI. Returns reply for SendAndReceive.
-        // Blocked until stage 2 completes so in-flight probes don't collide with client CMDs.
+        // Raw command pass-throughs for the manual-command UI and the pipe
+        // server (driver process delegates every wire byte through here, so
+        // this is also the chokepoint for ASCOM-originated traffic). Blocked
+        // until stage 2 completes so in-flight probes don't collide with
+        // client CMDs.
+        //
+        // Sync gate: any :CM#-class command runs through SyncLimitGuard before
+        // hitting the wire. Lock is released around the guard prompt so the
+        // hub UI doesn't freeze while waiting on the user.
         public string SendAndReceiveRaw(string command)
         {
+            if (SyncLimitGuard.IsSyncCommand(command) && !SyncLimitGuard.ShouldAllowSync(Protocol, State))
+                return "";
             lock (_gate)
             {
                 if (_transport == null || !_transport.Connected || !_responsive)
@@ -208,6 +218,8 @@ namespace ASCOM.OnStepX.Hardware
         }
         public void SendBlindRaw(string command)
         {
+            if (SyncLimitGuard.IsSyncCommand(command) && !SyncLimitGuard.ShouldAllowSync(Protocol, State))
+                return;
             lock (_gate)
             {
                 if (_transport == null || !_transport.Connected || !_responsive)
