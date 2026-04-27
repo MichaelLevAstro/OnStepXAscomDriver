@@ -86,7 +86,7 @@ namespace ASCOM.OnStepX.Ui
             _latBox = NewInput(x, 80, 240, editAnchor);
             Controls.Add(_latBox);
 
-            Controls.Add(Lbl("Longitude (west-positive, W is +):", x, 110, editAnchor));
+            Controls.Add(Lbl("Longitude (east-positive, E is +):", x, 110, editAnchor));
             _lonBox = NewInput(x, 128, 240, editAnchor);
             Controls.Add(_lonBox);
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using ASCOM.DeviceInterface;
+using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.Transport;
 
@@ -44,6 +45,10 @@ namespace ASCOM.OnStepX.Driver
                 if (value == _clientConnected) return;
                 if (value)
                 {
+                    DebugLogger.Init("driver");
+                    string host = "?";
+                    try { host = System.Diagnostics.Process.GetCurrentProcess().ProcessName; } catch { }
+                    DebugLogger.Log("CONNECT", "Driver Connected=true requested by host '" + host + "'");
                     var t = new PipeTransport();
                     try
                     {
@@ -53,6 +58,7 @@ namespace ASCOM.OnStepX.Driver
                     }
                     catch (Exception ex)
                     {
+                        DebugLogger.LogException("CONNECT", ex);
                         try { t.Dispose(); } catch { }
                         throw new ASCOM.NotConnectedException(
                             "OnStepX mount link is not ready. " +
@@ -64,9 +70,11 @@ namespace ASCOM.OnStepX.Driver
                     // Pop the hub window so the user sees their telescope is live.
                     try { _transport.ShowHub(); } catch { }
                     _clientConnected = true;
+                    DebugLogger.Log("CONNECT", "Driver connected; pipe up");
                 }
                 else
                 {
+                    DebugLogger.Log("CONNECT", "Driver Connected=false");
                     _clientConnected = false;
                     CloseTransport();
                 }
@@ -208,12 +216,28 @@ namespace ASCOM.OnStepX.Driver
         public double TargetRightAscension
         {
             get { if (!_targetRaSet) throw new ASCOM.ValueNotSetException("TargetRightAscension"); return _targetRA; }
-            set { RequireConnected(); if (value < 0 || value >= 24) throw new ASCOM.InvalidValueException("TargetRA"); _protocol.SetTargetRA(value); _targetRA = value; _targetRaSet = true; }
+            set
+            {
+                RequireConnected();
+                if (value < 0 || value >= 24) throw new ASCOM.InvalidValueException("TargetRA");
+                _protocol.SetTargetRA(value);
+                _targetRA = value;
+                _targetRaSet = true;
+                DebugLogger.Log("TARGET", "set RA=" + FormatHours(value));
+            }
         }
         public double TargetDeclination
         {
             get { if (!_targetDecSet) throw new ASCOM.ValueNotSetException("TargetDeclination"); return _targetDec; }
-            set { RequireConnected(); if (value < -90 || value > 90) throw new ASCOM.InvalidValueException("TargetDec"); _protocol.SetTargetDec(value); _targetDec = value; _targetDecSet = true; }
+            set
+            {
+                RequireConnected();
+                if (value < -90 || value > 90) throw new ASCOM.InvalidValueException("TargetDec");
+                _protocol.SetTargetDec(value);
+                _targetDec = value;
+                _targetDecSet = true;
+                DebugLogger.Log("TARGET", "set Dec=" + FormatDeg(value));
+            }
         }
 
         // ---------- Slew / sync / abort ----------
@@ -228,17 +252,22 @@ namespace ASCOM.OnStepX.Driver
         public void SlewToTargetAsync()
         {
             RequireConnected();
+            DebugLogger.Log("SLEW", "SlewToTargetAsync entry; tgtRA=" + FormatHours(_targetRA) + " tgtDec=" + FormatDeg(_targetDec));
+            EnforceMeridianLimits();
             int rc = _protocol.SlewToTarget();
-            if (rc != 0) throw SlewError(rc);
+            DebugLogger.Log("SLEW", "SlewToTarget :MS# rc=" + rc);
+            if (rc != 0) { NotifyLimitIfApplicable(rc); throw SlewError(rc); }
         }
         public void SlewToAltAz(double Azimuth, double Altitude) { SlewToAltAzAsync(Azimuth, Altitude); while (Slewing) System.Threading.Thread.Sleep(100); }
         public void SlewToAltAzAsync(double Azimuth, double Altitude)
         {
             RequireConnected();
+            DebugLogger.Log("SLEW", "SlewToAltAzAsync az=" + FormatDeg(Azimuth) + " alt=" + FormatDeg(Altitude));
             _protocol.SetTargetAlt(Altitude);
             _protocol.SetTargetAz(Azimuth);
             int rc = _protocol.SlewToTargetAltAz();
-            if (rc != 0) throw SlewError(rc);
+            DebugLogger.Log("SLEW", "SlewToTargetAltAz :MA# rc=" + rc);
+            if (rc != 0) { NotifyLimitIfApplicable(rc); throw SlewError(rc); }
         }
         public void SyncToCoordinates(double RightAscension, double Declination)
         {
@@ -249,8 +278,57 @@ namespace ASCOM.OnStepX.Driver
         public void SyncToTarget()
         {
             RequireConnected();
+            DebugLogger.Log("SYNC", "SyncToTarget entry; tgtRA=" + FormatHours(_targetRA) + " tgtDec=" + FormatDeg(_targetDec));
+
+            // Capture pier + :GU# status before sync. OnStepX firmware can
+            // silently flip its internal pier flag during :CM# when the sync
+            // target's HA implies the opposite pier from the one the mount is
+            // physically on (e.g. just-after-meridian-flip + plate-solve sync
+            // whose target HA is slightly negative). The flag flip leaves
+            // firmware reporting W while the mount is still mechanically on E,
+            // and the next slew routes through the wrong side. Logging both
+            // sides makes the corruption visible in the post-mortem.
+            string preGm = "?", preGu = "?";
+            try { preGm = (_protocol.GetPierSide() ?? "").TrimEnd('#'); } catch (Exception ex) { preGm = "ERR:" + ex.Message; }
+            try { preGu = (_protocol.GetStatus()   ?? "").TrimEnd('#'); } catch (Exception ex) { preGu = "ERR:" + ex.Message; }
+            DebugLogger.Log("SYNC", "pre :Gm#='" + preGm + "' :GU#='" + preGu + "'");
+
             EnforceSyncLimit();
-            if (!_protocol.Sync()) throw new ASCOM.DriverException("Sync failed: " + _protocol.GetLastError());
+            bool ok = _protocol.Sync();
+            if (!ok)
+            {
+                string err = "?";
+                try { err = _protocol.GetLastError(); } catch { }
+                DebugLogger.Log("SYNC", "Sync :CM# FAILED err=" + err);
+                throw new ASCOM.DriverException("Sync failed: " + err);
+            }
+            DebugLogger.Log("SYNC", "Sync :CM# OK");
+
+            string postGm = "?", postGu = "?";
+            try { postGm = (_protocol.GetPierSide() ?? "").TrimEnd('#'); } catch (Exception ex) { postGm = "ERR:" + ex.Message; }
+            try { postGu = (_protocol.GetStatus()   ?? "").TrimEnd('#'); } catch (Exception ex) { postGu = "ERR:" + ex.Message; }
+            DebugLogger.Log("SYNC", "post :Gm#='" + postGm + "' :GU#='" + postGu + "'");
+
+            char preP = ExtractPierChar(preGm);
+            char postP = ExtractPierChar(postGm);
+            if (preP != '?' && postP != '?' && preP != postP)
+            {
+                DebugLogger.Log("SYNC",
+                    "*** PIER FLAG CHANGED across :CM# without physical motion: " + preP + " -> " + postP +
+                    ". Next slew will use " + (postP == 'E' ? "East" : "West") +
+                    "-pier limits and routing — verify mount mechanical pier matches before slewing.");
+            }
+        }
+
+        private static char ExtractPierChar(string reply)
+        {
+            if (string.IsNullOrEmpty(reply)) return '?';
+            foreach (var c in reply)
+            {
+                if (c == 'E' || c == 'e') return 'E';
+                if (c == 'W' || c == 'w') return 'W';
+            }
+            return '?';
         }
 
         // Driver-side sync distance guardrail. Reads SyncLimitDeg from the same
@@ -262,8 +340,12 @@ namespace ASCOM.OnStepX.Driver
         private void EnforceSyncLimit()
         {
             int limit = ReadSyncLimitDeg();
-            if (limit <= 0) return;
-            if (!_targetRaSet || !_targetDecSet) return;
+            if (limit <= 0) { DebugLogger.Log("SYNC", "EnforceSyncLimit decision=DISABLED limitDeg=0"); return; }
+            if (!_targetRaSet || !_targetDecSet)
+            {
+                DebugLogger.Log("SYNC", "EnforceSyncLimit decision=TARGET_NOT_SET (raSet=" + _targetRaSet + " decSet=" + _targetDecSet + ")");
+                return;
+            }
 
             double curRa, curDec;
             try
@@ -271,13 +353,44 @@ namespace ASCOM.OnStepX.Driver
                 curRa  = CoordFormat.ParseHours(_protocol.GetRA());
                 curDec = CoordFormat.ParseDegrees(_protocol.GetDec());
             }
-            catch
+            catch (Exception ex)
             {
-                return; // Can't read current position — allow sync to proceed.
+                // Fail closed. A failed mount-position read can't disambiguate
+                // a tiny correction sync from a 90° wrong-pointing sync; better
+                // to refuse and surface the wire problem than silently accept.
+                DebugLogger.Log("SYNC", "EnforceSyncLimit decision=READ_FAIL (" + ex.Message + ")");
+                throw new ASCOM.DriverException(
+                    "Sync limit check failed: could not read mount position (" + ex.Message + ")");
             }
 
             double dist = AngularSeparationDeg(curRa, curDec, _targetRA, _targetDec);
-            if (dist <= limit) return;
+
+            // Compute target HA + the pier the target's HA implies. OnStepX
+            // firmware uses this same heuristic during :CM# to (re)set its
+            // internal pier flag, so logging it makes "sync caused phantom
+            // pier change" cases visible: if implied pier ≠ current physical
+            // pier, the flag is about to flip.
+            double lstHours = double.NaN;
+            try { lstHours = CoordFormat.ParseHours(_protocol.GetSiderealTime()); } catch { }
+            double tgtHaHours = double.IsNaN(lstHours) ? double.NaN : (lstHours - _targetRA);
+            while (tgtHaHours > 12) tgtHaHours -= 24;
+            while (tgtHaHours < -12) tgtHaHours += 24;
+            char impliedPier = double.IsNaN(tgtHaHours) ? '?' : (tgtHaHours > 0 ? 'E' : 'W');
+            string curPier = "?";
+            try { curPier = (_protocol.GetPierSide() ?? "").TrimEnd('#'); } catch { }
+
+            DebugLogger.Log("SYNC",
+                "EnforceSyncLimit curRA=" + FormatHours(curRa) + " curDec=" + FormatDeg(curDec) +
+                " tgtRA=" + FormatHours(_targetRA) + " tgtDec=" + FormatDeg(_targetDec) +
+                " dist=" + dist.ToString("F3", CultureInfo.InvariantCulture) + "° limit=" + limit + "°" +
+                " lst=" + (double.IsNaN(lstHours) ? "?" : FormatHours(lstHours)) +
+                " tgtHaHours=" + (double.IsNaN(tgtHaHours) ? "?" : tgtHaHours.ToString("F4", CultureInfo.InvariantCulture)) +
+                " impliedPier=" + impliedPier + " curPier='" + curPier + "'");
+            if (dist <= limit)
+            {
+                DebugLogger.Log("SYNC", "EnforceSyncLimit decision=ALLOW");
+                return;
+            }
 
             string msg = string.Format(CultureInfo.InvariantCulture,
                 "Sync will move the mount by {0:F2}°, which exceeds the configured sync limit of {1}°.\n\n" +
@@ -291,23 +404,132 @@ namespace ASCOM.OnStepX.Driver
                 System.Windows.Forms.MessageBoxIcon.Warning,
                 System.Windows.Forms.MessageBoxDefaultButton.Button2);
             if (res != System.Windows.Forms.DialogResult.OK)
+            {
+                DebugLogger.Log("SYNC", "EnforceSyncLimit decision=POPUP_CANCEL");
                 throw new ASCOM.DriverException(string.Format(CultureInfo.InvariantCulture,
                     "Sync cancelled by user — distance {0:F2}° exceeded configured limit of {1}°.", dist, limit));
+            }
+            DebugLogger.Log("SYNC", "EnforceSyncLimit decision=POPUP_OK (user confirmed)");
         }
 
-        private static int ReadSyncLimitDeg()
+        private static int ReadSyncLimitDeg() => ReadIntSetting("SyncLimitDeg", 0);
+        private static int ReadMeridianLimitEastMin() => ReadIntSetting("MeridianLimitEastMin", 15);
+        private static int ReadMeridianLimitWestMin() => ReadIntSetting("MeridianLimitWestMin", 15);
+
+        private static int ReadIntSetting(string name, int def)
         {
             try
             {
                 using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\ASCOM\OnStepX"))
                 {
-                    if (k == null) return 0;
-                    var v = k.GetValue("SyncLimitDeg");
-                    if (v == null) return 0;
-                    return int.TryParse(Convert.ToString(v, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0;
+                    if (k == null) return def;
+                    var v = k.GetValue(name);
+                    if (v == null) return def;
+                    return int.TryParse(Convert.ToString(v, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : def;
                 }
             }
-            catch { return 0; }
+            catch { return def; }
+        }
+
+        // Pre-slew meridian-limit guardrail. NINA's centering slews after a
+        // plate-solve sync are the dangerous case: a target HA past the
+        // destination-pier limit lets firmware route the slew through the
+        // south pole and into the tripod. Mirror EnforceSyncLimit's UX —
+        // popup with Continue/Cancel; Cancel throws so NINA reports failure.
+        private void EnforceMeridianLimits()
+        {
+            if (!_targetRaSet) { DebugLogger.Log("SLEW", "EnforceMeridianLimits decision=TARGET_NOT_SET"); return; }
+
+            int eastLimitMin = ReadMeridianLimitEastMin();
+            int westLimitMin = ReadMeridianLimitWestMin();
+            // Treat both >= 270 (effectively no limit) as disabled. Allow
+            // negative values per OnStepX firmware (stop tracking before
+            // meridian) — those are the strictest case and must still warn.
+            if (eastLimitMin >= 270 && westLimitMin >= 270)
+            {
+                DebugLogger.Log("SLEW", "EnforceMeridianLimits decision=DISABLED eastMin=" + eastLimitMin + " westMin=" + westLimitMin);
+                return;
+            }
+
+            double lstHours, curRaHours;
+            string pierReply;
+            try
+            {
+                lstHours    = CoordFormat.ParseHours(_protocol.GetSiderealTime());
+                curRaHours  = CoordFormat.ParseHours(_protocol.GetRA());
+                pierReply   = _protocol.GetPierSide() ?? "";
+            }
+            catch (Exception ex)
+            {
+                // Don't block the slew on a transient read failure — firmware
+                // still enforces hard limits with rc=6. Best-effort guardrail only.
+                DebugLogger.Log("SLEW", "EnforceMeridianLimits decision=READ_FAIL (" + ex.Message + ")");
+                return;
+            }
+
+            double targetHaHours = lstHours - _targetRA;
+            while (targetHaHours > 12) targetHaHours -= 24;
+            while (targetHaHours < -12) targetHaHours += 24;
+            double targetHaMin = targetHaHours * 60.0;
+
+            // Predict destination pier. Driver intentionally echoes current
+            // pier in DestinationSideOfPier (see comment near that property)
+            // because firmware owns the flip decision. Approximate the same
+            // way: if HA shifts past meridian relative to current pier, treat
+            // as a flip; otherwise stay on current side.
+            char curPier = '?';
+            foreach (var c in pierReply.TrimEnd('#'))
+            {
+                if (c == 'E' || c == 'e') { curPier = 'E'; break; }
+                if (c == 'W' || c == 'w') { curPier = 'W'; break; }
+            }
+
+            double curHaHours = lstHours - curRaHours;
+            while (curHaHours > 12) curHaHours -= 24;
+            while (curHaHours < -12) curHaHours += 24;
+
+            char destPier = curPier;
+            if (curPier == 'W' && targetHaHours < 0) destPier = 'E';
+            else if (curPier == 'E' && targetHaHours > 0) destPier = 'W';
+            // If current pier unknown, fall back to HA sign convention:
+            // positive HA (west of meridian) typically lives on E pier.
+            if (curPier == '?') destPier = targetHaHours > 0 ? 'E' : 'W';
+
+            int limitMin = destPier == 'E' ? eastLimitMin : westLimitMin;
+            DebugLogger.Log("SLEW",
+                "EnforceMeridianLimits lst=" + FormatHours(lstHours) +
+                " curRA=" + FormatHours(curRaHours) + " curPier=" + curPier +
+                " tgtRA=" + FormatHours(_targetRA) +
+                " tgtHaMin=" + targetHaMin.ToString("F2", CultureInfo.InvariantCulture) +
+                " destPier=" + destPier +
+                " eastLimit=" + eastLimitMin + " westLimit=" + westLimitMin +
+                " activeLimit=" + limitMin);
+            if (targetHaMin <= limitMin)
+            {
+                DebugLogger.Log("SLEW", "EnforceMeridianLimits decision=ALLOW");
+                return;
+            }
+
+            string msg = string.Format(CultureInfo.InvariantCulture,
+                "Slew target is {0:+0;-0;0} min past meridian on the {1} pier, " +
+                "which exceeds the configured {1}-pier meridian limit of {2} min.\n\n" +
+                "Continuing may route the mount through the south pole and into " +
+                "the tripod. Verify the limits and the target before proceeding.\n\n" +
+                "Continue with the slew?",
+                targetHaMin, destPier == 'E' ? "East" : "West", limitMin);
+            var res = System.Windows.Forms.MessageBox.Show(msg,
+                "OnStepX meridian limit",
+                System.Windows.Forms.MessageBoxButtons.OKCancel,
+                System.Windows.Forms.MessageBoxIcon.Warning,
+                System.Windows.Forms.MessageBoxDefaultButton.Button2);
+            if (res != System.Windows.Forms.DialogResult.OK)
+            {
+                DebugLogger.Log("SLEW", "EnforceMeridianLimits decision=POPUP_CANCEL");
+                throw new ASCOM.DriverException(string.Format(CultureInfo.InvariantCulture,
+                    "Slew cancelled by user — target HA {0:+0;-0;0} min exceeded {1}-pier limit of {2} min.",
+                    targetHaMin, destPier == 'E' ? "East" : "West", limitMin));
+            }
+            DebugLogger.Log("SLEW", "EnforceMeridianLimits decision=POPUP_OK (user confirmed)");
         }
 
         // Great-circle angular separation. RA in hours, Dec in degrees.
@@ -323,7 +545,13 @@ namespace ASCOM.OnStepX.Driver
         }
         public void SyncToAltAz(double Azimuth, double Altitude) => throw new ASCOM.MethodNotImplementedException("SyncToAltAz");
 
-        public void AbortSlew() { RequireConnected(); _protocol.AbortSlew(); }
+        public void AbortSlew()
+        {
+            RequireConnected();
+            DebugLogger.Log("SLEW", "AbortSlew :Q# requested");
+            _protocol.AbortSlewVerified();
+            DebugLogger.Log("SLEW", "AbortSlew confirmed (mount stopped)");
+        }
 
         // ---------- Move axis ----------
         public void MoveAxis(TelescopeAxes Axis, double Rate)
@@ -383,16 +611,37 @@ namespace ASCOM.OnStepX.Driver
         // ---------- Site ----------
         public double SiteLatitude
         {
-            get { RequireConnected(); return CoordFormat.ParseDegrees(_protocol.GetLatitude()); }
-            set { RequireConnected(); _protocol.SetLatitude(value); }
+            get
+            {
+                RequireConnected();
+                double v = CoordFormat.ParseDegrees(_protocol.GetLatitude());
+                DebugLogger.Log("SITE", "get SiteLatitude=" + FormatDeg(v));
+                return v;
+            }
+            set
+            {
+                RequireConnected();
+                DebugLogger.Log("SITE", "set SiteLatitude=" + FormatDeg(value));
+                _protocol.SetLatitude(value);
+            }
         }
-        // West-positive end-to-end (see LX200Protocol.GetLongitude comment).
-        // ASCOM spec says east-positive; we deliberately expose raw west-positive
-        // while debugging the meridian/sync sign issue.
+        // ASCOM east-positive (positive east of Greenwich). LX200Protocol negates
+        // at the wire to satisfy OnStepX's Meade west-positive :Sg/:Gg convention.
         public double SiteLongitude
         {
-            get { RequireConnected(); return _protocol.GetLongitude(); }
-            set { RequireConnected(); _protocol.SetLongitude(value); }
+            get
+            {
+                RequireConnected();
+                double v = _protocol.GetLongitude();
+                DebugLogger.Log("SITE", "get SiteLongitude=" + FormatDeg(v) + " (east-positive)");
+                return v;
+            }
+            set
+            {
+                RequireConnected();
+                DebugLogger.Log("SITE", "set SiteLongitude=" + FormatDeg(value) + " (east-positive)");
+                _protocol.SetLongitude(value);
+            }
         }
         public double SiteElevation
         {
@@ -400,9 +649,15 @@ namespace ASCOM.OnStepX.Driver
             {
                 RequireConnected();
                 double.TryParse(_protocol.GetElevation().TrimEnd('#'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v);
+                DebugLogger.Log("SITE", "get SiteElevation=" + v.ToString("F1", CultureInfo.InvariantCulture) + "m");
                 return v;
             }
-            set { RequireConnected(); _protocol.SetElevation(value); }
+            set
+            {
+                RequireConnected();
+                DebugLogger.Log("SITE", "set SiteElevation=" + value.ToString("F1", CultureInfo.InvariantCulture) + "m");
+                _protocol.SetElevation(value);
+            }
         }
         public DateTime UTCDate
         {
@@ -413,16 +668,26 @@ namespace ASCOM.OnStepX.Driver
                 var time = _protocol.GetLocalTime().TrimEnd('#');
                 var off  = _protocol.GetUtcOffset().TrimEnd('#');
                 if (!DateTime.TryParseExact(date + " " + time, "MM/dd/yy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
+                {
+                    DebugLogger.Log("TIME", "get UTCDate parse FAILED date=" + date + " time=" + time + " off=" + off);
                     return DateTime.UtcNow;
+                }
                 double offH = 0; double.TryParse(off.Replace(":", "."), NumberStyles.Float, CultureInfo.InvariantCulture, out offH);
                 // :GG# reports west-positive (Meade convention). UTC = local + westPos.
-                return local.AddHours(offH);
+                var utc = local.AddHours(offH);
+                DebugLogger.Log("TIME", "get UTCDate local=" + local.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+                    " offWestPos=" + offH.ToString("F2", CultureInfo.InvariantCulture) +
+                    " utc=" + utc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+                return utc;
             }
             set
             {
                 RequireConnected();
                 double offset = (DateTime.Now - DateTime.UtcNow).TotalHours;
                 var local = value.AddHours(offset);
+                DebugLogger.Log("TIME", "set UTCDate utc=" + value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+                    " offEastPos=" + offset.ToString("F2", CultureInfo.InvariantCulture) +
+                    " local=" + local.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
                 _protocol.SetUtcOffset(offset);
                 _protocol.SetLocalDate(local);
                 _protocol.SetLocalTime(local);
@@ -456,6 +721,30 @@ namespace ASCOM.OnStepX.Driver
             _protocol = null;
         }
 
+        // Compact human-readable formatters used only in log output. Wire encoding
+        // is owned by CoordFormat / LX200Protocol; these are for the diagnostic file.
+        private static string FormatHours(double h)
+        {
+            if (double.IsNaN(h) || double.IsInfinity(h)) return h.ToString(CultureInfo.InvariantCulture);
+            int hh = (int)Math.Floor(h);
+            double mTotal = (h - hh) * 60.0;
+            int mm = (int)Math.Floor(mTotal);
+            double ss = (mTotal - mm) * 60.0;
+            return string.Format(CultureInfo.InvariantCulture, "{0:00}h{1:00}m{2:00.00}s", hh, mm, ss);
+        }
+
+        private static string FormatDeg(double d)
+        {
+            if (double.IsNaN(d) || double.IsInfinity(d)) return d.ToString(CultureInfo.InvariantCulture);
+            char sgn = d < 0 ? '-' : '+';
+            double a = Math.Abs(d);
+            int dd = (int)Math.Floor(a);
+            double mTotal = (a - dd) * 60.0;
+            int mm = (int)Math.Floor(mTotal);
+            double ss = (mTotal - mm) * 60.0;
+            return string.Format(CultureInfo.InvariantCulture, "{0}{1:00}d{2:00}m{3:00.0}s", sgn, dd, mm, ss);
+        }
+
         // Getter helpers — mount-query failures must never throw back into the
         // ASCOM poll loop or clients spiral into reconnect storms. Return 0 /
         // empty on wire errors; the subsequent poll cycle recovers.
@@ -470,6 +759,26 @@ namespace ASCOM.OnStepX.Driver
             catch { return 0.0; }
         }
         private static string TryGet(Func<string> f) { try { return f(); } catch { return null; } }
+
+        // Forward firmware limit-rejection codes to the hub UI's sticky LED.
+        // SlewTargetForm raises this internally; for NINA-issued slews the hub
+        // process never sees the rc unless we relay it over the IPC pipe.
+        private void NotifyLimitIfApplicable(int rc)
+        {
+            string reason;
+            switch (rc)
+            {
+                case 1: reason = "Below horizon"; break;
+                case 2: reason = "Above overhead limit"; break;
+                case 6: reason = "Outside meridian limits"; break;
+                default:
+                    DebugLogger.Log("IPC", "NotifyLimitIfApplicable rc=" + rc + " (no IPC sent)");
+                    return;
+            }
+            DebugLogger.Log("IPC", "NotifyLimit -> hub: rc=" + rc + " reason='" + reason + "'");
+            try { _transport?.NotifyLimit(reason); }
+            catch (Exception ex) { DebugLogger.LogException("IPC", ex); }
+        }
 
         private Exception SlewError(int rc)
         {

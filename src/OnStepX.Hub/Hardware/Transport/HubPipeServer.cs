@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
+using ASCOM.OnStepX.Diagnostics;
 
 namespace ASCOM.OnStepX.Hardware.Transport
 {
@@ -121,10 +122,15 @@ namespace ASCOM.OnStepX.Hardware.Transport
             try
             {
                 if (line == "IPC:ISCONNECTED")
-                    return "IPC:ISCONNECTED:" + (_mount.IsOpen ? "TRUE" : "FALSE");
+                {
+                    bool open = _mount.IsOpen;
+                    DebugLogger.Log("IPC", "received IPC:ISCONNECTED -> " + (open ? "TRUE" : "FALSE"));
+                    return "IPC:ISCONNECTED:" + (open ? "TRUE" : "FALSE");
+                }
 
                 if (line == "IPC:SHOWHUB")
                 {
+                    DebugLogger.Log("IPC", "received IPC:SHOWHUB");
                     try { _showHubHandler?.Invoke(); } catch { }
                     return "OK";
                 }
@@ -134,6 +140,7 @@ namespace ASCOM.OnStepX.Hardware.Transport
                     // Optional handshake. Legacy hubs (v0.3.16 proxy mode) do
                     // not implement this and reply ERR; driver tolerates that.
                     var ver = typeof(HubPipeServer).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+                    DebugLogger.Log("IPC", "received IPC:VERSION clientVer='" + line.Substring("IPC:VERSION\t".Length) + "' replyHubVer=" + ver);
                     return "OK\t" + ver;
                 }
 
@@ -153,12 +160,27 @@ namespace ASCOM.OnStepX.Hardware.Transport
                     return "OK";
                 }
 
+                // Driver -> hub limit notification. Driver-issued (NINA) slews
+                // hit Telescope.SlewError() with rc=1/2/6 but never reach the
+                // hub UI's sticky-warn LED otherwise. Forward to MountSession
+                // so HubForm's existing LimitWarning handler picks it up.
+                if (line.StartsWith("IPC:LIMIT\t"))
+                {
+                    string reason = line.Substring("IPC:LIMIT\t".Length);
+                    DebugLogger.Log("IPC", "received IPC:LIMIT reason='" + reason + "'");
+                    try { _mount.RaiseLimitWarning(reason); }
+                    catch (Exception ex) { DebugLogger.LogException("IPC", ex); }
+                    return "OK";
+                }
+
+                DebugLogger.Log("IPC", "received UNKNOWN line='" + (line ?? "") + "'");
                 return "ERR\tunknown command";
             }
             catch (Exception ex)
             {
                 string m = ex.Message ?? "";
                 m = m.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+                DebugLogger.Log("IPC", "Dispatch threw on line='" + (line ?? "") + "': " + m);
                 return "ERR\t" + m;
             }
         }

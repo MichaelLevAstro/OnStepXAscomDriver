@@ -3,8 +3,11 @@ using System.Drawing;
 using System.IO.Pipes;
 using System.Threading;
 using System.Windows.Forms;
+using ASCOM.OnStepX.Config;
+using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.Transport;
+using ASCOM.OnStepX.Notifications;
 using ASCOM.OnStepX.Ui;
 
 namespace ASCOM.OnStepX
@@ -42,6 +45,13 @@ namespace ASCOM.OnStepX
                 return 0;
             }
 
+            // Run before HubForm reads SiteLongitude / SiteStore. Idempotent.
+            DriverSettings.RunMigrations();
+
+            DebugLogger.Init("hub");
+
+            MountAlertBridge.Attach(MountSession.Instance);
+
             Hub = new HubForm();
             _pipeServer = new HubPipeServer(MountSession.Instance,
                 showHubHandler: () => { try { Hub?.EnsureVisibleFromClient(); } catch { } });
@@ -67,6 +77,7 @@ namespace ASCOM.OnStepX
             try { _pipeServer?.Stop(); } catch { }
             try { MountSession.Instance.ForceCloseAll(); } catch { }
             try { _tray?.Dispose(); } catch { }
+            try { DebugLogger.Shutdown(); } catch { }
             try { SingleInstanceMutex?.ReleaseMutex(); } catch { }
             return 0;
         }

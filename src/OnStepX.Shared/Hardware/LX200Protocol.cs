@@ -25,11 +25,11 @@ namespace ASCOM.OnStepX.Hardware
         public string GetLastError() => _transport.SendAndReceive(":GE#");
 
         // ---------- Site ----------
-        // Sign convention: west-positive end-to-end. OnStepX :Sg/:Gg uses Meade
-        // west-positive on the wire (east = negative); driver/hub/sites store
-        // the same. No sign flip at this layer — value passes through raw. ASCOM
-        // clients that expect east-positive see west-positive; that is accepted
-        // while we debug meridian/sync behavior and nail down the real bug.
+        // Sign convention: ASCOM east-positive above this layer; OnStepX :Sg/:Gg
+        // uses Meade west-positive on the wire. Mirror the SetUtcOffset pattern —
+        // negate at the wire so callers (driver, hub UI, sites file) all speak the
+        // civil east-positive convention. GetLongitudeRaw() still returns the raw
+        // wire value for diagnostics; GetLongitude() applies the flip.
         // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's
         // current precision mode — avoids losing the seconds component in low-prec.
         public string GetLatitude()  => _transport.SendAndReceive(":GtH#");
@@ -37,12 +37,18 @@ namespace ASCOM.OnStepX.Hardware
         public double GetLongitude()
         {
             if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
-                return westPos;
+                return -westPos;
             throw new FormatException("Mount longitude reply could not be parsed");
         }
-        public bool TryGetLongitude(out double westPos)
+        public bool TryGetLongitude(out double eastPos)
         {
-            return CoordFormat.TryParseDegrees(GetLongitudeRaw(), out westPos);
+            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
+            {
+                eastPos = -westPos;
+                return true;
+            }
+            eastPos = 0;
+            return false;
         }
         public string GetElevation() => _transport.SendAndReceive(":Gv#");
         public string GetUtcOffset() => _transport.SendAndReceive(":GG#");
@@ -59,13 +65,14 @@ namespace ASCOM.OnStepX.Hardware
                 return true;
             return Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
         }
-        // West-positive passthrough (Meade :Sg convention on the wire). Caller
-        // supplies west-positive; no flip here.
-        public bool SetLongitude(double westPositiveDeg)
+        // Caller passes east-positive (civil/ASCOM); flip to west-positive for
+        // the Meade :Sg wire convention. Mirrors SetUtcOffset.
+        public bool SetLongitude(double eastPositiveDeg)
         {
-            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPositiveDeg) + "#")))
+            double westPos = -eastPositiveDeg;
+            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPos) + "#")))
                 return true;
-            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPositiveDeg) + "#"));
+            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPos) + "#"));
         }
         public bool SetElevation(double m)
         {
@@ -105,15 +112,52 @@ namespace ASCOM.OnStepX.Hardware
         // Returns 0 on success, otherwise a Meade-style error code.
         public int SlewToTarget()   => NumericSlew(_transport.SendAndReceive(":MS#"));
         public int SlewToTargetAltAz() => NumericSlew(_transport.SendAndReceive(":MA#"));
-        // OnStepX: :CS# is blind (no reply) — SendAndReceive would time out and be
-        // misread as failure. :CM# replies "N/A#" on accept; treat any non-empty
-        // reply as success. Real sync errors surface via :GE# (GetLastError).
+        // OnStepX runtime sync uses :CS# (Calibrate Sync) — pure coordinate-frame
+        // correction, NO alignment-model side effects. :CM# (Calibrate Mount, used
+        // for initial alignment) recomputes pier-flag from synced HA: when sync
+        // target's HA implies the opposite pier from the mount's physical pier
+        // (common with plate-solve corrections near the meridian), firmware silently
+        // flips :Gm# while the mount stays mechanically put. Subsequent :MS# then
+        // routes through the wrong pier solution and drives the OTA into the tripod.
+        // Reproduced 2026-04-27 with two pre/post :Gm# captures showing W↔E flag
+        // flips across :CM# without physical motion.
+        // :CS# is blind in OnStepX firmware. Use SendBlind so SendAndReceive doesn't
+        // time out waiting for a reply that never comes. Errors surface via :GE#.
         public bool Sync()
         {
-            var reply = Strip(_transport.SendAndReceive(":CM#"));
-            return !string.IsNullOrEmpty(reply);
+            _transport.SendBlind(":CS#");
+            return true;
         }
         public void AbortSlew()     => _transport.SendBlind(":Q#");
+
+        // :Q# is blind, so a single send cannot tell whether the firmware
+        // actually stopped (lost-byte on the wire, mid-flip transition, or
+        // the firmware ignoring it). Poll :GU# for the 'N' (not slewing)
+        // flag; re-send and poll again on first miss. Throws on persistent
+        // failure so the caller knows abort did not take.
+        public void AbortSlewVerified(int totalTimeoutMs = 3000, int pollMs = 150)
+        {
+            int half = Math.Max(500, totalTimeoutMs / 2);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                _transport.SendBlind(":Q#");
+                int waited = 0;
+                while (waited < half)
+                {
+                    System.Threading.Thread.Sleep(pollMs);
+                    waited += pollMs;
+                    string raw;
+                    try { raw = _transport.SendAndReceive(":GU#"); }
+                    catch { continue; } // Transient wire glitch — keep polling.
+                    raw = (raw ?? "").TrimEnd('#');
+                    // 'N' = not slewing; 'I' = park-in-progress (still moving).
+                    if (raw.IndexOf('N') >= 0 && raw.IndexOf('I') < 0) return;
+                }
+            }
+            throw new System.IO.IOException(
+                "AbortSlew: mount still slewing after " + totalTimeoutMs + "ms — " +
+                ":Q# may not have reached the firmware. Power-cycle if motion continues.");
+        }
 
         public void MoveNorth() => _transport.SendBlind(":Mn#");
         public void MoveSouth() => _transport.SendBlind(":Ms#");

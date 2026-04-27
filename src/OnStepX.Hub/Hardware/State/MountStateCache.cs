@@ -1,6 +1,8 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using ASCOM.OnStepX.Diagnostics;
 
 namespace ASCOM.OnStepX.Hardware.State
 {
@@ -79,7 +81,21 @@ namespace ASCOM.OnStepX.Hardware.State
                     if (CoordFormat.TryParseDegrees(altS, out var aVal)) Altitude    = aVal;
                     if (CoordFormat.TryParseDegrees(azS,  out var zVal)) Azimuth     = zVal;
                     SiderealTime   = CoordFormat.ParseHours(stS);
+                    string priorPier = SideOfPier;
                     SideOfPier     = ExtractPierSide(psS);
+                    if (!string.Equals(priorPier ?? "", SideOfPier ?? "", StringComparison.Ordinal))
+                    {
+                        // Pier transition pins the firmware-visible flip moment in
+                        // the timeline — primary diagnostic for "did the cache lag
+                        // the actual flip?" theories.
+                        DebugLogger.Log("PIER",
+                            (string.IsNullOrEmpty(priorPier) ? "?" : priorPier) + " -> " +
+                            (string.IsNullOrEmpty(SideOfPier) ? "?" : SideOfPier) +
+                            " ra=" + RightAscension.ToString("F4", CultureInfo.InvariantCulture) +
+                            "h dec=" + Declination.ToString("F3", CultureInfo.InvariantCulture) +
+                            "° lst=" + SiderealTime.ToString("F4", CultureInfo.InvariantCulture) +
+                            "h gu='" + (gus ?? "").TrimEnd('#') + "'");
+                    }
                     LastStatusString = gus ?? "";
 
                     // :GU# status byte conventions (OnStepX, verified against firmware output):

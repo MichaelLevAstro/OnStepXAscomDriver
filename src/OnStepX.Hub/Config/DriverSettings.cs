@@ -47,6 +47,22 @@ namespace ASCOM.OnStepX.Config
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
+        // Master switch for Windows toast notifications emitted by the hub
+        // (limit reached, etc). Default ON; users who want a silent hub flip
+        // this in the collapsed Advanced Settings section.
+        public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
+
+        // Persistent debug log under %APPDATA%\OnStepX\logs. Default ON while the
+        // driver is in active diagnosis; toggle from Advanced Settings. Same key
+        // is read by both hub and driver processes (DebugLogger reads HKCU
+        // directly so neither needs a project reference on the other).
+        public static bool   DebugLogEnabled      { get => GetBool("DebugLogEnabled", true); set => SetBool("DebugLogEnabled", value); }
+        // Verbose I/O captures every wire poll (RA/Dec/status). Off by default
+        // because :GU#/:GR#/:GD# at 750 ms produce ~10 lines/sec of noise that
+        // drowns out the interesting commands. Turn on only when reproducing
+        // a timing-sensitive bug where poll order matters.
+        public static bool   DebugLogVerbosePolls { get => GetBool("DebugLogVerbosePolls", false); set => SetBool("DebugLogVerbosePolls", value); }
+
         // When slewing to a Sun/Moon/planet from the Slew dialog, switch the
         // mount tracking rate (:TS#/:TL#/:TQ#) to match. Without this the
         // mount keeps sidereal and Moon/Sun visibly drift off frame within
@@ -55,6 +71,40 @@ namespace ASCOM.OnStepX.Config
 
         // "dark" or "light". Default dark per redesign.
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
+
+        // Schema version for the longitude convention. Pre-1: hub stored raw
+        // west-positive values matching the LX200 wire. >=1: stored east-positive
+        // (ASCOM/civil), with LX200Protocol negating at the wire. RunMigrations()
+        // negates the on-disk values once on first hub start after upgrade.
+        public static int LongitudeConventionVersion
+        {
+            get => GetInt("LongitudeConventionVersion", 0);
+            set => SetInt("LongitudeConventionVersion", value);
+        }
+
+        // One-shot, idempotent migration runner. Call from hub startup before
+        // anything reads SiteLongitude or SiteStore. Bump the version BEFORE
+        // any flip so a partial failure doesn't double-apply on the next run.
+        public static void RunMigrations()
+        {
+            if (LongitudeConventionVersion < 1)
+            {
+                LongitudeConventionVersion = 1;
+                SiteLongitude = -SiteLongitude;
+
+                try
+                {
+                    var sites = SiteStore.Load();
+                    foreach (var s in sites) s.Longitude = -s.Longitude;
+                    SiteStore.Save(sites);
+                }
+                catch
+                {
+                    // Sites file unreadable. Registry-side longitude is already
+                    // flipped; user can re-import or manually fix the sites file.
+                }
+            }
+        }
 
         private static string Get(string name, string def)
         {

@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Windows.Forms;
 using ASCOM.OnStepX.Config;
+using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.State;
 using ASCOM.OnStepX.Hardware.Transport;
@@ -92,6 +93,11 @@ namespace ASCOM.OnStepX.Ui
 
         private ThemedCheckBox _autoConnectCheck;
         private ThemedCheckBox _autoSyncTimeCheck;
+        private ThemedCheckBox _notificationsEnabledCheck;
+        private ThemedCheckBox _debugLogEnabledCheck;
+        private ThemedCheckBox _debugLogVerboseCheck;
+        private FlatButton _openLogFolderBtn;
+        private Label _logPathLabel;
 
         private FlatButton _parkBtn, _unparkBtn, _findHomeBtn, _goHomeBtn, _resetHomeBtn;
         private FlatButton _slewTargetBtn;
@@ -495,6 +501,7 @@ namespace ASCOM.OnStepX.Ui
             left.Controls.Add(BuildTimeGroup());
             left.Controls.Add(BuildTrackingGroup());
             left.Controls.Add(BuildLimitsGroup());
+            left.Controls.Add(BuildAdvancedGroup());
 
             right.Controls.Add(BuildPositionGroup());
             right.Controls.Add(BuildParkHomeGroup());
@@ -817,6 +824,76 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
+        // Collapsed-by-default catch-all for power-user toggles. Notifications
+        // master switch lives here alongside the persistent-log diagnostics
+        // controls, plus a one-click Open Log Folder for support hand-off.
+        private SectionPanel BuildAdvancedGroup()
+        {
+            var g = NewGroup("Advanced Settings", 440, 170);
+            g.Collapsed = true;
+
+            _notificationsEnabledCheck = new ThemedCheckBox
+            {
+                Text = "Notify on limits",
+                Left = 10, Top = 14, Width = 240,
+            };
+            _notificationsEnabledCheck.CheckedChanged += (s, e) =>
+                DriverSettings.NotificationsEnabled = _notificationsEnabledCheck.Checked;
+            g.Controls.Add(_notificationsEnabledCheck);
+
+            _debugLogEnabledCheck = new ThemedCheckBox
+            {
+                Text = "Enable debug log",
+                Left = 10, Top = 40, Width = 240,
+            };
+            _debugLogEnabledCheck.CheckedChanged += (s, e) =>
+                DriverSettings.DebugLogEnabled = _debugLogEnabledCheck.Checked;
+            g.Controls.Add(_debugLogEnabledCheck);
+
+            _debugLogVerboseCheck = new ThemedCheckBox
+            {
+                Text = "Verbose I/O (log poll commands)",
+                Left = 10, Top = 66, Width = 320,
+            };
+            _debugLogVerboseCheck.CheckedChanged += (s, e) =>
+                DriverSettings.DebugLogVerbosePolls = _debugLogVerboseCheck.Checked;
+            g.Controls.Add(_debugLogVerboseCheck);
+
+            _logPathLabel = new Label
+            {
+                Left = 10, Top = 92, Width = 420, Height = 18,
+                Text = DebugLogger.LogDirectory,
+                ForeColor = Theme.P.TextFaint,
+                BackColor = Color.Transparent,
+                AutoEllipsis = true,
+            };
+            g.Controls.Add(_logPathLabel);
+
+            _openLogFolderBtn = new FlatButton { Text = "Open Log Folder", Left = 10, Top = 116, Width = 140 };
+            _openLogFolderBtn.Click += (s, e) => OpenLogFolder();
+            g.Controls.Add(_openLogFolderBtn);
+
+            return g;
+        }
+
+        private void OpenLogFolder()
+        {
+            try
+            {
+                System.IO.Directory.CreateDirectory(DebugLogger.LogDirectory);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = DebugLogger.LogDirectory,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not open log folder:\n" + ex.Message,
+                    "OnStepX", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         private SectionPanel BuildPositionGroup()
         {
             var g = NewGroup("Current Position", 360, 195);
@@ -846,17 +923,17 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        // Compute apparent sidereal time (hours, 0..24) for the given west-positive
+        // Compute apparent sidereal time (hours, 0..24) for the given east-positive
         // longitude at the current UTC. Mean GMST formula (Meeus, ch. 12) — accurate
         // to a few tenths of a second, plenty for diagnosing a sign-convention bug.
-        private static double ComputeSkyLstHours(double westLonDeg)
+        private static double ComputeSkyLstHours(double eastLonDeg)
         {
             var utc = DateTime.UtcNow;
             double jd = utc.ToOADate() + 2415018.5;
             double d = jd - 2451545.0;
             double t = d / 36525.0;
             double gmstDeg = 280.46061837 + 360.98564736629 * d + 0.000387933 * t * t - (t * t * t) / 38710000.0;
-            double lstDeg = gmstDeg - westLonDeg;
+            double lstDeg = gmstDeg + eastLonDeg;
             lstDeg = ((lstDeg % 360.0) + 360.0) % 360.0;
             return lstDeg / 15.0;
         }
@@ -1469,8 +1546,11 @@ namespace ASCOM.OnStepX.Ui
                     lonRaw = _mount.Protocol.GetLongitudeRaw();
                     if (!CoordFormat.TryParseDegrees(latRaw, out mLat))
                         throw new FormatException("latitude reply '" + latRaw + "'");
-                    if (!CoordFormat.TryParseDegrees(lonRaw, out mLon))
+                    // GetLongitudeRaw returns wire west-positive; convert to ASCOM
+                    // east-positive for comparison with hub-stored value.
+                    if (!CoordFormat.TryParseDegrees(lonRaw, out var westPos))
                         throw new FormatException("longitude reply '" + lonRaw + "'");
+                    mLon = -westPos;
                     double.TryParse(StripReply(_mount.Protocol.GetElevation()),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out mEle);
                     ok = true;
@@ -2089,6 +2169,9 @@ namespace ASCOM.OnStepX.Ui
             _guideRateBox.Value = (decimal)DriverSettings.GuideRateMultiplier;
             _slewSpeedBox.Value = Math.Max(_slewSpeedBox.Minimum, Math.Min(_slewSpeedBox.Maximum, (decimal)DriverSettings.SlewRateDegPerSec));
             _meridianActionBox.SelectedIndex = DriverSettings.MeridianAutoFlip ? 0 : 1;
+            if (_notificationsEnabledCheck != null) _notificationsEnabledCheck.Checked = DriverSettings.NotificationsEnabled;
+            if (_debugLogEnabledCheck != null)      _debugLogEnabledCheck.Checked      = DriverSettings.DebugLogEnabled;
+            if (_debugLogVerboseCheck != null)      _debugLogVerboseCheck.Checked      = DriverSettings.DebugLogVerbosePolls;
         }
         private void SaveSettings()
         {
