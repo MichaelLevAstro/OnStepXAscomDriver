@@ -89,6 +89,14 @@ namespace ASCOM.OnStepX.Ui
         private DateTime _limitRejectionUntilUtc = DateTime.MinValue;
         private string _limitRejectionMsg;
 
+        // Cached on connect from the mount's :GX92/:GX93/:GX97 readbacks. Drives
+        // the deg/s -> us/step conversion when the user moves the slew rate
+        // slider AND when re-applying the registry-stored rate on connect (so
+        // an :ENVRESET-wiped mount picks up the user's preferred slew rate
+        // again instead of sitting at firmware default).
+        private double _mountBaseSlewDegPerSec;
+        private double _mountUsPerStepBase;
+
         private Label _raLabel, _decLabel, _altLabel, _azLabel, _pierLabel, _lstLabel;
 
         private ThemedCheckBox _autoConnectCheck;
@@ -722,6 +730,7 @@ namespace ASCOM.OnStepX.Ui
                 _suppressSlewSyncEvent = true;
                 try { _slewSpeedBox.Value = Math.Max(_slewSpeedBox.Minimum, Math.Min(_slewSpeedBox.Maximum, _slewSpeedSlider.Value / 100M)); }
                 finally { _suppressSlewSyncEvent = false; }
+                if (_hubConnected) ApplySlewRateDegPerSec((double)_slewSpeedBox.Value);
             };
             _slewSpeedBox.ValueChanged += (s, e) =>
             {
@@ -729,6 +738,7 @@ namespace ASCOM.OnStepX.Ui
                 _suppressSlewSyncEvent = true;
                 try { _slewSpeedSlider.Value = Math.Max(_slewSpeedSlider.Minimum, Math.Min(_slewSpeedSlider.Maximum, (int)Math.Round(_slewSpeedBox.Value * 100M))); }
                 finally { _suppressSlewSyncEvent = false; }
+                if (_hubConnected) ApplySlewRateDegPerSec((double)_slewSpeedBox.Value);
             };
 
             _meridianActionBox = new ComboBox { Left = 110, Top = 126, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -783,7 +793,7 @@ namespace ASCOM.OnStepX.Ui
         private SectionPanel BuildLimitsGroup()
         {
             var g = NewGroup("Limits", 440, 150);
-            _limitsStatusLed = new StatusLabel { Width = 220, Height = 28 };
+            _limitsStatusLed = new StatusLabel { Width = 320, Height = 28 };
             _limitsStatusLed.LabelFont = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             _limitsStatusLed.Kind = PulseDot.StatusKind.Neutral;
             _limitsStatusLed.Text = "—";
@@ -1419,6 +1429,8 @@ namespace ASCOM.OnStepX.Ui
                     // SLEW_RATE_BASE_DESIRED. :GX97# cold-boot quirk is handled inside
                     // GetCurrentStepRateDegPerSec.
                     try { mountBaseSlew = _mount.Protocol.GetBaseSlewRateDegPerSec(); } catch { }
+                    try { _mountUsPerStepBase = _mount.Protocol.GetUsPerStepBase(); } catch { _mountUsPerStepBase = 0; }
+                    _mountBaseSlewDegPerSec = mountBaseSlew;
                 }
                 catch (OperationCanceledException) { canceled = true; }
                 catch (Exception ex) { err = ex; }
@@ -1471,6 +1483,14 @@ namespace ASCOM.OnStepX.Ui
                             catch (Exception syncEx) { TransportLogger.Note("Auto-sync time failed: " + syncEx.Message); }
                         }
                         ReapplyAdvancedSettingsOnConnect();
+                        // Push the registry-stored slew rate to the mount. Important
+                        // after :ENVRESET wipes mount NV — firmware reverts to default
+                        // SLEW_RATE_BASE_DESIRED us/step, slider would still show the
+                        // saved deg/s value but mount runs at the lower default until
+                        // the user nudges the slider. Re-apply on every connect so
+                        // user's preferred rate survives mount power cycles.
+                        try { ApplySlewRateDegPerSec((double)_slewSpeedBox.Value); }
+                        catch (Exception slewEx) { TransportLogger.Note("Apply slew rate on connect failed: " + slewEx.Message); }
                         try
                         {
                             bool autoFlip = _mount.Protocol.GetMeridianAutoFlip();
@@ -1489,6 +1509,21 @@ namespace ASCOM.OnStepX.Ui
                     try { cts.Dispose(); } catch { }
                 }
             });
+        }
+
+        // Convert deg/s -> us/step using mount's reported base rate + base us/step,
+        // then push via :SX92. Firmware clamps to [base/2, base*2] ∩ ≥ :GX99 lower
+        // limit. No-op if mount didn't report sane base values on connect (avoid
+        // writing nonsense from a failed :GX92/:GX93/:GX97 probe).
+        private void ApplySlewRateDegPerSec(double targetDegPerSec)
+        {
+            if (!_hubConnected) return;
+            if (_mountBaseSlewDegPerSec <= 0.1) return;
+            if (_mountUsPerStepBase <= 0.1) return;
+            if (targetDegPerSec <= 0.0) return;
+            double targetUs = _mountUsPerStepBase * (_mountBaseSlewDegPerSec / targetDegPerSec);
+            try { _mount.Protocol.SetUsPerStepCurrent(targetUs); }
+            catch (Exception ex) { TransportLogger.Note("ApplySlewRate failed: " + ex.Message); }
         }
 
         // Re-apply advanced pier/flip settings from DriverSettings to the mount.
@@ -2100,44 +2135,50 @@ namespace ASCOM.OnStepX.Ui
 
             string reason = null;
 
-            if (DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg))
-                reason = "Slew rejected: " + _limitRejectionMsg;
+            // Sticky slew-rejection wins regardless of park state — user-issued
+            // rejections are about a command they just made, surface them even if
+            // the mount happens to be at park afterward.
+            bool sticky = DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg);
+            if (sticky)
+                reason = "Rejected: " + _limitRejectionMsg;
 
-            if (reason == null)
+            // Live alt/HA checks are meaningless while parked — mount sits at the
+            // configured park position which can legitimately be below the horizon
+            // limit / past the meridian limit. Skip them in that case.
+            if (reason == null && !st.AtPark)
             {
                 int horizon = (int)_horizonLimitBox.Value;
                 if (st.Altitude <= horizon)
-                    reason = "Below horizon (" + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°)";
-            }
+                    reason = "Below horizon " + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°";
 
-            if (reason == null && !string.IsNullOrEmpty(st.SideOfPier))
-            {
-                // HA in minutes of RA, signed: positive = west of meridian.
-                // 1 min RA = 0.25°. OnStep's per-pier meridian limit caps how
-                // far past the meridian (positive HA) the mount may continue
-                // tracking before refusing further motion / requesting a flip.
-                double haHours = st.SiderealTime - st.RightAscension;
-                while (haHours > 12) haHours -= 24;
-                while (haHours < -12) haHours += 24;
-                double haMin = haHours * 60.0;
-                if (st.SideOfPier == "E" && haMin > (int)_meridianEastBox.Value)
-                    reason = "Past meridian limit (E pier, " + haMin.ToString("F0", CultureInfo.InvariantCulture) + " min)";
-                else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
-                    reason = "Past meridian limit (W pier, " + haMin.ToString("F0", CultureInfo.InvariantCulture) + " min)";
+                if (reason == null && !string.IsNullOrEmpty(st.SideOfPier))
+                {
+                    // HA in minutes of RA, signed: positive = west of meridian.
+                    // 1 min RA = 0.25°. OnStep's per-pier meridian limit caps how
+                    // far past the meridian (positive HA) the mount may continue
+                    // tracking before refusing further motion / requesting a flip.
+                    double haHours = st.SiderealTime - st.RightAscension;
+                    while (haHours > 12) haHours -= 24;
+                    while (haHours < -12) haHours += 24;
+                    double haMin = haHours * 60.0;
+                    if (st.SideOfPier == "E" && haMin > (int)_meridianEastBox.Value)
+                        reason = "Past E meridian " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
+                    else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
+                        reason = "Past W meridian " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
+                }
             }
 
             if (reason != null)
             {
-                string text = "LIMIT: " + reason;
-                if (_limitsStatusLed.Text != text) _limitsStatusLed.Text = text;
+                if (!_limitsStatusLed.Visible) _limitsStatusLed.Visible = true;
+                if (_limitsStatusLed.Text != reason) _limitsStatusLed.Text = reason;
                 if (_limitsStatusLed.Kind != PulseDot.StatusKind.Err) _limitsStatusLed.Kind = PulseDot.StatusKind.Err;
                 if (!_limitsStatusLed.Pulsing) _limitsStatusLed.Pulsing = true;
             }
             else
             {
-                if (_limitsStatusLed.Text != "Within limits") _limitsStatusLed.Text = "Within limits";
-                if (_limitsStatusLed.Kind != PulseDot.StatusKind.Ok) _limitsStatusLed.Kind = PulseDot.StatusKind.Ok;
                 if (_limitsStatusLed.Pulsing) _limitsStatusLed.Pulsing = false;
+                if (_limitsStatusLed.Visible) _limitsStatusLed.Visible = false;
             }
         }
 
