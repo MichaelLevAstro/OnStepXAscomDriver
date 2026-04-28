@@ -584,6 +584,7 @@ namespace ASCOM.OnStepX.Driver
             if (cos > 1) cos = 1; else if (cos < -1) cos = -1;
             return Math.Acos(cos) * 180.0 / Math.PI;
         }
+
         public void SyncToAltAz(double Azimuth, double Altitude) => throw new ASCOM.MethodNotImplementedException("SyncToAltAz");
 
         public void AbortSlew()

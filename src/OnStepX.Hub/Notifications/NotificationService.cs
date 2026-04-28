@@ -29,7 +29,7 @@ namespace ASCOM.OnStepX.Notifications
             if (!IsEnabled) return;
             if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(body)) return;
 
-            string key = (title ?? "") + "" + (body ?? "");
+            string key = (title ?? "") + "" + (body ?? "");
             lock (_gate)
             {
                 if (_recent.TryGetValue(key, out var last) && DateTime.UtcNow - last < DebounceWindow)

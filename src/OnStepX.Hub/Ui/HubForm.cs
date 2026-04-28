@@ -88,6 +88,12 @@ namespace ASCOM.OnStepX.Ui
         // MessageBox. Live Alt/HA limit checks bypass this and update each tick.
         private DateTime _limitRejectionUntilUtc = DateTime.MinValue;
         private string _limitRejectionMsg;
+        // Edge-trigger guard: live alt/HA-derived limit state from RefreshLimitsStatus.
+        // Flips false->true when the mount first crosses into a configured limit
+        // (manual pad, ASCOM client, autonomous tracking) and back when it returns
+        // to within limits. Used to fire MountSession.LimitWarning exactly once per
+        // entry, regardless of which subsystem issued the offending move.
+        private bool _liveLimitActive;
 
         // Cached on connect from the mount's :GX92/:GX93/:GX97 readbacks. Drives
         // the deg/s -> us/step conversion when the user moves the slew rate
@@ -2120,38 +2126,55 @@ namespace ASCOM.OnStepX.Ui
         {
             if (_limitsStatusLed == null) return;
 
-            string reason = null;
-
-            bool sticky = DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg);
-            if (sticky)
-                reason = "Rejected: " + _limitRejectionMsg;
-
-            // Park position can legitimately be outside live limits.
-            if (reason == null && !st.AtPark)
+            // Skip live checks until the cache has had at least one successful
+            // poll, otherwise default 0.0 values trigger spurious limit alerts.
+            if (st.LastUpdateUtc == DateTime.MinValue)
             {
-                int horizon = (int)_horizonLimitBox.Value;
-                if (st.Altitude <= horizon)
-                    reason = "Below horizon " + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°";
-
-                if (reason == null && !string.IsNullOrEmpty(st.SideOfPier))
-                {
-                    // HA in minutes of RA, signed: positive = west of meridian.
-                    // 1 min RA = 0.25°. Past-meridian convention is symmetric
-                    // by pier:
-                    //   W pier covers eastern sky (HA<0); past meridian = HA>0.
-                    //     Limit reached when haMin >  +westLimit.
-                    //   E pier covers western sky (HA>0); past meridian = HA<0.
-                    //     Limit reached when haMin <  -eastLimit.
-                    double haHours = st.SiderealTime - st.RightAscension;
-                    while (haHours > 12) haHours -= 24;
-                    while (haHours < -12) haHours += 24;
-                    double haMin = haHours * 60.0;
-                    if (st.SideOfPier == "E" && haMin < -(int)_meridianEastBox.Value)
-                        reason = "Past E meridian " + (-haMin).ToString("F0", CultureInfo.InvariantCulture) + "m";
-                    else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
-                        reason = "Past W meridian " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
-                }
+                if (_limitsStatusLed.Text != "—") _limitsStatusLed.Text = "—";
+                if (_limitsStatusLed.Kind != PulseDot.StatusKind.Neutral) _limitsStatusLed.Kind = PulseDot.StatusKind.Neutral;
+                if (_limitsStatusLed.Pulsing) _limitsStatusLed.Pulsing = false;
+                _liveLimitActive = false;
+                return;
             }
+
+            string reason = null;
+            string liveReason = null;
+
+            if (DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg))
+                reason = _limitRejectionMsg;
+
+            int horizon = (int)_horizonLimitBox.Value;
+            if (st.Altitude <= horizon)
+                liveReason = "Below horizon " + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°";
+
+            if (liveReason == null && !string.IsNullOrEmpty(st.SideOfPier))
+            {
+                // HA in minutes of RA. Past-meridian limit is symmetric:
+                //   W pier covers eastern sky (HA<0); limit reached when haMin >  +westLimit.
+                //   E pier covers western sky (HA>0); limit reached when haMin <  -eastLimit.
+                double haHours = st.SiderealTime - st.RightAscension;
+                while (haHours > 12) haHours -= 24;
+                while (haHours < -12) haHours += 24;
+                double haMin = haHours * 60.0;
+                if (st.SideOfPier == "E" && haMin < -(int)_meridianEastBox.Value)
+                    liveReason = "Past meridian E " + (-haMin).ToString("F0", CultureInfo.InvariantCulture) + "m";
+                else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
+                    liveReason = "Past meridian W " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
+            }
+
+            // Edge-trigger MountSession.LimitWarning when the live alt/HA check
+            // crosses ok->limit. Catches manual-pad slews, ASCOM client slews,
+            // and autonomous tracking past meridian — all paths that bypass
+            // SlewTargetForm's slew-rejection plumbing. NotificationService
+            // owns the toast debounce, so re-arming is safe.
+            bool nowInLiveLimit = liveReason != null;
+            if (nowInLiveLimit && !_liveLimitActive)
+            {
+                try { _mount.RaiseLimitWarning(liveReason); } catch { }
+            }
+            _liveLimitActive = nowInLiveLimit;
+
+            if (reason == null) reason = liveReason;
 
             if (reason != null)
             {

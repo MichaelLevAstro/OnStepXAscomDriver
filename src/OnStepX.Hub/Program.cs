@@ -58,6 +58,7 @@ namespace ASCOM.OnStepX
             _pipeServer.Start();
 
             BuildTray();
+            MountAlertBridge.Attach(MountSession.Instance);
 
             if (startInTray)
             {
