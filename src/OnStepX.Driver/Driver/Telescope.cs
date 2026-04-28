@@ -61,8 +61,6 @@ namespace ASCOM.OnStepX.Driver
                     try { _transport.ShowHub(); } catch { }
                     _clientConnected = true;
                     DebugLogger.Log("CONNECT", "Driver connected; pipe up");
-                    try { LogPierDiagnostic("CONNECT", "post-pipe"); }
-                    catch (Exception ex) { DebugLogger.Log("CONNECT", "Diagnostic snapshot failed: " + ex.Message); }
                 }
                 else
                 {
@@ -234,7 +232,6 @@ namespace ASCOM.OnStepX.Driver
         {
             RequireConnected();
             DebugLogger.Log("SLEW", "SlewToTargetAsync entry; tgtRA=" + FormatHours(_targetRA) + " tgtDec=" + FormatDeg(_targetDec));
-            LogPierDiagnostic("SLEW", "pre-MS#");
             int rc = _protocol.SlewToTarget();
             DebugLogger.Log("SLEW", "SlewToTarget :MS# rc=" + rc);
             if (rc != 0) { NotifyLimitIfApplicable(rc); throw SlewError(rc); }
@@ -270,7 +267,6 @@ namespace ASCOM.OnStepX.Driver
             DebugLogger.Log("SYNC", "pre :Gm#='" + preGm + "' :GU#='" + preGu + "'");
 
             EnforceSyncLimit();
-            EnforceSyncPierGuard(preGm);
             bool ok = _protocol.Sync();
             if (!ok)
             {
@@ -295,8 +291,6 @@ namespace ASCOM.OnStepX.Driver
                     ". Next slew will use " + (postP == 'E' ? "East" : "West") +
                     "-pier routing — verify mount mechanical pier matches before slewing.");
             }
-
-            LogPierDiagnostic("SYNC", "post-CS#");
         }
 
         private static char ExtractPierChar(string reply)
@@ -395,165 +389,6 @@ namespace ASCOM.OnStepX.Driver
                     "Sync cancelled by user — distance {0:F2}° exceeded configured limit of {1}°.", dist, limit));
             }
             DebugLogger.Log("SYNC", "EnforceSyncLimit decision=POPUP_OK (user confirmed)");
-        }
-
-        // Full-state diagnostic snapshot. Logs site, clock, mount and target
-        // state. Pinpoints whether a pier inconsistency comes from time,
-        // longitude, mount HA or the target HA. Never refuses or throws.
-        private void LogPierDiagnostic(string category, string label)
-        {
-            string rawGs = "?", rawGg = "?", rawGG = "?", rawGL = "?", rawGC = "?",
-                   rawGt = "?", rawGr = "?", rawGd = "?", rawGm = "?", rawGu = "?";
-            try { rawGs = (_protocol.GetSiderealTime() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGs = "ERR:" + ex.Message; }
-            try { rawGg = (_protocol.GetLongitudeRaw() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGg = "ERR:" + ex.Message; }
-            try { rawGG = (_protocol.GetUtcOffset() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGG = "ERR:" + ex.Message; }
-            try { rawGL = (_protocol.GetLocalTime() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGL = "ERR:" + ex.Message; }
-            try { rawGC = (_protocol.GetDate() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGC = "ERR:" + ex.Message; }
-            try { rawGt = (_protocol.GetLatitude() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGt = "ERR:" + ex.Message; }
-            try { rawGr = (_protocol.GetRA() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGr = "ERR:" + ex.Message; }
-            try { rawGd = (_protocol.GetDec() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGd = "ERR:" + ex.Message; }
-            try { rawGm = (_protocol.GetPierSide() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGm = "ERR:" + ex.Message; }
-            try { rawGu = (_protocol.GetStatus() ?? "").TrimEnd('#'); } catch (Exception ex) { rawGu = "ERR:" + ex.Message; }
-
-            char curPier = ExtractPierChar(rawGm);
-
-            double fwLstHours = double.NaN;
-            try { fwLstHours = CoordFormat.ParseHours(rawGs); } catch { }
-            double curRaHours = double.NaN;
-            try { curRaHours = CoordFormat.ParseHours(rawGr); } catch { }
-
-            double siteLonDegEastPos = double.NaN;
-            if (CoordFormat.TryParseDegrees(rawGg, out var lonWestPos)) siteLonDegEastPos = -lonWestPos;
-
-            // :GG# returns west-positive UTC offset in "sHH:MM" wire format.
-            double utcOffsetHoursWestPos = double.NaN, utcOffsetHoursEastPos = double.NaN;
-            if (TryParseSignedHmm(rawGG, out var goff))
-            { utcOffsetHoursWestPos = goff; utcOffsetHoursEastPos = -goff; }
-            else if (double.TryParse(rawGG, NumberStyles.Float, CultureInfo.InvariantCulture, out var gdec))
-            { utcOffsetHoursWestPos = gdec; utcOffsetHoursEastPos = -gdec; }
-
-            double driverLstHours = ComputeDriverLstHours(siteLonDegEastPos);
-
-            double curHaHours = (double.IsNaN(fwLstHours) || double.IsNaN(curRaHours)) ? double.NaN : (fwLstHours - curRaHours);
-            while (curHaHours > 12) curHaHours -= 24;
-            while (curHaHours < -12) curHaHours += 24;
-            char impliedPierFromCur = double.IsNaN(curHaHours) ? '?' : (curHaHours > 0 ? 'E' : 'W');
-
-            DebugLogger.Log(category,
-                "DIAG[" + label + "] SITE rawGg='" + rawGg + "' lonEastPos=" + Fmt(siteLonDegEastPos) + "°" +
-                " rawGt='" + rawGt + "'" +
-                " rawGG='" + rawGG + "' utcOffWestPos=" + Fmt(utcOffsetHoursWestPos) +
-                "h utcOffEastPos=" + Fmt(utcOffsetHoursEastPos) + "h" +
-                " rawGL='" + rawGL + "' rawGC='" + rawGC + "'" +
-                " sysLocal=" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) +
-                " sysUtc=" + DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture));
-
-            string deltaLstSec = (double.IsNaN(fwLstHours) || double.IsNaN(driverLstHours)) ? "?" :
-                ((driverLstHours - fwLstHours) * 3600.0).ToString("F1", CultureInfo.InvariantCulture);
-            DebugLogger.Log(category,
-                "DIAG[" + label + "] CLOCK rawGs='" + rawGs + "' fwLst=" + Fmt(fwLstHours) +
-                "h driverLst=" + Fmt(driverLstHours) +
-                "h deltaLstSec=" + deltaLstSec);
-
-            DebugLogger.Log(category,
-                "DIAG[" + label + "] MOUNT rawGr='" + rawGr + "' rawGd='" + rawGd + "' rawGm='" + rawGm + "' rawGu='" + rawGu + "'" +
-                " curRA=" + Fmt(curRaHours) + "h curHa=" + Fmt(curHaHours) + "h" +
-                " curPier=" + curPier + " impliedPierFromCur=" + impliedPierFromCur);
-
-            if (impliedPierFromCur != '?' && curPier != '?' && impliedPierFromCur != curPier)
-            {
-                DebugLogger.Log(category,
-                    "DIAG[" + label + "] *** CURRENT-STATE INCONSISTENCY: mount-reported curHa=" +
-                    Fmt(curHaHours) + "h implies " + impliedPierFromCur + " but :Gm#=" + curPier +
-                    ". Firmware pier flag does not match firmware-reported HA — corruption already present.");
-            }
-
-            if (_targetRaSet)
-            {
-                double tgtHaHours = double.IsNaN(fwLstHours) ? double.NaN : (fwLstHours - _targetRA);
-                while (tgtHaHours > 12) tgtHaHours -= 24;
-                while (tgtHaHours < -12) tgtHaHours += 24;
-                char impliedPierFromTgt = double.IsNaN(tgtHaHours) ? '?' : (tgtHaHours > 0 ? 'E' : 'W');
-                DebugLogger.Log(category,
-                    "DIAG[" + label + "] TARGET tgtRA=" + FormatHours(_targetRA) + " tgtDec=" + FormatDeg(_targetDec) +
-                    " tgtHa=" + Fmt(tgtHaHours) + "h impliedPierFromTgt=" + impliedPierFromTgt);
-
-                if (impliedPierFromTgt != '?' && curPier != '?' && impliedPierFromTgt != curPier)
-                {
-                    DebugLogger.Log(category,
-                        "DIAG[" + label + "] *** CROSS-PIER OPERATION: target HA implies " + impliedPierFromTgt +
-                        " but mount on " + curPier +
-                        ". On :CS# firmware would flip :Gm# without motion. On :MS# firmware should flip mechanically.");
-                }
-            }
-        }
-
-        // Sync-time diagnostic. Snapshot of full state before :CS#.
-        private void EnforceSyncPierGuard(string preGm)
-        {
-            if (!_targetRaSet)
-            {
-                DebugLogger.Log("SYNC", "EnforceSyncPierGuard decision=TARGET_NOT_SET");
-                return;
-            }
-            LogPierDiagnostic("SYNC", "pre-CS#");
-        }
-
-        private static string Fmt(double v)
-        {
-            return double.IsNaN(v) ? "?" : v.ToString("F4", CultureInfo.InvariantCulture);
-        }
-
-        // OnStepX :GG# wire format is "sHH:MM" (e.g. "-03:00"). Returns hours.
-        private static bool TryParseSignedHmm(string s, out double hours)
-        {
-            hours = 0;
-            if (string.IsNullOrEmpty(s)) return false;
-            string t = s.Trim();
-            int sign = 1;
-            if (t[0] == '+' || t[0] == '-') { if (t[0] == '-') sign = -1; t = t.Substring(1); }
-            int colon = t.IndexOf(':');
-            if (colon < 0)
-            {
-                if (!double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)) return false;
-                hours = sign * dec; return true;
-            }
-            if (!int.TryParse(t.Substring(0, colon), NumberStyles.Integer, CultureInfo.InvariantCulture, out var h)) return false;
-            if (!int.TryParse(t.Substring(colon + 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var m)) return false;
-            hours = sign * (h + m / 60.0);
-            return true;
-        }
-
-        // Driver-computed LST from PC UTC + east-positive longitude. Used to
-        // cross-check firmware :GS#. Diverging values mean firmware time or
-        // longitude is wrong (or PC clock is).
-        private static double ComputeDriverLstHours(double siteLonDegEastPos)
-        {
-            if (double.IsNaN(siteLonDegEastPos)) return double.NaN;
-            DateTime utc = DateTime.UtcNow;
-            double jd = ToJulianDate(utc);
-            double t = (jd - 2451545.0) / 36525.0;
-            // IAU 1982 GMST in seconds
-            double gmstSec = 67310.54841
-                + (876600.0 * 3600.0 + 8640184.812866) * t
-                + 0.093104 * t * t
-                - 6.2e-6 * t * t * t;
-            double gmstHours = (gmstSec / 3600.0) % 24.0;
-            if (gmstHours < 0) gmstHours += 24.0;
-            double lst = gmstHours + siteLonDegEastPos / 15.0;
-            lst = lst % 24.0;
-            if (lst < 0) lst += 24.0;
-            return lst;
-        }
-
-        private static double ToJulianDate(DateTime utc)
-        {
-            int Y = utc.Year, M = utc.Month, D = utc.Day;
-            if (M <= 2) { Y -= 1; M += 12; }
-            int A = Y / 100;
-            int B = 2 - A + A / 4;
-            double dayFrac = (utc.Hour + utc.Minute / 60.0 + (utc.Second + utc.Millisecond / 1000.0) / 3600.0) / 24.0;
-            return Math.Floor(365.25 * (Y + 4716)) + Math.Floor(30.6001 * (M + 1)) + D + dayFrac + B - 1524.5;
         }
 
         private static int ReadSyncLimitDeg() => ReadIntSetting("SyncLimitDeg", 0);
