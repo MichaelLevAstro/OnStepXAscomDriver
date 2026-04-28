@@ -38,6 +38,7 @@ namespace ASCOM.OnStepX.Diagnostics
         private static Task _writerTask;
         private static string _processTag = "?";
         private static int _pid;
+        private static string _sessionStamp;
         private static string _logDir;
         private static volatile bool _initialized;
 
@@ -72,6 +73,8 @@ namespace ASCOM.OnStepX.Diagnostics
                 if (_initialized) return;
                 _processTag = (processTag ?? "?").ToUpperInvariant();
                 try { _pid = Process.GetCurrentProcess().Id; } catch { _pid = 0; }
+                _sessionStamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture)
+                              + "_pid" + _pid;
 
                 try { Directory.CreateDirectory(LogDirectory); } catch { }
                 TryPruneOldFiles();
@@ -186,9 +189,10 @@ namespace ASCOM.OnStepX.Diagnostics
 
         private static string CurrentFilePath()
         {
-            string day = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            // Session-specific: one file per process lifetime so logs stay short
+            // and post-mortem of "what happened in this session" is a single file.
             return Path.Combine(LogDirectory,
-                "OnStepX-" + _processTag.ToLowerInvariant() + "-" + day + ".log");
+                "OnStepX-" + _processTag.ToLowerInvariant() + "-" + _sessionStamp + ".log");
         }
 
         private static void TryPruneOldFiles()
