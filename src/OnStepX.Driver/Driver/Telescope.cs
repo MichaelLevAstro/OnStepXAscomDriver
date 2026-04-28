@@ -10,12 +10,7 @@ using ASCOM.OnStepX.Hardware.Transport;
 
 namespace ASCOM.OnStepX.Driver
 {
-    // In-process ASCOM ITelescopeV3 implementation. Owns a PipeTransport +
-    // LX200Protocol pair per client; all reads/writes hop over the named pipe
-    // to OnStepX.Hub which owns the mount. No MountSession, no state poller,
-    // no reflection — driver is a thin shim and stateless except for target
-    // coordinates (ASCOM contract requires setter round-trip) and the COM
-    // client's Connected flag.
+    // ASCOM ITelescopeV3 thin shim. Pipes to OnStepX.Hub which owns the mount.
     [ComVisible(true)]
     [Guid("E3F7B8A1-6C2D-4F3E-9A5B-1F2C3D4E5A6B")]
     [ClassInterface(ClassInterfaceType.None)]
@@ -32,11 +27,6 @@ namespace ASCOM.OnStepX.Driver
         public Telescope() { }
 
         // ---------- Connection ----------
-        // Connected=true hands off the heavy lifting to HubLauncher: pipe-open,
-        // spawn OnStepX.Hub.exe if nobody is listening, retry until the hub's
-        // IPC:ISCONNECTED handshake says the mount is live. On timeout throw
-        // NotConnectedException with an actionable message — NINA surfaces it
-        // verbatim in its "failed to connect" toast.
         public bool Connected
         {
             get => _clientConnected;
@@ -163,20 +153,11 @@ namespace ASCOM.OnStepX.Driver
         public bool CanSetPierSide => TelescopeCapabilities.CanSetPierSide;
         public bool CanMoveAxis(TelescopeAxes Axis) => TelescopeCapabilities.CanMoveAxis;
 
-        // Mount truth, not driver truth. Any driver-side HA prediction can
-        // disagree with firmware's flip logic near the meridian (LST/RA float
-        // jitter at HA≈0), making NINA force a spurious flip that slews into
-        // the legs. Echo the mount's current side — the real flip decision
-        // happens in firmware on the slew itself (:SX95 auto-flip, :SX96
-        // preferred pier, meridian limits).
+        // Mirror current SideOfPier — firmware owns the flip decision.
         public PierSide DestinationSideOfPier(double RightAscension, double Declination)
             => _clientConnected ? SideOfPier : PierSide.pierUnknown;
 
         // ---------- Positions ----------
-        // Every read hops over the pipe. Fine at normal ASCOM poll rates
-        // (NINA polls RA/Dec ~2 Hz). If a client hammers these and latency
-        // matters, the Hub is the right place to add a server-side cache —
-        // the driver stays dumb.
         public double RightAscension { get { RequireConnected(); return SafeHours(() => CoordFormat.ParseHours(_protocol.GetRA())); } }
         public double Declination    { get { RequireConnected(); return SafeDegrees(() => _protocol.GetDec()); } }
         public double Altitude       { get { RequireConnected(); return SafeDegrees(() => _protocol.GetAlt()); } }
@@ -204,9 +185,7 @@ namespace ASCOM.OnStepX.Driver
             get
             {
                 RequireConnected();
-                // :GU# status byte conventions (OnStepX, verified against firmware):
-                //   'N' = not slewing (absent => slewing)
-                //   'I' = park in progress (treat as slewing for ASCOM contract)
+                // :GU# 'N'=not slewing, 'I'=park in progress (still moving).
                 var raw = (TryGet(() => _protocol.GetStatus()) ?? "").TrimEnd('#');
                 return raw.IndexOf('N') < 0 || raw.IndexOf('I') >= 0;
             }
@@ -282,14 +261,9 @@ namespace ASCOM.OnStepX.Driver
             RequireConnected();
             DebugLogger.Log("SYNC", "SyncToTarget entry; tgtRA=" + FormatHours(_targetRA) + " tgtDec=" + FormatDeg(_targetDec));
 
-            // Capture pier + :GU# status before sync. OnStepX firmware can
-            // silently flip its internal pier flag during :CM# when the sync
-            // target's HA implies the opposite pier from the one the mount is
-            // physically on (e.g. just-after-meridian-flip + plate-solve sync
-            // whose target HA is slightly negative). The flag flip leaves
-            // firmware reporting W while the mount is still mechanically on E,
-            // and the next slew routes through the wrong side. Logging both
-            // sides makes the corruption visible in the post-mortem.
+            // OnStepX firmware can flip :Gm# during :CS# when the synced HA
+            // implies the opposite pier from current. Capture pre/post for
+            // post-mortem.
             string preGm = "?", preGu = "?";
             try { preGm = (_protocol.GetPierSide() ?? "").TrimEnd('#'); } catch (Exception ex) { preGm = "ERR:" + ex.Message; }
             try { preGu = (_protocol.GetStatus()   ?? "").TrimEnd('#'); } catch (Exception ex) { preGu = "ERR:" + ex.Message; }
@@ -336,12 +310,9 @@ namespace ASCOM.OnStepX.Driver
             return '?';
         }
 
-        // Driver-side sync distance guardrail. Reads SyncLimitDeg from the same
-        // HKCU\Software\ASCOM\OnStepX key the hub writes via DriverSettings.
-        // 0 disables. If the angular separation between the mount's current
-        // position and the target sync position exceeds the limit, show a
-        // confirmation popup in the driver process; Cancel throws so NINA et al.
-        // treat the sync as failed rather than silently succeeding.
+        // Driver-side sync distance guardrail. SyncLimitDeg=0 disables.
+        // Confirmation popup if sync moves more than the configured degrees.
+        // Cancel throws so the caller treats the sync as failed.
         private void EnforceSyncLimit()
         {
             int limit = ReadSyncLimitDeg();
@@ -370,11 +341,6 @@ namespace ASCOM.OnStepX.Driver
 
             double dist = AngularSeparationDeg(curRa, curDec, _targetRA, _targetDec);
 
-            // Compute target HA + the pier the target's HA implies. OnStepX
-            // firmware uses this same heuristic during :CM# to (re)set its
-            // internal pier flag, so logging it makes "sync caused phantom
-            // pier change" cases visible: if implied pier ≠ current physical
-            // pier, the flag is about to flip.
             double lstHours = double.NaN;
             try { lstHours = CoordFormat.ParseHours(_protocol.GetSiderealTime()); } catch { }
             double tgtHaHours = double.IsNaN(lstHours) ? double.NaN : (lstHours - _targetRA);
@@ -431,27 +397,9 @@ namespace ASCOM.OnStepX.Driver
             DebugLogger.Log("SYNC", "EnforceSyncLimit decision=POPUP_OK (user confirmed)");
         }
 
-        // Full-state diagnostic snapshot. Driver never refuses or throws —
-        // user must always retain control of the mount. Logs every input
-        // OnStepX firmware uses for HA/pier derivation, so post-mortem can
-        // pinpoint which value is wrong when :Gm# flips when it shouldn't.
-        //
-        // Captured per snapshot:
-        //   SITE  — raw :GgH# (west-positive longitude wire), east-positive
-        //           computed value, raw :GtH# latitude, raw :GG# (UTC offset
-        //           wire = west-positive Meade), east-positive equivalent,
-        //           raw :GL# local time, :GC# date, system Local/UTC clock.
-        //   CLOCK — raw :GS# firmware LST cross-checked against a driver-
-        //           computed LST from PC UTC + east-positive site longitude.
-        //           Non-zero deltaLstSec means firmware time/longitude is
-        //           wrong (or PC clock is) — that drives every HA error
-        //           that drives every pier-from-HA flip.
-        //   MOUNT — raw :GRH# RA, :GDH# Dec, :Gm# pier, parsed values, the
-        //           mount-reported HA, and the pier the mount-reported HA
-        //           implies (mismatch vs :Gm# = firmware state already
-        //           inconsistent before this command).
-        //   TARGET (if target set) — current target RA/Dec, target HA, the
-        //           pier the target HA implies, vs current :Gm#.
+        // Full-state diagnostic snapshot. Logs site, clock, mount and target
+        // state. Pinpoints whether a pier inconsistency comes from time,
+        // longitude, mount HA or the target HA. Never refuses or throws.
         private void LogPierDiagnostic(string category, string label)
         {
             string rawGs = "?", rawGg = "?", rawGG = "?", rawGL = "?", rawGC = "?",
@@ -477,10 +425,7 @@ namespace ASCOM.OnStepX.Driver
             double siteLonDegEastPos = double.NaN;
             if (CoordFormat.TryParseDegrees(rawGg, out var lonWestPos)) siteLonDegEastPos = -lonWestPos;
 
-            // :GG# returns west-positive UTC offset in OnStepX "sHH:MM" wire
-            // format (e.g. "-03:00" = east-positive +3, Israel). double.Parse
-            // chokes on the colon; parse hours and minutes separately. East-
-            // positive is the negation of the wire value.
+            // :GG# returns west-positive UTC offset in "sHH:MM" wire format.
             double utcOffsetHoursWestPos = double.NaN, utcOffsetHoursEastPos = double.NaN;
             if (TryParseSignedHmm(rawGG, out var goff))
             { utcOffsetHoursWestPos = goff; utcOffsetHoursEastPos = -goff; }
@@ -543,9 +488,7 @@ namespace ASCOM.OnStepX.Driver
             }
         }
 
-        // Sync-time diagnostic. Same snapshot as LogPierDiagnostic — using
-        // pre-captured pier reply from caller so the SITE/MOUNT snapshot uses
-        // the same :Gm# value EnforceSyncLimit logged.
+        // Sync-time diagnostic. Snapshot of full state before :CS#.
         private void EnforceSyncPierGuard(string preGm)
         {
             if (!_targetRaSet)
@@ -581,10 +524,9 @@ namespace ASCOM.OnStepX.Driver
             return true;
         }
 
-        // Cross-check firmware LST against a driver-computed LST. Diverging values
-        // mean either firmware time/longitude is wrong or PC clock is wrong; either
-        // way explains "synced HA flips pier when it shouldn't" because LST drives
-        // HA which drives OnStepX's pier-from-HA derivation on :CS#.
+        // Driver-computed LST from PC UTC + east-positive longitude. Used to
+        // cross-check firmware :GS#. Diverging values mean firmware time or
+        // longitude is wrong (or PC clock is).
         private static double ComputeDriverLstHours(double siteLonDegEastPos)
         {
             if (double.IsNaN(siteLonDegEastPos)) return double.NaN;
@@ -859,9 +801,7 @@ namespace ASCOM.OnStepX.Driver
         }
         private static string TryGet(Func<string> f) { try { return f(); } catch { return null; } }
 
-        // Forward firmware limit-rejection codes to the hub UI's sticky LED.
-        // SlewTargetForm raises this internally; for NINA-issued slews the hub
-        // process never sees the rc unless we relay it over the IPC pipe.
+        // Forward firmware limit-rejection rc to the hub via IPC.
         private void NotifyLimitIfApplicable(int rc)
         {
             string reason;
@@ -895,13 +835,8 @@ namespace ASCOM.OnStepX.Driver
         }
     }
 
-    // These three classes MUST be public + ComVisible so NINA (and anything else
-    // using late-bound ASCOM.Com.DriverAccess) can QI for IEnumerable on the
-    // __ComObject returned from get_TrackingRates / AxisRates. Internal classes
-    // don't get a proper CCW — QueryInterface(IID_IEnumerable) fails with
-    // E_NOINTERFACE, which NINA reports as an InvalidCastException during
-    // PostConnect → GetTrackingModes. The DispId(-4) on GetEnumerator matches
-    // DISPID_NEWENUM so late-bind IDispatch clients can enumerate too.
+    // Must be public + ComVisible so late-bound ASCOM clients (NINA et al.)
+    // can QI for IEnumerable on the __ComObject. DispId(-4) = DISPID_NEWENUM.
     [ComVisible(true)]
     [Guid("7C8A1F4B-6D3E-4B8C-9D2E-5F6A7B8C9D0E")]
     [ClassInterface(ClassInterfaceType.None)]

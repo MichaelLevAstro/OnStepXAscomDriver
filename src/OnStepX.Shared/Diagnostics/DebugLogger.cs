@@ -11,26 +11,20 @@ using Microsoft.Win32;
 
 namespace ASCOM.OnStepX.Diagnostics
 {
-    // Persistent file-based debug log shared by the driver (in-proc inside NINA
-    // et al.) and the hub (separate exe). Both processes call Init at startup;
-    // each writes to its own daily file under %APPDATA%\OnStepX\logs so writes
-    // never contend on the same handle. The "Open Log Folder" button in the
-    // Advanced Settings dialog points users at this directory.
-    //
-    // Subscribes to TransportLogger.Pair so every wire round-trip is captured
-    // for free. A poll-command filter (Verbose I/O off by default) drops the
-    // chatty :GR/:GD/:GU/etc. status reads so the file stays useful for
-    // post-mortem on multi-minute sequences. Verbose I/O mode logs everything.
-    //
-    // Settings are read directly from HKCU\Software\ASCOM\OnStepX so the driver
-    // process picks them up without needing a project reference on the hub's
-    // DriverSettings type.
+    // Single application logger. Driver and hub both call Init at startup; every
+    // log line goes through Log() and fans out to:
+    //   - LineEmitted event (hub UI subscribes to render the console)
+    //   - File under %APPDATA%\OnStepX\logs when VerboseFileLog setting is ON
+    // Both processes share one session file so driver+hub timelines interleave
+    // in chronological order. The session tag is registered in HKCU on first
+    // Init() and reused by the second process.
     internal static class DebugLogger
     {
         private const string RegPath = @"Software\ASCOM\OnStepX";
-        private const string EnabledValue = "DebugLogEnabled";
-        private const string VerboseValue = "DebugLogVerbosePolls";
+        private const string VerboseValue = "VerboseFileLog";
+        private const string SessionTagValue = "LogSessionTag";
         private const int RetentionDays = 7;
+        private static readonly TimeSpan SessionMaxAge = TimeSpan.FromHours(2);
 
         private static readonly ConcurrentQueue<string> _queue = new ConcurrentQueue<string>();
         private static readonly object _initLock = new object();
@@ -38,9 +32,11 @@ namespace ASCOM.OnStepX.Diagnostics
         private static Task _writerTask;
         private static string _processTag = "?";
         private static int _pid;
-        private static string _sessionStamp;
+        private static string _sessionTag;
         private static string _logDir;
         private static volatile bool _initialized;
+
+        public static event Action<string> LineEmitted;
 
         public static string LogDirectory
         {
@@ -54,13 +50,7 @@ namespace ASCOM.OnStepX.Diagnostics
             }
         }
 
-        public static bool Enabled
-        {
-            get => ReadBoolSetting(EnabledValue, true);
-            set => WriteBoolSetting(EnabledValue, value);
-        }
-
-        public static bool VerbosePolls
+        public static bool VerboseFileLog
         {
             get => ReadBoolSetting(VerboseValue, false);
             set => WriteBoolSetting(VerboseValue, value);
@@ -73,8 +63,7 @@ namespace ASCOM.OnStepX.Diagnostics
                 if (_initialized) return;
                 _processTag = (processTag ?? "?").ToUpperInvariant();
                 try { _pid = Process.GetCurrentProcess().Id; } catch { _pid = 0; }
-                _sessionStamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture)
-                              + "_pid" + _pid;
+                _sessionTag = ResolveSessionTag();
 
                 try { Directory.CreateDirectory(LogDirectory); } catch { }
                 TryPruneOldFiles();
@@ -85,7 +74,7 @@ namespace ASCOM.OnStepX.Diagnostics
                 TransportLogger.Pair += OnTransportPair;
 
                 _initialized = true;
-                Log("CONNECT", "Logger init; tag=" + _processTag + " pid=" + _pid);
+                Log("CONNECT", "Logger init; tag=" + _processTag + " pid=" + _pid + " session=" + _sessionTag);
             }
         }
 
@@ -106,8 +95,9 @@ namespace ASCOM.OnStepX.Diagnostics
         public static void Log(string category, string message)
         {
             if (!_initialized) return;
-            if (!Enabled) return;
-            _queue.Enqueue(Format(category, message ?? ""));
+            string line = Format(category, message ?? "");
+            try { LineEmitted?.Invoke(line); } catch { }
+            if (VerboseFileLog) _queue.Enqueue(line);
         }
 
         public static void LogException(string category, Exception ex)
@@ -119,35 +109,9 @@ namespace ASCOM.OnStepX.Diagnostics
         private static void OnTransportPair(string cmd, string reply, int elapsedMs)
         {
             if (!_initialized) return;
-            if (!Enabled) return;
-            if (!VerbosePolls && IsPollCommand(cmd)) return;
-            _queue.Enqueue(Format("IO", cmd + " -> " + reply + "  (" + elapsedMs + " ms)"));
-        }
-
-        // Drop the high-frequency status/position reads when not in verbose mode.
-        // These come from MountStateCache (hub, ~750 ms) and ASCOM client polls
-        // (driver, ~2 Hz). Listed by LX200 prefix; first char after ':'.
-        //
-        // :Gm# (pier side) and :GU# (status string) are deliberately NOT
-        // filtered: pier corruption across :CM# is the primary diagnostic
-        // target right now, so every pier read goes to disk. Cost is small —
-        // 2 lines per poll cycle vs. 7 polled commands total.
-        private static bool IsPollCommand(string cmd)
-        {
-            if (string.IsNullOrEmpty(cmd)) return false;
-            string s = cmd;
-            if (s[0] == ':') s = s.Substring(1);
-            if (s.Length == 0) return false;
-            // :GRH#, :GR#, :GDH#, :GD#, :GA#, :GZ#, :GS#, :GT#
-            if (s.StartsWith("GRH", StringComparison.Ordinal)) return true;
-            if (s.StartsWith("GDH", StringComparison.Ordinal)) return true;
-            if (s.StartsWith("GR", StringComparison.Ordinal) && !s.StartsWith("GRA")) return true;
-            if (s.StartsWith("GD", StringComparison.Ordinal)) return true;
-            if (s.StartsWith("GA", StringComparison.Ordinal)) return true;
-            if (s.StartsWith("GZ", StringComparison.Ordinal)) return true;
-            if (s.StartsWith("GS", StringComparison.Ordinal)) return true;
-            if (s.StartsWith("GT", StringComparison.Ordinal)) return true;
-            return false;
+            string line = Format("IO", cmd + " -> " + reply + "  (" + elapsedMs + " ms)");
+            try { LineEmitted?.Invoke(line); } catch { }
+            if (VerboseFileLog) _queue.Enqueue(line);
         }
 
         private static string Format(string category, string message)
@@ -182,17 +146,52 @@ namespace ASCOM.OnStepX.Diagnostics
             }
             catch
             {
-                // Drop on the floor rather than reconnect-storm the mount thread.
-                // A locked log file is preferable to a dropped slew.
+                // Locked or unavailable. Drop on the floor rather than block the
+                // mount thread — preferable to a stalled slew on a logging issue.
             }
         }
 
         private static string CurrentFilePath()
         {
-            // Session-specific: one file per process lifetime so logs stay short
-            // and post-mortem of "what happened in this session" is a single file.
-            return Path.Combine(LogDirectory,
-                "OnStepX-" + _processTag.ToLowerInvariant() + "-" + _sessionStamp + ".log");
+            return Path.Combine(LogDirectory, "OnStepX-" + _sessionTag + ".log");
+        }
+
+        // Driver and hub agree on the session tag via a registry rendezvous so
+        // both processes append to the same file. The first process to start
+        // writes its tag; the second one reads and joins. Tags older than
+        // SessionMaxAge are treated as stale (e.g. a previous session that
+        // crashed without clearing the value).
+        private static string ResolveSessionTag()
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.CreateSubKey(RegPath))
+                {
+                    var existing = k?.GetValue(SessionTagValue) as string;
+                    if (!string.IsNullOrEmpty(existing) && IsRecentSessionTag(existing))
+                        return existing;
+                    string fresh = DateTime.Now.ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture)
+                                 + "_pid" + _pid;
+                    k?.SetValue(SessionTagValue, fresh);
+                    return fresh;
+                }
+            }
+            catch
+            {
+                return DateTime.Now.ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture) + "_pid" + _pid;
+            }
+        }
+
+        private static bool IsRecentSessionTag(string tag)
+        {
+            int us = tag.IndexOf('_');
+            if (us < 0) return false;
+            int us2 = tag.IndexOf('_', us + 1);
+            string stamp = us2 > 0 ? tag.Substring(0, us2) : tag;
+            if (DateTime.TryParseExact(stamp, "yyyy-MM-dd_HHmmss",
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var t))
+                return (DateTime.Now - t) < SessionMaxAge;
+            return false;
         }
 
         private static void TryPruneOldFiles()

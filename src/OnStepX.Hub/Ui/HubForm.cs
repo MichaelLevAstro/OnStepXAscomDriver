@@ -102,12 +102,11 @@ namespace ASCOM.OnStepX.Ui
         private ThemedCheckBox _autoConnectCheck;
         private ThemedCheckBox _autoSyncTimeCheck;
         private ThemedCheckBox _notificationsEnabledCheck;
-        private ThemedCheckBox _debugLogEnabledCheck;
-        private ThemedCheckBox _debugLogVerboseCheck;
+        private ThemedCheckBox _verboseLogCheck;
         private FlatButton _openLogFolderBtn;
         private Label _logPathLabel;
 
-        private FlatButton _parkBtn, _unparkBtn, _findHomeBtn, _goHomeBtn, _resetHomeBtn;
+        private FlatButton _parkBtn, _unparkBtn, _findHomeBtn, _searchHomeBtn, _resetHomeBtn;
         private FlatButton _slewTargetBtn;
         private FlatButton _nvResetBtn;
         private FlatButton _slewInfoBtn;
@@ -141,9 +140,11 @@ namespace ASCOM.OnStepX.Ui
             _mount.LimitWarning += OnMountLimitWarning;
             TransportLogger.Pair += OnTransportPair;
             TransportLogger.Line += OnTransportLine;
+            DebugLogger.LineEmitted += OnLoggerLine;
             FormClosed += (s, e) => {
                 TransportLogger.Pair -= OnTransportPair;
                 TransportLogger.Line -= OnTransportLine;
+                DebugLogger.LineEmitted -= OnLoggerLine;
             };
             UpdateClientLabel();
 
@@ -165,9 +166,8 @@ namespace ASCOM.OnStepX.Ui
             EnqueueConsole(line, color);
         }
 
-        // TransportLogger emits Tx/Rx (-> / <-) and Note (--) lines. The Pair event
-        // already carries the cmd+reply pair in a single line, so routing Tx/Rx here
-        // would just duplicate. Only Notes need surfacing.
+        // TransportLogger emits Tx/Rx (-> / <-) and Note (--) lines. Pair already
+        // covers the cmd+reply pair, so only Notes are surfaced here.
         private void OnTransportLine(string rawLine)
         {
             if (_ioEnable != null && !_ioEnable.Checked) return;
@@ -177,17 +177,30 @@ namespace ASCOM.OnStepX.Ui
             EnqueueConsole(line, ConsoleNoteColor);
         }
 
+        // DebugLogger emits one event per Log() call from anywhere in the app.
+        // Surfacing them in the hub console makes the file and the on-screen
+        // view show identical content. Transport pair lines are already routed
+        // via OnTransportPair (in this same process), so skip the IO category
+        // to avoid duplicates. Driver-process IO lines arrive only through
+        // DebugLogger and are kept.
+        private void OnLoggerLine(string formattedLine)
+        {
+            if (_ioEnable != null && !_ioEnable.Checked) return;
+            if (string.IsNullOrEmpty(formattedLine)) return;
+            if (formattedLine.IndexOf("[HUB ", StringComparison.Ordinal) > 0 &&
+                formattedLine.IndexOf("] [IO]", StringComparison.Ordinal) > 0) return;
+            EnqueueConsole(formattedLine, ConsoleNoteColor);
+        }
+
         private void EnqueueConsole(string line, Color color)
         {
             _ioPending.Enqueue(new ConsoleEntry { Text = line, Color = color });
             while (_ioPending.Count > 2000 && _ioPending.TryDequeue(out _)) { }
         }
 
-        // Per-command reply validation. Generic "reply == 0 is bad" is wrong —
-        // e.g. :GT# (tracking rate) can legitimately return "0.0#", and :MS#
-        // returns "0" *on success*. Classify the command and apply the right
-        // rule. Commands outside the known set stay uncolored (green), so the
-        // console doesn't flag third-party / user-typed probes by mistake.
+        // Per-command reply validation. :MS# returns "0" on success and :GT#
+        // returns "0.0#" legitimately, so a generic "reply==0 is bad" rule is
+        // wrong. Unknown commands stay neutral.
         private enum ReplyKind { Unknown, Ack01, SlewAck, Numeric, NonEmpty }
 
         private static ReplyKind ClassifyReply(string cmdCore)
@@ -272,10 +285,7 @@ namespace ASCOM.OnStepX.Ui
                 if (_ioBox.TextLength > keep) RebuildIoView();
             }
             bool autoScroll = _ioAutoScroll?.Checked ?? true;
-            // Snapshot the user's scroll position before appending. AppendText
-            // of a RichTextBox moves the caret to the end, which auto-scrolls.
-            // When auto-scroll is off we restore the pixel-exact scroll offset
-            // via EM_SETSCROLLPOS so the view doesn't jump as new lines land.
+            // Save+restore scroll offset because AppendText auto-scrolls to caret.
             POINT savedScroll = default;
             if (!autoScroll && _ioBox.IsHandleCreated)
                 SendMessage(_ioBox.Handle, EM_GETSCROLLPOS, IntPtr.Zero, ref savedScroll);
@@ -800,15 +810,11 @@ namespace ASCOM.OnStepX.Ui
             g.HeaderRight = _limitsStatusLed;
             _horizonLimitBox = new NumericUpDown { Left = 110, Top = 26, Width = 60, Minimum = -30, Maximum = 30 };
             _overheadLimitBox = new NumericUpDown { Left = 260, Top = 26, Width = 60, Minimum = 60, Maximum = 90, Value = 85 };
-            // OnStepX meridian limits are minutes of RA (1 min = 0.25°). Typical
-            // safe range is -270..+270; most users stay within ±60. Negative value
-            // stops tracking before the meridian on that side.
+            // Meridian limits in minutes of RA (1 min = 0.25°). Negative =
+            // stop tracking before meridian.
             _meridianEastBox = new NumericUpDown { Left = 110, Top = 56, Width = 60, Minimum = -270, Maximum = 270 };
             _meridianWestBox = new NumericUpDown { Left = 260, Top = 56, Width = 60, Minimum = -270, Maximum = 270 };
-            // Sync distance guardrail. Driver-side (not firmware) — confirmation
-            // popup when an ASCOM sync would move the mount by more than this
-            // many degrees. 0 disables. Lives in Limits group because it is
-            // conceptually a safety limit on the sync operation.
+            // Driver-side sync distance guardrail. 0 disables.
             _syncLimitBox = new NumericUpDown { Left = 110, Top = 86, Width = 60, Minimum = 0, Maximum = 180, Value = 0 };
             _syncLimitBox.ValueChanged += (s, e) => DriverSettings.SyncLimitDeg = (int)_syncLimitBox.Value;
             _limitsWriteBtn = new FlatButton { Text = "Upload", Left = 230, Top = 116, Width = 100 };
@@ -834,12 +840,9 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        // Collapsed-by-default catch-all for power-user toggles. Notifications
-        // master switch lives here alongside the persistent-log diagnostics
-        // controls, plus a one-click Open Log Folder for support hand-off.
         private SectionPanel BuildAdvancedGroup()
         {
-            var g = NewGroup("Advanced Settings", 440, 170);
+            var g = NewGroup("Advanced Settings", 440, 140);
             g.Collapsed = true;
 
             _notificationsEnabledCheck = new ThemedCheckBox
@@ -851,27 +854,18 @@ namespace ASCOM.OnStepX.Ui
                 DriverSettings.NotificationsEnabled = _notificationsEnabledCheck.Checked;
             g.Controls.Add(_notificationsEnabledCheck);
 
-            _debugLogEnabledCheck = new ThemedCheckBox
+            _verboseLogCheck = new ThemedCheckBox
             {
-                Text = "Enable debug log",
-                Left = 10, Top = 40, Width = 240,
+                Text = "Enable Verbose log file",
+                Left = 10, Top = 40, Width = 320,
             };
-            _debugLogEnabledCheck.CheckedChanged += (s, e) =>
-                DriverSettings.DebugLogEnabled = _debugLogEnabledCheck.Checked;
-            g.Controls.Add(_debugLogEnabledCheck);
-
-            _debugLogVerboseCheck = new ThemedCheckBox
-            {
-                Text = "Verbose I/O (log poll commands)",
-                Left = 10, Top = 66, Width = 320,
-            };
-            _debugLogVerboseCheck.CheckedChanged += (s, e) =>
-                DriverSettings.DebugLogVerbosePolls = _debugLogVerboseCheck.Checked;
-            g.Controls.Add(_debugLogVerboseCheck);
+            _verboseLogCheck.CheckedChanged += (s, e) =>
+                DriverSettings.VerboseFileLog = _verboseLogCheck.Checked;
+            g.Controls.Add(_verboseLogCheck);
 
             _logPathLabel = new Label
             {
-                Left = 10, Top = 92, Width = 420, Height = 18,
+                Left = 10, Top = 66, Width = 420, Height = 18,
                 Text = DebugLogger.LogDirectory,
                 ForeColor = Theme.P.TextFaint,
                 BackColor = Color.Transparent,
@@ -879,7 +873,7 @@ namespace ASCOM.OnStepX.Ui
             };
             g.Controls.Add(_logPathLabel);
 
-            _openLogFolderBtn = new FlatButton { Text = "Open Log Folder", Left = 10, Top = 116, Width = 140 };
+            _openLogFolderBtn = new FlatButton { Text = "Open Log Folder", Left = 10, Top = 90, Width = 140 };
             _openLogFolderBtn.Click += (s, e) => OpenLogFolder();
             g.Controls.Add(_openLogFolderBtn);
 
@@ -912,11 +906,8 @@ namespace ASCOM.OnStepX.Ui
             _altLabel = new Label { Left = 110, Top = 80, Width = 230, Text = "—" };
             _azLabel = new Label { Left = 110, Top = 106, Width = 230, Text = "—" };
             _pierLabel = new Label { Left = 110, Top = 132, Width = 230, Text = "—" };
-            // Diagnostic: mount-reported LST alongside computed sky LST for the
-            // stored site longitude. A large Δ (> a few seconds) points at a
-            // longitude-sign or UTC-offset convention mismatch — which directly
-            // corrupts pier-side selection on slews (pier choice uses sign of
-            // HA = LST − RA).
+            // Mount-reported LST vs computed sky LST. Large Δ flags a
+            // longitude-sign or UTC-offset mismatch.
             _lstLabel = new Label { Left = 110, Top = 160, Width = 230, Text = "—" };
             g.Controls.Add(new Label { Text = "RA:", Left = 10, Top = 28, Width = 100 });
             g.Controls.Add(new Label { Text = "Dec:", Left = 10, Top = 54, Width = 100 });
@@ -933,9 +924,7 @@ namespace ASCOM.OnStepX.Ui
             return g;
         }
 
-        // Compute apparent sidereal time (hours, 0..24) for the given east-positive
-        // longitude at the current UTC. Mean GMST formula (Meeus, ch. 12) — accurate
-        // to a few tenths of a second, plenty for diagnosing a sign-convention bug.
+        // Mean GMST formula (Meeus, ch. 12). Accurate to a few tenths of a sec.
         private static double ComputeSkyLstHours(double eastLonDeg)
         {
             var utc = DateTime.UtcNow;
@@ -960,20 +949,20 @@ namespace ASCOM.OnStepX.Ui
 
         private SectionPanel BuildParkHomeGroup()
         {
-            var g = NewGroup("Park / Home / Go To", 360, 180);
+            var g = NewGroup("Park / Home / Go To", 360, 215);
             _parkBtn = new FlatButton { Text = "Park", Left = 10, Top = 26, Width = 80 };
             _unparkBtn = new FlatButton { Text = "Unpark", Left = 100, Top = 26, Width = 80 };
-            // :hF# per OnStep command reference resets the telescope's home
-            // reference to the current axes (mount must be physically at home).
-            // Mirrors the "Set Home" action in the OnStepX web UI.
+            // :hF# resets the home reference to current axes — mount must be
+            // physically at home for this to be correct.
             _findHomeBtn = new FlatButton { Text = "Set Home", Left = 190, Top = 26, Width = 100 };
-            _goHomeBtn = new FlatButton { Text = "Go Home", Left = 10, Top = 60, Width = 110 };
-            // NOTE: this button sends :hQ# which sets the PARK position at the
-            // current axes. It does NOT redefine the mount's home reference —
-            // LX200 has no standard "set current as home" command; that calibration
-            // is done via the OnStepX web UI / SHC. Previously mislabeled
-            // "Reset Home (here)", which caused users to think GoHome would return
-            // to this position (it does not, which surfaced as a park-vs-home offset).
+            // :hC# moves the mount to its home position. With HOME_SENSE
+            // configured in firmware it uses the limit sensors to find true
+            // mechanical home; without sensors it slews to the stored home
+            // coordinates. Same command, behavior depends on firmware build.
+            _searchHomeBtn = new FlatButton { Text = "Search Home", Left = 10, Top = 60, Width = 110 };
+            // :hQ# sets the park position to current axes. Distinct from
+            // home — LX200 has no standard "set current as home"; that
+            // calibration goes via SHC / OnStepX web UI.
             _resetHomeBtn = new FlatButton { Text = "Set Park Here", Left = 130, Top = 60, Width = 160 };
             _slewTargetBtn = new FlatButton { Text = "Slew to Target...", Left = 10, Top = 94, Width = 200 };
             ((FlatButton)_slewTargetBtn).Kind = FlatButton.Variant.Primary;
@@ -982,17 +971,17 @@ namespace ASCOM.OnStepX.Ui
             _parkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Park", _mount.Protocol.Park()));
             _unparkBtn.Click += (s, e) => Guard(() => ReportIfRejected("Unpark", _mount.Protocol.Unpark()));
             _findHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.FindHome());
-            _goHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.GoHome());
+            _searchHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.GoHome());
             _resetHomeBtn.Click += (s, e) => Guard(() => _mount.Protocol.SetParkHere());
             _slewTargetBtn.Click += (s, e) => OpenSlewTarget();
             _nvResetBtn.Click += (s, e) => DoNvReset();
-            g.Controls.Add(_parkBtn); g.Controls.Add(_unparkBtn); g.Controls.Add(_findHomeBtn); g.Controls.Add(_goHomeBtn); g.Controls.Add(_resetHomeBtn);
+            g.Controls.Add(_parkBtn); g.Controls.Add(_unparkBtn); g.Controls.Add(_findHomeBtn); g.Controls.Add(_searchHomeBtn); g.Controls.Add(_resetHomeBtn);
             g.Controls.Add(_slewTargetBtn);
             g.Controls.Add(_nvResetBtn);
             _mountActionControls.Add(_parkBtn);
             _mountActionControls.Add(_unparkBtn);
             _mountActionControls.Add(_findHomeBtn);
-            _mountActionControls.Add(_goHomeBtn);
+            _mountActionControls.Add(_searchHomeBtn);
             _mountActionControls.Add(_resetHomeBtn);
             _mountActionControls.Add(_slewTargetBtn);
             _mountActionControls.Add(_nvResetBtn);
@@ -2125,26 +2114,19 @@ namespace ASCOM.OnStepX.Ui
             RefreshLimitsStatus(st);
         }
 
-        // Drives the Limits-section header status indicator. Sticky slew-rejection
-        // warning takes priority over live drift checks — a rejected goto is the
-        // most actionable thing to surface, and live Alt may have already been
-        // back inside the limit by the next poll cycle.
+        // Limits-section header status. Sticky slew-rejection wins over live
+        // drift checks.
         private void RefreshLimitsStatus(MountStateCache st)
         {
             if (_limitsStatusLed == null) return;
 
             string reason = null;
 
-            // Sticky slew-rejection wins regardless of park state — user-issued
-            // rejections are about a command they just made, surface them even if
-            // the mount happens to be at park afterward.
             bool sticky = DateTime.UtcNow < _limitRejectionUntilUtc && !string.IsNullOrEmpty(_limitRejectionMsg);
             if (sticky)
                 reason = "Rejected: " + _limitRejectionMsg;
 
-            // Live alt/HA checks are meaningless while parked — mount sits at the
-            // configured park position which can legitimately be below the horizon
-            // limit / past the meridian limit. Skip them in that case.
+            // Park position can legitimately be outside live limits.
             if (reason == null && !st.AtPark)
             {
                 int horizon = (int)_horizonLimitBox.Value;
@@ -2154,15 +2136,18 @@ namespace ASCOM.OnStepX.Ui
                 if (reason == null && !string.IsNullOrEmpty(st.SideOfPier))
                 {
                     // HA in minutes of RA, signed: positive = west of meridian.
-                    // 1 min RA = 0.25°. OnStep's per-pier meridian limit caps how
-                    // far past the meridian (positive HA) the mount may continue
-                    // tracking before refusing further motion / requesting a flip.
+                    // 1 min RA = 0.25°. Past-meridian convention is symmetric
+                    // by pier:
+                    //   W pier covers eastern sky (HA<0); past meridian = HA>0.
+                    //     Limit reached when haMin >  +westLimit.
+                    //   E pier covers western sky (HA>0); past meridian = HA<0.
+                    //     Limit reached when haMin <  -eastLimit.
                     double haHours = st.SiderealTime - st.RightAscension;
                     while (haHours > 12) haHours -= 24;
                     while (haHours < -12) haHours += 24;
                     double haMin = haHours * 60.0;
-                    if (st.SideOfPier == "E" && haMin > (int)_meridianEastBox.Value)
-                        reason = "Past E meridian " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
+                    if (st.SideOfPier == "E" && haMin < -(int)_meridianEastBox.Value)
+                        reason = "Past E meridian " + (-haMin).ToString("F0", CultureInfo.InvariantCulture) + "m";
                     else if (st.SideOfPier == "W" && haMin > (int)_meridianWestBox.Value)
                         reason = "Past W meridian " + haMin.ToString("F0", CultureInfo.InvariantCulture) + "m";
                 }
@@ -2211,8 +2196,7 @@ namespace ASCOM.OnStepX.Ui
             _slewSpeedBox.Value = Math.Max(_slewSpeedBox.Minimum, Math.Min(_slewSpeedBox.Maximum, (decimal)DriverSettings.SlewRateDegPerSec));
             _meridianActionBox.SelectedIndex = DriverSettings.MeridianAutoFlip ? 0 : 1;
             if (_notificationsEnabledCheck != null) _notificationsEnabledCheck.Checked = DriverSettings.NotificationsEnabled;
-            if (_debugLogEnabledCheck != null)      _debugLogEnabledCheck.Checked      = DriverSettings.DebugLogEnabled;
-            if (_debugLogVerboseCheck != null)      _debugLogVerboseCheck.Checked      = DriverSettings.DebugLogVerbosePolls;
+            if (_verboseLogCheck != null)           _verboseLogCheck.Checked           = DriverSettings.VerboseFileLog;
         }
         private void SaveSettings()
         {
@@ -2246,29 +2230,20 @@ namespace ASCOM.OnStepX.Ui
         {
             base.OnFormClosed(e);
             try { _uiTimer.Stop(); } catch { }
-            // Always tear down on close — previously this was gated on "no clients",
-            // which stranded the process (tray icon present, main window gone, pipe
-            // server still serving) when the user chose to close with clients active.
             try { _mount.ForceCloseAll(); } catch { }
             Application.ExitThread();
         }
     }
 
-    // FlowLayoutPanel subclass with auto-scroll-on-focus disabled. The base
-    // control calls ScrollControlIntoView whenever a child gains focus (e.g.
-    // clicking a button inside a scrolled group), which yanks the visible
-    // window away from where the user clicked. Overriding to a no-op keeps
-    // manual scroll (wheel, scrollbar) working while preventing the jump.
+    // FlowLayoutPanel with ScrollControlIntoView disabled so child focus
+    // doesn't yank the scroll position.
     internal sealed class NoAutoScrollFlowPanel : FlowLayoutPanel
     {
         protected override System.Drawing.Point ScrollToControl(Control activeControl) => DisplayRectangle.Location;
     }
 
-    // GroupBox with a top-right toggle button that collapses the box to a
-    // header-only strip so the user can hide sections they don't care about.
-    // Children aren't removed, just hidden by clipping to the reduced Height —
-    // re-expand restores exactly what was there, no rebuild. Parent is a
-    // FlowLayoutPanel which reflows automatically on SizeChanged.
+    // GroupBox with a top-right toggle that collapses to a header-only strip.
+    // Children stay; box height shrinks. Parent FlowLayoutPanel reflows.
     internal sealed class CollapsibleGroupBox : GroupBox
     {
         private readonly Button _toggle;
