@@ -1,6 +1,8 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using ASCOM.OnStepX.Diagnostics;
 
 namespace ASCOM.OnStepX.Hardware.State
 {
@@ -79,23 +81,28 @@ namespace ASCOM.OnStepX.Hardware.State
                     if (CoordFormat.TryParseDegrees(altS, out var aVal)) Altitude    = aVal;
                     if (CoordFormat.TryParseDegrees(azS,  out var zVal)) Azimuth     = zVal;
                     SiderealTime   = CoordFormat.ParseHours(stS);
+                    string priorPier = SideOfPier;
                     SideOfPier     = ExtractPierSide(psS);
+                    if (!string.Equals(priorPier ?? "", SideOfPier ?? "", StringComparison.Ordinal))
+                    {
+                        DebugLogger.Log("PIER",
+                            (string.IsNullOrEmpty(priorPier) ? "?" : priorPier) + " -> " +
+                            (string.IsNullOrEmpty(SideOfPier) ? "?" : SideOfPier) +
+                            " ra=" + RightAscension.ToString("F4", CultureInfo.InvariantCulture) +
+                            "h dec=" + Declination.ToString("F3", CultureInfo.InvariantCulture) +
+                            "° lst=" + SiderealTime.ToString("F4", CultureInfo.InvariantCulture) +
+                            "h gu='" + (gus ?? "").TrimEnd('#') + "'");
+                    }
                     LastStatusString = gus ?? "";
 
-                    // :GU# status byte conventions (OnStepX, verified against firmware output):
-                    //   'n' = not tracking        (absent => tracking)
-                    //   'N' = not slewing         (absent => slewing, includes goto/home/park motion)
-                    //   'P' = parked              'p' = not parked
-                    //   'I' = park in progress    'F' = park failed
-                    //   'H' = at home
-                    //   'a' = auto-meridian-flip enabled (only on equatorial mounts that support flips)
+                    // :GU# bytes: 'n'=not tracking, 'N'=not slewing, 'P'=parked,
+                    // 'p'=not parked, 'I'=park in progress, 'F'=park failed,
+                    // 'H'=at home, 'a'=auto meridian flip enabled.
                     var raw = LastStatusString.TrimEnd('#');
                     Tracking = raw.IndexOf('n') < 0;
                     Slewing  = raw.IndexOf('N') < 0 || raw.IndexOf('I') >= 0;
                     AtPark   = raw.IndexOf('P') >= 0;
                     AtHome   = raw.IndexOf('H') >= 0;
-                    // 'a' is unique in :GU# (no other field uses lowercase 'a'); same source
-                    // OnStep's web view reads, and matches firmware's isAutoFlipEnabled().
                     AutoMeridianFlip = raw.IndexOf('a') >= 0;
                     TrackingMode = ClassifyTrackingRate(rateHz);
 
@@ -111,17 +118,7 @@ namespace ASCOM.OnStepX.Hardware.State
             }
         }
 
-        // Classify tracking rate from :GT# Hz readback. Deterministic and collision-free,
-        // unlike scanning :GU# for marker chars (which false-positive on 'K' fork-mount
-        // type, '(' appearing in status fields, etc. — the prior impl always reverted to
-        // Sidereal because '(' was found in unrelated status bytes).
-        //
-        // OnStepX rates:
-        //   Lunar    57.902 Hz
-        //   Solar    60.000 Hz
-        //   King     60.136 Hz
-        //   Sidereal 60.164 Hz
-        // Midpoint thresholds separate the four bands.
+        // OnStepX rates: Lunar 57.902 Hz, Solar 60.000, King 60.136, Sidereal 60.164.
         private static string ClassifyTrackingRate(double hz)
         {
             if (hz <= 0.0) return "";

@@ -25,59 +25,55 @@ namespace ASCOM.OnStepX.Hardware
         public string GetLastError() => _transport.SendAndReceive(":GE#");
 
         // ---------- Site ----------
-        // Sign convention: west-positive end-to-end. OnStepX :Sg/:Gg uses Meade
-        // west-positive on the wire (east = negative); driver/hub/sites store
-        // the same. No sign flip at this layer — value passes through raw. ASCOM
-        // clients that expect east-positive see west-positive; that is accepted
-        // while we debug meridian/sync behavior and nail down the real bug.
-        // H suffix forces high-precision reply (±DD°MM'SS") regardless of mount's
-        // current precision mode — avoids losing the seconds component in low-prec.
+        // ASCOM/civil callers use east-positive; Meade :Sg/:Gg wire is west-
+        // positive. Negate at the wire. The H suffix forces high-precision
+        // reply regardless of the mount's current precision mode.
         public string GetLatitude()  => _transport.SendAndReceive(":GtH#");
         public string GetLongitudeRaw() => _transport.SendAndReceive(":GgH#");
         public double GetLongitude()
         {
             if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
-                return westPos;
+                return -westPos;
             throw new FormatException("Mount longitude reply could not be parsed");
         }
-        public bool TryGetLongitude(out double westPos)
+        public bool TryGetLongitude(out double eastPos)
         {
-            return CoordFormat.TryParseDegrees(GetLongitudeRaw(), out westPos);
+            if (CoordFormat.TryParseDegrees(GetLongitudeRaw(), out var westPos))
+            {
+                eastPos = -westPos;
+                return true;
+            }
+            eastPos = 0;
+            return false;
         }
         public string GetElevation() => _transport.SendAndReceive(":Gv#");
         public string GetUtcOffset() => _transport.SendAndReceive(":GG#");
         public string GetDate() => _transport.SendAndReceive(":GC#");
         public string GetLocalTime() => _transport.SendAndReceive(":GL#");
 
-        // Prefer signed-decimal (OnStepX-Extended): preserves full precision and avoids
-        // the integer-seconds rounding that produces "+53*07:00"-style truncation when
-        // a client (e.g. NINA) re-writes the mount's site from a stored double. Fall
-        // back to classic DMS if the firmware rejects the decimal form.
+        // Try OnStepX-Extended signed-decimal first (full precision); fall back
+        // to classic DMS if firmware rejects.
         public bool SetLatitude(double deg)
         {
             if (Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesDecimal(deg) + "#")))
                 return true;
             return Bool(_transport.SendAndReceive(":St" + CoordFormat.FormatDegreesMount(deg) + "#"));
         }
-        // West-positive passthrough (Meade :Sg convention on the wire). Caller
-        // supplies west-positive; no flip here.
-        public bool SetLongitude(double westPositiveDeg)
+        // Caller passes east-positive (civil/ASCOM); flip to west-positive for
+        // the Meade :Sg wire convention. Mirrors SetUtcOffset.
+        public bool SetLongitude(double eastPositiveDeg)
         {
-            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPositiveDeg) + "#")))
+            double westPos = -eastPositiveDeg;
+            if (Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeDecimal(westPos) + "#")))
                 return true;
-            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPositiveDeg) + "#"));
+            return Bool(_transport.SendAndReceive(":Sg" + CoordFormat.FormatLongitudeHighPrec(westPos) + "#"));
         }
         public bool SetElevation(double m)
         {
             string v = (m >= 0 ? "+" : "") + m.ToString("0.0", CultureInfo.InvariantCulture);
             return Bool(_transport.SendAndReceive(":Sv" + v + "#"));
         }
-        // :SG uses the Meade LX200 convention — positive value = hours WEST of
-        // Greenwich (i.e. the negative of the civil timezone). Driver callers pass
-        // east-positive timezone offsets (e.g. Israel = +3), so flip the sign here
-        // at the wire. Without this flip OnStepX applies UTC offset twice in the
-        // wrong direction, producing a local-vs-UTC gap of 2·tz hours and a
-        // corresponding LST error that corrupts pier-side selection on slews.
+        // :SG is west-positive on the wire. Caller passes east-positive; flip.
         public bool SetUtcOffset(double tzHoursEastPositive)
         {
             double westPos = -tzHoursEastPositive;
@@ -110,15 +106,42 @@ namespace ASCOM.OnStepX.Hardware
         // Returns 0 on success, otherwise a Meade-style error code.
         public int SlewToTarget()   => NumericSlew(_transport.SendAndReceive(":MS#"));
         public int SlewToTargetAltAz() => NumericSlew(_transport.SendAndReceive(":MA#"));
-        // OnStepX: :CS# is blind (no reply) — SendAndReceive would time out and be
-        // misread as failure. :CM# replies "N/A#" on accept; treat any non-empty
-        // reply as success. Real sync errors surface via :GE# (GetLastError).
+        // :CS# (Calibrate Sync) — runtime sync. Blind in OnStepX firmware
+        // (no reply); errors surface via :GE#. Firmware re-derives the pier
+        // flag from the synced HA when PIER_SIDE_SYNC_CHANGE_SIDES is ON in
+        // its build, which can flip :Gm# without physical motion.
         public bool Sync()
         {
-            var reply = Strip(_transport.SendAndReceive(":CM#"));
-            return !string.IsNullOrEmpty(reply);
+            _transport.SendBlind(":CS#");
+            return true;
         }
         public void AbortSlew()     => _transport.SendBlind(":Q#");
+
+        // :Q# is blind. Poll :GU# for 'N' (not slewing); resend and poll
+        // again on first miss. Throws on persistent failure.
+        public void AbortSlewVerified(int totalTimeoutMs = 3000, int pollMs = 150)
+        {
+            int half = Math.Max(500, totalTimeoutMs / 2);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                _transport.SendBlind(":Q#");
+                int waited = 0;
+                while (waited < half)
+                {
+                    System.Threading.Thread.Sleep(pollMs);
+                    waited += pollMs;
+                    string raw;
+                    try { raw = _transport.SendAndReceive(":GU#"); }
+                    catch { continue; } // Transient wire glitch — keep polling.
+                    raw = (raw ?? "").TrimEnd('#');
+                    // 'N' = not slewing; 'I' = park-in-progress (still moving).
+                    if (raw.IndexOf('N') >= 0 && raw.IndexOf('I') < 0) return;
+                }
+            }
+            throw new System.IO.IOException(
+                "AbortSlew: mount still slewing after " + totalTimeoutMs + "ms — " +
+                ":Q# may not have reached the firmware. Power-cycle if motion continues.");
+        }
 
         public void MoveNorth() => _transport.SendBlind(":Mn#");
         public void MoveSouth() => _transport.SendBlind(":Ms#");
@@ -223,25 +246,16 @@ namespace ASCOM.OnStepX.Hardware
             return CharToPreferredPier(char.ToUpperInvariant(s[0]));
         }
 
-        // Pause at home on meridian flip. :SX98,0|1# write-only in firmware —
-        // no matching :GX98 get in stock OnStepX, so state lives in driver
-        // settings and is re-applied on connect.
+        // :SX98 is write-only; state mirrored in driver settings.
         public bool SetPauseAtHomeOnFlip(bool on) =>
             Bool(_transport.SendAndReceive(":SX98," + (on ? "1" : "0") + "#"));
 
         // ---------- Admin / NV ----------
-        // :ENVRESET#  Wipes mount non-volatile memory to factory defaults.
-        // :ERESET#    Triggers MCU reboot. Send after :ENVRESET# so reset takes
-        //             effect cleanly; transport will drop on the firmware's reboot.
-        // Both blind — firmware does not return a reply (mount is busy resetting).
         public void ResetNvMemory() => _transport.SendBlind(":ENVRESET#");
         public void RebootMount()   => _transport.SendBlind(":ERESET#");
 
         // ---------- Meridian limits (minutes of RA past meridian) ----------
-        // OnStepX stores the "continue tracking past meridian" window on each side
-        // of the pier as minutes of RA (1 min RA = 0.25°). :GXE9# = East, :GXEA# =
-        // West. Set via :SXE9,n# / :SXEA,n#. Values are integer minutes and may be
-        // negative (stop tracking before the meridian).
+        // 1 min RA = 0.25°. Negative = stop tracking before meridian.
         public int GetMeridianLimitEastMinutes()
         {
             int.TryParse(Digits(_transport.SendAndReceive(":GXE9#")), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v);

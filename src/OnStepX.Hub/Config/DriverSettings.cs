@@ -23,43 +23,58 @@ namespace ASCOM.OnStepX.Config
         public static int    OverheadLimitDeg{ get => GetInt("OverheadLimitDeg", 85); set => SetInt("OverheadLimitDeg", value); }
         public static int    MeridianLimitEastMin { get => GetInt("MeridianLimitEastMin", 15); set => SetInt("MeridianLimitEastMin", value); }
         public static int    MeridianLimitWestMin { get => GetInt("MeridianLimitWestMin", 15); set => SetInt("MeridianLimitWestMin", value); }
-        // Sync distance guardrail (degrees). 0 disables the check; any positive
-        // value triggers a confirmation popup in the driver process when an
-        // ASCOM sync would move the mount's reported position by more than
-        // this angular distance — a large delta usually means the site or
-        // time is wrong rather than a legitimate plate-solve correction.
-        // Read by the driver directly from registry (same HKCU key) so the
-        // hub and driver processes share one source of truth.
+        // Driver-side sync distance guardrail (degrees). 0 disables.
         public static int    SyncLimitDeg { get => GetInt("SyncLimitDeg", 0); set => SetInt("SyncLimitDeg", value); }
 
         public static double SlewRateDegPerSec { get => GetDouble("SlewRateDegPerSec", 3.0); set => SetDouble("SlewRateDegPerSec", value); }
         public static double GuideRateMultiplier { get => GetDouble("GuideRateMultiplier", 0.5); set => SetDouble("GuideRateMultiplier", value); }
         public static bool   MeridianAutoFlip { get => GetBool("MeridianAutoFlip", true); set => SetBool("MeridianAutoFlip", value); }
 
-        // Advanced pier/flip policy. Values match OnStepX :SX96 chars: B/E/W/A.
-        // Default "B" (Best) stays on current side when possible — safe for
-        // plate-solve-near-meridian workflows. Pause-at-home on flip is
-        // write-only at firmware level (no :GX98), so driver settings are
-        // authoritative and re-applied on every connect.
+        // OnStepX :SX96 chars: B/E/W/A.
         public static string PreferredPierSide { get => Get("PreferredPierSide", "B"); set => Set("PreferredPierSide", value); }
         public static bool   PauseAtHomeOnFlip { get => GetBool("PauseAtHomeOnFlip", false); set => SetBool("PauseAtHomeOnFlip", value); }
 
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
-        // Master switch for Windows toast notifications emitted by the hub
-        // (limit reached, etc). Default ON; users who want a silent hub can flip
-        // this in the collapsed Notifications section.
+        // Hub toast notifications (limit reached, etc).
         public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
 
-        // When slewing to a Sun/Moon/planet from the Slew dialog, switch the
-        // mount tracking rate (:TS#/:TL#/:TQ#) to match. Without this the
-        // mount keeps sidereal and Moon/Sun visibly drift off frame within
-        // minutes. Default ON; off for users who manage tracking rate manually.
+        // Persistent log file under %APPDATA%\OnStepX\logs. ON = every line
+        // shown in the hub console is also written to disk.
+        public static bool   VerboseFileLog { get => GetBool("VerboseFileLog", false); set => SetBool("VerboseFileLog", value); }
+
+        // Auto-switch tracking rate to match Sun/Moon/planet target.
         public static bool   AutoSwitchPlanetTrackingRate { get => GetBool("AutoSwitchPlanetTrackingRate", true); set => SetBool("AutoSwitchPlanetTrackingRate", value); }
 
-        // "dark" or "light". Default dark per redesign.
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
+
+        // Longitude on-disk convention. Pre-1: west-positive (raw wire).
+        // >=1: east-positive (ASCOM/civil); migration flips once.
+        public static int LongitudeConventionVersion
+        {
+            get => GetInt("LongitudeConventionVersion", 0);
+            set => SetInt("LongitudeConventionVersion", value);
+        }
+
+        // Idempotent migration runner. Bump version before flipping values
+        // so partial failure doesn't double-apply.
+        public static void RunMigrations()
+        {
+            if (LongitudeConventionVersion < 1)
+            {
+                LongitudeConventionVersion = 1;
+                SiteLongitude = -SiteLongitude;
+
+                try
+                {
+                    var sites = SiteStore.Load();
+                    foreach (var s in sites) s.Longitude = -s.Longitude;
+                    SiteStore.Save(sites);
+                }
+                catch { /* sites file unreadable; registry already flipped */ }
+            }
+        }
 
         private static string Get(string name, string def)
         {

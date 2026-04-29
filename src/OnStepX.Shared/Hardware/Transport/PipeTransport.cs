@@ -137,6 +137,24 @@ namespace ASCOM.OnStepX.Hardware.Transport
             }
         }
 
+        // Out-of-band IPC: notify the hub that a NINA-issued slew was rejected
+        // by the firmware with a limit code. Hub raises its own LimitWarning
+        // event so the Limits-section LED flashes for the same 10 s window the
+        // hub-internal slew form already uses.
+        public void NotifyLimit(string reason)
+        {
+            lock (_lock)
+            {
+                if (!Connected) return;
+                try
+                {
+                    _writer.WriteLine("IPC:LIMIT\t" + (reason ?? "").Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '));
+                    _reader.ReadLine();
+                }
+                catch (IOException) { Cleanup(); }
+            }
+        }
+
         private static string ParseReply(string line)
         {
             if (line == null) throw new IOException("OnStepX hub closed pipe");
