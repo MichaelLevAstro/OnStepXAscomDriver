@@ -1,8 +1,8 @@
 # OnStepX ASCOM + Hub
 
-## Caution!
-This is still a work in progress and i'm still testing it.
-Use at your own risk!
+## Disclaimer
+I have tested this with my setup and it works well, but that doesn't mean it'll work well for you.
+If it doesn't, but you like the driver and would like it to, open up an issue stating the bug with as much context as possible, and i'll get on it!
 
 Windows ASCOM Telescope driver + mediator app for OnStepX mounts. The driver is an in-process ASCOM shim; the hub is a standalone WinForms app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
 
