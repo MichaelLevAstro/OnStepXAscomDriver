@@ -6,7 +6,10 @@ If it doesn't, but you like the driver and would like it to, open up an issue st
 
 Windows ASCOM Telescope driver + mediator app for OnStepX mounts. The driver is an in-process ASCOM shim; the hub is a standalone WinForms app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
 
-<img width="899" height="979" alt="image" src="https://github.com/user-attachments/assets/979d4dcc-ba43-46b2-bec5-30b30f0b42f2" />
+<img width="1226" height="1381" alt="image" src="https://github.com/user-attachments/assets/4226c6a1-b45b-4b3e-9d4e-f42e935a9360" />
+<img width="1225" height="1379" alt="image" src="https://github.com/user-attachments/assets/2b52c40b-ed8e-461e-a55c-26e7be4ff6a0" />
+<img width="965" height="745" alt="image" src="https://github.com/user-attachments/assets/bbfb1c6b-22d9-495d-9871-19682078094a" />
+<img width="967" height="642" alt="image" src="https://github.com/user-attachments/assets/87020df3-98e4-4f49-9eae-6512e3d65a4a" />
 
 # Features
 - Manual slewing
@@ -14,6 +17,7 @@ Windows ASCOM Telescope driver + mediator app for OnStepX mounts. The driver is 
 - Console
 - Sites: Save site locations in the app (not saved in mount due to 3 sites limitation)
 - GOTO: Common catalogs added (Planets, Messier, NGC etc...)
+- 3D Visualizer
 
 # Install
 Go to Install folder, and run installer, done :)
