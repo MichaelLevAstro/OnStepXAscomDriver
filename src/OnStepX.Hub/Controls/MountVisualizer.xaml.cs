@@ -18,44 +18,41 @@ namespace ASCOM.OnStepX.Controls
     public partial class MountVisualizer : UserControl
     {
         // --- Tunable scene dimensions (arbitrary units; HelixViewport ZoomExtents fits).
+        // Thickness/cross-section dimensions scaled 1.5× from the previous
+        // pass; lengths kept the same so the mount looks chunkier without
+        // changing its overall reach.
         private const double PierHeight        = 1.55;
-        private const double PierShaftRadius   = 0.13;
-        private const double PierBaseRadius    = 0.24;
-        private const double PierBaseHeight    = 0.06;
-        private const double PierTopRadius     = 0.20;
-        private const double PierTopHeight     = 0.05;
-        private const double PolarHousingSize  = 0.34;
+        private const double PierShaftRadius   = 0.195;
+        private const double PierBaseRadius    = 0.36;
+        private const double PierBaseHeight    = 0.09;
+        private const double PierTopRadius     = 0.30;
+        private const double PierTopHeight     = 0.075;
+        private const double PolarHousingSize  = 0.51;
 
         private const double RaShaftLength     = 1.05;
-        private const double RaShaftRadius     = 0.085;
-        private const double RaMotorRadius     = 0.135;
-        private const double RaMotorLength     = 0.16;
+        private const double RaShaftRadius     = 0.1275;
+        private const double RaMotorRadius     = 0.2025;
+        private const double RaMotorLength     = 0.24;
 
         private const double SaddleLength      = 0.55;
-        private const double SaddleRadius      = 0.085;
-        private const double DecMotorRadius    = 0.14;
-        private const double DecMotorLength    = 0.20;
-
-        private const double DovetailWidth     = 0.13;
-        private const double DovetailHeight    = 0.045;
-        private const double DovetailLength    = 0.60;
-
-        private const double CtwShaftLength    = 0.75;
-        private const double CtwShaftRadius    = 0.04;
-        private const double CtwDiscRadius     = 0.21;
-        private const double CtwDiscLength     = 0.16;
+        private const double SaddleRadius      = 0.1275;
+        private const double DecMotorRadius    = 0.21;
+        private const double DecMotorLength    = 0.30;
 
         private const double OtaLength         = 1.10;
-        private const double OtaRadius         = 0.135;
-
-        private const double FinderRadius      = 0.042;
-        private const double FinderLength      = 0.40;
-        private const double FocuserRadius     = 0.075;
-        private const double FocuserLength     = 0.18;
-        private const double FocuserKnobRadius = 0.03;
+        private const double OtaRadius         = 0.2025;
+        // Extra X-axis clearance between the saddle end and the OTA centerline
+        // so the (now thicker) tube doesn't clip into the saddle / DEC head.
+        private const double OtaSaddleOffset   = 0.30;
 
         private const double PointingLineLength = 8.0;
         private const double GroundRadius       = 1.7;
+
+        // Reference mount height for zoom clamps — pier + half the RA shaft
+        // covers everything that's normally on screen.
+        private const double MountRefHeight  = PierHeight + RaShaftLength * 0.5;
+        private const double MaxCamDistance  = MountRefHeight * 6.0;
+        private const double MinCamDistance  = MountRefHeight * 1.5;
 
         // --- Animation
         private static readonly Duration EaseDuration = new Duration(TimeSpan.FromMilliseconds(750));
@@ -74,6 +71,9 @@ namespace ASCOM.OnStepX.Controls
         private Vector3D _initialCameraLook;
         private Vector3D _initialCameraUp;
         private double   _initialCameraFov;
+
+        // --- Zoom clamp re-entry guard.
+        private bool _clampingCamera;
 
         // --- VM subscription
         private VisualizerViewModel _vm;
@@ -231,7 +231,6 @@ namespace ASCOM.OnStepX.Controls
             var otaColor     = ResolveColor("Brush.Accent",       Color.FromRgb(0xe5, 0x48, 0x2d));
             var frontColor   = ResolveColor("Brush.Info",         Color.FromRgb(0x5f, 0x9e, 0xd4));
             var lensColor    = ResolveColor("Brush.Ok",           Color.FromRgb(0x4a, 0xc2, 0x7a));
-            var ctwColor     = ResolveColor("Brush.BorderStrong", Color.FromRgb(0x3a, 0x42, 0x50));
             var groundColor  = ResolveColor("Brush.Panel",        Color.FromRgb(0x1b, 0x1f, 0x26));
             var gridColor    = ResolveColor("Brush.TextFaint",    Color.FromRgb(0x6b, 0x75, 0x82));
 
@@ -241,7 +240,6 @@ namespace ASCOM.OnStepX.Controls
             var otaMat     = MakeMaterial(otaColor,     softSpec: true);
             var frontMat   = MakeMaterial(frontColor,   softSpec: true);
             var lensMat    = MakeLensMaterial(lensColor);
-            var ctwMat     = MakeMaterial(ctwColor,     softSpec: true);
             var groundMat  = MakeMaterial(groundColor,  softSpec: false);
 
             // ── Ground: solid disc at y=0 plus a square wireframe grid on top.
@@ -304,11 +302,13 @@ namespace ASCOM.OnStepX.Controls
             raRotated.Children.Add(MakeVisual(raShaftMb, housingMat));
 
             // ── Saddle / DEC head assembly (in raRotated, lies along X at +Y end).
-            // Saddle bar.
+            // Saddle bar — extends past +X end of nominal saddle so it reaches
+            // the (offset) OTA centerline. -X end stays where the DEC motor
+            // attaches.
             var saddleMb = new MeshBuilder();
             saddleMb.AddCylinder(
-                new Point3D(-SaddleLength / 2.0, RaShaftLength * 0.5, 0),
-                new Point3D( SaddleLength / 2.0, RaShaftLength * 0.5, 0),
+                new Point3D(-SaddleLength / 2.0,                       RaShaftLength * 0.5, 0),
+                new Point3D( SaddleLength / 2.0 + OtaSaddleOffset,     RaShaftLength * 0.5, 0),
                 SaddleRadius, 28);
             raRotated.Children.Add(MakeVisual(saddleMb, metalMat));
 
@@ -322,22 +322,7 @@ namespace ASCOM.OnStepX.Controls
                 DecMotorRadius, 32);
             raRotated.Children.Add(MakeVisual(decMotorMb, housingMat));
 
-            // ── Counterweight: thin shaft + flat disc weight (replaces the
-            //    earlier sphere "bob"). Disc radius >> length, perpendicular
-            //    to the shaft axis.
-            var ctwMb = new MeshBuilder();
-            ctwMb.AddCylinder(
-                new Point3D(0, -RaShaftLength * 0.5,                  0),
-                new Point3D(0, -RaShaftLength * 0.5 - RaMotorLength - CtwShaftLength, 0),
-                CtwShaftRadius, 18);
-            double discCenterY = -RaShaftLength * 0.5 - RaMotorLength - CtwShaftLength * 0.85;
-            ctwMb.AddCylinder(
-                new Point3D(0, discCenterY + CtwDiscLength * 0.5, 0),
-                new Point3D(0, discCenterY - CtwDiscLength * 0.5, 0),
-                CtwDiscRadius, 36);
-            raRotated.Children.Add(MakeVisual(ctwMb, ctwMat));
-
-            // ── DEC-rotated subtree: dovetail + OTA + finder + focuser.
+            // ── DEC-rotated subtree: holds the OTA.
             _decAxisRotation = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(1, 0, 0), 0.0));
             var decFrame = new ModelVisual3D
             {
@@ -346,20 +331,14 @@ namespace ASCOM.OnStepX.Controls
                     Children =
                     {
                         _decAxisRotation,
-                        // OTA mount sits at +X end of the saddle — offset out
-                        // far enough that the tube doesn't intersect the shaft.
-                        new TranslateTransform3D(SaddleLength / 2.0, RaShaftLength * 0.5, 0)
+                        // OTA mount sits past the +X end of the saddle —
+                        // offset out far enough that the tube doesn't clip
+                        // into the saddle / DEC head after thickening.
+                        new TranslateTransform3D(SaddleLength / 2.0 + OtaSaddleOffset, RaShaftLength * 0.5, 0)
                     }
                 }
             };
             raRotated.Children.Add(decFrame);
-
-            // Dovetail saddle plate — thin box on top of the DEC head, parallel
-            // to the OTA. Connects the saddle to the OTA tube.
-            const double dovetailY = OtaRadius + DovetailHeight * 0.5 + 0.005;
-            var dovetailMb = new MeshBuilder();
-            dovetailMb.AddBox(new Point3D(0, -dovetailY, 0), DovetailWidth, DovetailHeight, DovetailLength);
-            decFrame.Children.Add(MakeVisual(dovetailMb, metalMat));
 
             // OTA — split into three colored sections so "front" is unambiguous:
             //   rear 70% = accent (orange),
@@ -387,43 +366,6 @@ namespace ASCOM.OnStepX.Controls
                 new Point3D(0, 0, otaFrontEndZ - 0.025),
                 OtaRadius * 1.10, 32);
             decFrame.Children.Add(MakeVisual(lensMb, lensMat));
-
-            // Focuser — drawtube + side knob, at the rear face of the OTA.
-            var focuserMb = new MeshBuilder();
-            focuserMb.AddCylinder(
-                new Point3D(0, 0, otaRearZ),
-                new Point3D(0, 0, otaRearZ + FocuserLength),
-                FocuserRadius, 28);
-            focuserMb.AddCylinder(
-                new Point3D(FocuserRadius + 0.005, 0, otaRearZ + FocuserLength * 0.55),
-                new Point3D(FocuserRadius + FocuserKnobRadius * 1.6, 0, otaRearZ + FocuserLength * 0.55),
-                FocuserKnobRadius, 18);
-            decFrame.Children.Add(MakeVisual(focuserMb, metalMat));
-
-            // Finder scope — small parallel tube riding on top of the OTA,
-            // mid-tube. Built in DEC frame's +Y so it follows OTA rotation.
-            const double finderOffsetY = OtaRadius + FinderRadius + 0.025 + DovetailHeight;
-            const double finderCenterZ = otaSplitZ - 0.05;
-            var finderMb = new MeshBuilder();
-            finderMb.AddCylinder(
-                new Point3D(0, finderOffsetY, finderCenterZ + FinderLength * 0.5),
-                new Point3D(0, finderOffsetY, finderCenterZ - FinderLength * 0.5),
-                FinderRadius, 24);
-            // Finder objective ring (slightly larger) at front end.
-            finderMb.AddCylinder(
-                new Point3D(0, finderOffsetY, finderCenterZ - FinderLength * 0.5 + 0.005),
-                new Point3D(0, finderOffsetY, finderCenterZ - FinderLength * 0.5 - 0.02),
-                FinderRadius * 1.18, 24);
-            // Finder mounting brackets (two short stubs).
-            finderMb.AddCylinder(
-                new Point3D(0, finderOffsetY - 0.03, finderCenterZ - FinderLength * 0.30),
-                new Point3D(0, OtaRadius + 0.005,    finderCenterZ - FinderLength * 0.30),
-                0.012, 12);
-            finderMb.AddCylinder(
-                new Point3D(0, finderOffsetY - 0.03, finderCenterZ + FinderLength * 0.30),
-                new Point3D(0, OtaRadius + 0.005,    finderCenterZ + FinderLength * 0.30),
-                0.012, 12);
-            decFrame.Children.Add(MakeVisual(finderMb, housingMat));
 
             // Pointing line — long thin line extending from the front of the
             // objective straight along the OTA's optical axis, into "the sky."
@@ -453,6 +395,31 @@ namespace ASCOM.OnStepX.Controls
             _initialCameraLook = camera.LookDirection;
             _initialCameraUp   = camera.UpDirection;
             _initialCameraFov  = camera.FieldOfView;
+
+            // Zoom clamp: react to any camera Position change (mouse wheel,
+            // pan, double-click reset, etc.) and snap distance from world
+            // origin back into [MinCamDistance, MaxCamDistance].
+            System.ComponentModel.DependencyPropertyDescriptor
+                .FromProperty(PerspectiveCamera.PositionProperty, typeof(PerspectiveCamera))
+                .AddValueChanged(camera, OnCameraPositionChanged);
+        }
+
+        private void OnCameraPositionChanged(object sender, EventArgs e)
+        {
+            if (_clampingCamera) return;
+            if (!(Viewport.Camera is PerspectiveCamera cam)) return;
+            var p = cam.Position;
+            double dist = Math.Sqrt(p.X * p.X + p.Y * p.Y + p.Z * p.Z);
+            if (dist <= 0) return;
+            double clamped = Math.Max(MinCamDistance, Math.Min(MaxCamDistance, dist));
+            if (Math.Abs(clamped - dist) < 1e-6) return;
+            _clampingCamera = true;
+            try
+            {
+                double s = clamped / dist;
+                cam.Position = new Point3D(p.X * s, p.Y * s, p.Z * s);
+            }
+            finally { _clampingCamera = false; }
         }
 
         private static ModelVisual3D MakeVisual(MeshBuilder mb, Material mat)

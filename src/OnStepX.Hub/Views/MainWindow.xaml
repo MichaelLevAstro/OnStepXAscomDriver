@@ -336,7 +336,10 @@
               <!-- ───── 3D Visualizer ───── -->
               <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}">
                 <c:Section.Body>
-                  <c:MountVisualizer DataContext="{Binding Visualizer}" Height="280"/>
+                  <!-- Height binds to own ActualWidth so the viewport stays
+                       square regardless of pane width. -->
+                  <c:MountVisualizer DataContext="{Binding Visualizer}"
+                                     Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}"/>
                 </c:Section.Body>
               </c:Section>
 
