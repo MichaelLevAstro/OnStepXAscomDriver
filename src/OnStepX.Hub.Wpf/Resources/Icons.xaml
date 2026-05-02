@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Section icons. Path data ports verbatim from onstepx-app.jsx:80-91 (IC.*).
+       All glyphs are 24x24 viewBox with stroke-based rendering at 1.8 width. -->
+
+  <Geometry x:Key="Geo.Telescope">M3 14L11 11L14 19L6 22Z M11 11L19 8 M15 3L18 11 M9 20L11 19 M13 22L15 18</Geometry>
+  <Geometry x:Key="Geo.Connection">M5 12 A7 7 0 0 1 19 12 M8.5 12 A3.5 3.5 0 0 1 15.5 12 M12 13 V19</Geometry>
+  <Geometry x:Key="Geo.Site">M12 21 A9 9 0 1 1 12 3 A9 9 0 1 1 12 21 Z M3 12 H21 M12 3 A14 14 0 0 1 12 21 M12 3 A14 14 0 0 0 12 21</Geometry>
+  <Geometry x:Key="Geo.Clock">M12 21 A9 9 0 1 1 12 3 A9 9 0 1 1 12 21 Z M12 7 V12 L15 14</Geometry>
+  <Geometry x:Key="Geo.Tracking">M12 21 A9 9 0 1 1 12 3 A9 9 0 1 1 12 21 Z M12 16 A4 4 0 1 1 12 8 A4 4 0 1 1 12 16 Z M12 3 V6 M12 18 V21 M3 12 H6 M18 12 H21</Geometry>
+  <Geometry x:Key="Geo.Limits">M3 19 H21 M6 19 V9 M12 19 V5 M18 19 V12</Geometry>
+  <Geometry x:Key="Geo.Position">M12 21 A9 9 0 1 1 12 3 A9 9 0 1 1 12 21 Z M12 3 V21 M3 12 H21</Geometry>
+  <Geometry x:Key="Geo.Park">M3 10 L12 4 L21 10 M5 10 V20 H19 V10 M10 20 V14 H14 V20</Geometry>
+  <Geometry x:Key="Geo.Slew">M12 3 V21 M3 12 H21 M12 3 L9 6 M12 3 L15 6 M12 21 L9 18 M12 21 L15 18 M3 12 L6 9 M3 12 L6 15 M21 12 L18 9 M21 12 L18 15</Geometry>
+  <Geometry x:Key="Geo.Console">M4 6 L8 10 L4 14 M12 16 H20</Geometry>
+  <Geometry x:Key="Geo.Pin">M12 22 S5 15.5 5 10 A7 7 0 0 1 19 10 C19 15.5 12 22 12 22 Z M14.4 10 A2.4 2.4 0 1 1 9.6 10 A2.4 2.4 0 1 1 14.4 10 Z</Geometry>
+
+  <!-- Window chrome glyphs -->
+  <Geometry x:Key="Geo.WinMin">M1 5 H9</Geometry>
+  <Geometry x:Key="Geo.WinMax">M1.5 1.5 H8.5 V8.5 H1.5 Z</Geometry>
+  <Geometry x:Key="Geo.WinClose">M1 1 L9 9 M9 1 L1 9</Geometry>
+  <Geometry x:Key="Geo.Sun">M12 8 A4 4 0 1 1 12 16 A4 4 0 1 1 12 8 Z M12 2 V4 M12 20 V22 M4.9 4.9 L6.3 6.3 M17.7 17.7 L19.1 19.1 M2 12 H4 M20 12 H22 M4.9 19.1 L6.3 17.7 M17.7 6.3 L19.1 4.9</Geometry>
+  <Geometry x:Key="Geo.Moon">M21 12.8 A9 9 0 1 1 11.2 3 A7 7 0 0 0 21 12.8 Z</Geometry>
+  <Geometry x:Key="Geo.Chevron">M2 4 L6 8 L10 4</Geometry>
+  <Geometry x:Key="Geo.Target">M12 21 A9 9 0 1 1 12 3 A9 9 0 1 1 12 21 Z M12 15 A3 3 0 1 1 12 9 A3 3 0 1 1 12 15 Z M12 3 V6 M12 18 V21 M3 12 H6 M18 12 H21</Geometry>
+
+</ResourceDictionary>

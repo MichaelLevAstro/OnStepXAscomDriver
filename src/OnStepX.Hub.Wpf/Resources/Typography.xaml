@@ -1,0 +1,64 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+  <!-- Inter and JetBrains Mono are embedded as resources under /Resources/Fonts.
+       Pack URI form: pack://application:,,,/<assembly>;component/Resources/Fonts/#FamilyName
+       — falls back to Segoe UI / Cascadia Mono if the .ttf file is missing,
+       so the app stays renderable while the font binaries are dropped in. -->
+
+  <FontFamily x:Key="Font.Sans">/OnStepX.Hub.Wpf;component/Resources/Fonts/#Inter, Segoe UI</FontFamily>
+  <FontFamily x:Key="Font.Mono">/OnStepX.Hub.Wpf;component/Resources/Fonts/#JetBrains Mono, Cascadia Mono, Consolas</FontFamily>
+
+  <sys:Double x:Key="Font.Size.Body">12</sys:Double>
+  <sys:Double x:Key="Font.Size.Label">11.5</sys:Double>
+  <sys:Double x:Key="Font.Size.Title">12.5</sys:Double>
+  <sys:Double x:Key="Font.Size.Section">12</sys:Double>
+  <sys:Double x:Key="Font.Size.Mono">12</sys:Double>
+  <sys:Double x:Key="Font.Size.Hint">11.5</sys:Double>
+
+  <Style x:Key="Text.Label" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Label}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style x:Key="Text.Body" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style x:Key="Text.Mono" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Mono}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style x:Key="Text.Hint" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Hint}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextFaint}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style x:Key="Text.SectionTitle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Section}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+  </Style>
+
+  <Style x:Key="Text.WindowTitle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Title}"/>
+    <Setter Property="FontWeight" Value="Medium"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+</ResourceDictionary>

@@ -299,6 +299,34 @@ namespace ASCOM.OnStepX.Hardware
         }
         public double GetUsPerStepLowerLimit() => ParseDouble(_transport.SendAndReceive(":GX99#"));
 
+        // ---------- Axis instrument coordinates (mechanical angle) ----------
+        // OnStepX :GX42# / :GX43# return raw axis instrument coordinates in
+        // degrees — axis 1 (RA) and axis 2 (Dec) directly off the encoders /
+        // step counters. Independent of LST and pier-side mapping, so they
+        // give an unambiguous mechanical position even when the mount is
+        // parked or has tracking off (the derived RA / Dec readings are
+        // computed live against LST and can confuse downstream limit checks).
+        //
+        // Axis 1 convention on a GEM with default OnStep config: 0° at the
+        // meridian (counterweight pointing down on the home side), positive
+        // values rotate west, negative rotate east. ±90° is the horizon.
+        // Returns NaN if firmware doesn't support the command (pre-X builds).
+        public double GetAxis1Degrees() => TryGetAxisDegrees(":GX42#");
+        public double GetAxis2Degrees() => TryGetAxisDegrees(":GX43#");
+
+        private double TryGetAxisDegrees(string cmd)
+        {
+            try
+            {
+                var s = Strip(_transport.SendAndReceive(cmd));
+                if (string.IsNullOrEmpty(s)) return double.NaN;
+                if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    return v;
+            }
+            catch { }
+            return double.NaN;
+        }
+
         // Base slew rate in deg/s, derived from the current-rate readback and the
         // us/step ratio. Any non-zero current rate works because rate ∝ 1/us_per_step.
         public double GetBaseSlewRateDegPerSec()

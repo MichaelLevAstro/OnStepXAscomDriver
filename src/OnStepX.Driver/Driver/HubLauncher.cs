@@ -23,6 +23,12 @@ namespace ASCOM.OnStepX.Driver
     {
         private const string REG_ROOT = @"SOFTWARE\OnStepX\Hub";
         private const string REG_VALUE = "InstallPath";
+        // Optional installer-written value pointing at the new WPF hub. When
+        // present the launcher prefers it; falls back to the legacy WinForms
+        // exe so a partial install (only legacy hub on disk) still works.
+        private const string REG_VALUE_WPF = "WpfInstallPath";
+        private const string EXE_WPF = "OnStepX.Hub.Wpf.exe";
+        private const string EXE_LEGACY = "OnStepX.Hub.exe";
 
         // Overall budget split into two phases:
         //   Phase A — pipe availability (hub process up + HubPipeServer listening).
@@ -43,7 +49,7 @@ namespace ASCOM.OnStepX.Driver
                 string hubPath = LocateHub();
                 if (hubPath == null)
                     throw new FileNotFoundException(
-                        "OnStepX.Hub.exe not found. Reinstall OnStepX or launch the hub manually before connecting.");
+                        EXE_WPF + " (or " + EXE_LEGACY + ") not found. Reinstall OnStepX or launch the hub manually before connecting.");
 
                 try
                 {
@@ -122,28 +128,41 @@ namespace ASCOM.OnStepX.Driver
 
         private static string LocateHub()
         {
+            // Lookup order at every step: prefer the WPF exe, fall back to the
+            // legacy exe. Both share the single-instance mutex, so whichever
+            // one is found is interchangeable from the driver's perspective.
+
+            // 1. HKLM registry — installer can write either the new WpfInstallPath
+            //    value or the original InstallPath.
             try
             {
                 using (var k = Registry.LocalMachine.OpenSubKey(REG_ROOT))
                 {
-                    if (k?.GetValue(REG_VALUE) is string s && File.Exists(s)) return s;
+                    if (k?.GetValue(REG_VALUE_WPF) is string sw && File.Exists(sw)) return sw;
+                    if (k?.GetValue(REG_VALUE) is string sl && File.Exists(sl)) return sl;
                 }
             }
             catch { }
 
+            // 2. %ProgramFiles%\OnStepX\
             try
             {
                 string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-                string candidate = Path.Combine(pf, "OnStepX", "OnStepX.Hub.exe");
-                if (File.Exists(candidate)) return candidate;
+                string wpf = Path.Combine(pf, "OnStepX", EXE_WPF);
+                if (File.Exists(wpf)) return wpf;
+                string legacy = Path.Combine(pf, "OnStepX", EXE_LEGACY);
+                if (File.Exists(legacy)) return legacy;
             }
             catch { }
 
+            // 3. Driver DLL directory (dev/standalone-deploy).
             try
             {
                 string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                string candidate = Path.Combine(dir, "OnStepX.Hub.exe");
-                if (File.Exists(candidate)) return candidate;
+                string wpf = Path.Combine(dir, EXE_WPF);
+                if (File.Exists(wpf)) return wpf;
+                string legacy = Path.Combine(dir, EXE_LEGACY);
+                if (File.Exists(legacy)) return legacy;
             }
             catch { }
 

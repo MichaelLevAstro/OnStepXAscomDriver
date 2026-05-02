@@ -33,14 +33,18 @@ namespace ASCOM.OnStepX.Driver
             var openHub = new Button { Text = "Open OnStepX.Hub", Left = 16, Top = 130, Width = 160 };
             openHub.Click += (s, e) =>
             {
-                try { Process.Start("OnStepX.Hub.exe"); }
-                catch (Exception ex)
+                // Prefer the new WPF hub; fall back to the legacy WinForms one
+                // if the WPF exe isn't on PATH (mixed-version install).
+                string lastErr = null;
+                foreach (var exe in new[] { "OnStepX.Hub.Wpf.exe", "OnStepX.Hub.exe" })
                 {
-                    MessageBox.Show(this,
-                        "Could not launch OnStepX.Hub.exe: " + ex.Message + "\r\n\r\n" +
-                        "Launch it manually from the Start menu.",
-                        "OnStepX", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    try { Process.Start(exe); return; }
+                    catch (Exception ex) { lastErr = ex.Message; }
                 }
+                MessageBox.Show(this,
+                    "Could not launch OnStepX hub: " + lastErr + "\r\n\r\n" +
+                    "Launch OnStepX.Hub.Wpf (or OnStepX.Hub) manually from the Start menu.",
+                    "OnStepX", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             };
 
             var ok = new Button { Text = "Close", Left = 360, Top = 130, Width = 84, DialogResult = DialogResult.OK };

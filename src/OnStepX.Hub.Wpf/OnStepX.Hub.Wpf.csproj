@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>ASCOM.OnStepX</RootNamespace>
+    <AssemblyName>OnStepX.Hub.Wpf</AssemblyName>
+    <Version>0.4.0</Version>
+    <AssemblyVersion>0.4.0.0</AssemblyVersion>
+    <FileVersion>0.4.0.0</FileVersion>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Product>OnStepX</Product>
+    <Company>OnStepX Community</Company>
+    <AssemblyTitle>OnStepX Hub (WPF)</AssemblyTitle>
+    <Description>OnStepX mount mediator (WPF UI) — owns serial/TCP link, serves multiple ASCOM clients over a named pipe.</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <LangVersion>9.0</LangVersion>
+    <StartupObject>ASCOM.OnStepX.Program</StartupObject>
+    <ApplicationManifest>..\OnStepX.Hub\app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\OnStepX.Hub\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnStepX.Shared\OnStepX.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Device" />
+    <Reference Include="System.Runtime.Serialization" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+  </ItemGroup>
+
+  <!-- Linked source from OnStepX.Hub: Hardware/Config/Notifications/Astronomy
+       are compiled into both assemblies, untouched. Single-instance mutex and
+       identical settings/registry paths keep the two exes interchangeable. -->
+  <ItemGroup>
+    <Compile Include="..\OnStepX.Hub\Hardware\**\*.cs">
+      <Link>Hardware\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="..\OnStepX.Hub\Config\**\*.cs">
+      <Link>Config\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="..\OnStepX.Hub\Notifications\**\*.cs">
+      <Link>Notifications\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <Compile Include="..\OnStepX.Hub\Astronomy\**\*.cs">
+      <Link>Astronomy\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+  </ItemGroup>
+
+  <!-- Astronomy catalogs and app icon embedded under the same resource names
+       used by the original Hub, so any reflective lookups continue to work. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\OnStepX.Hub\Astronomy\Data\ngc.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ngc.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\OnStepX.Hub\Astronomy\Data\ic.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ic.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\OnStepX.Hub\Astronomy\Data\sh2.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.sh2.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\OnStepX.Hub\Astronomy\Data\ldn.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ldn.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\OnStepX.Hub\AppIcon.ico">
+      <LogicalName>ASCOM.OnStepX.AppIcon.ico</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

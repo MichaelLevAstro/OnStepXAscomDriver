@@ -10,3 +10,4 @@ using System.Runtime.InteropServices;
 // CoordFormat, ITransport, PipeTransport, TransportLogger).
 [assembly: InternalsVisibleTo("ASCOM.OnStepX.Telescope")]
 [assembly: InternalsVisibleTo("OnStepX.Hub")]
+[assembly: InternalsVisibleTo("OnStepX.Hub.Wpf")]

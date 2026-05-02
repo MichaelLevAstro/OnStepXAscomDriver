@@ -1,0 +1,51 @@
+<UserControl x:Class="ASCOM.OnStepX.Controls.TitleBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+             Height="38"
+             Background="{DynamicResource Brush.Panel}">
+  <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto"/>  <!-- Logo + title (drag) -->
+        <ColumnDefinition Width="*"/>      <!-- Spacer -->
+        <ColumnDefinition Width="Auto"/>  <!-- Theme toggle -->
+        <ColumnDefinition Width="Auto"/>  <!-- Min/Max/Close -->
+      </Grid.ColumnDefinitions>
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+        <Path Width="18" Height="18" Stretch="Uniform" Margin="0,0,8,0"
+              Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.6"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+              Data="{StaticResource Geo.Telescope}"/>
+        <TextBlock Style="{StaticResource Text.WindowTitle}">
+          <Run Text="{Binding AppTitle, Mode=OneWay}"/>
+          <Run Text=" · " Foreground="{DynamicResource Brush.TextFaint}"/>
+          <Run Text="{Binding AppVersion, Mode=OneWay}" Foreground="{DynamicResource Brush.TextFaint}"/>
+        </TextBlock>
+      </StackPanel>
+
+      <c:ThemeToggle Grid.Column="2" Margin="0,5,4,5"/>
+
+      <StackPanel Grid.Column="3" Orientation="Horizontal">
+        <Button Style="{StaticResource Btn.WinChrome}" Command="{Binding MinimizeCommand}" ToolTip="Minimize">
+          <Path Width="10" Height="10" Stretch="Uniform"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.2" StrokeStartLineCap="Round"
+                Data="{StaticResource Geo.WinMin}"/>
+        </Button>
+        <Button Style="{StaticResource Btn.WinChrome}" Command="{Binding MaxRestoreCommand}" ToolTip="Maximize">
+          <Path Width="10" Height="10" Stretch="Uniform"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.2" Fill="Transparent"
+                Data="{StaticResource Geo.WinMax}"/>
+        </Button>
+        <Button Style="{StaticResource Btn.WinClose}" Command="{Binding CloseCommand}" ToolTip="Close">
+          <Path Width="10" Height="10" Stretch="Uniform"
+                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.2" StrokeStartLineCap="Round"
+                Data="{StaticResource Geo.WinClose}"/>
+        </Button>
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

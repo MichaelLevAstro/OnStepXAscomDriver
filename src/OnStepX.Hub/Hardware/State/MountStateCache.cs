@@ -22,6 +22,13 @@ namespace ASCOM.OnStepX.Hardware.State
         public string TrackingMode;     // "Sidereal" | "Solar" | "Lunar" | "King" | ""
         public string LastStatusString; // raw :GU# reply
         public DateTime LastUpdateUtc;
+        // Raw mechanical axis angles in degrees from :GX42#/:GX43#. Independent
+        // of LST and pier-side mapping — gives the unambiguous physical
+        // position of the axes. Axis 1 (RA): 0° at meridian, +west, -east on
+        // a GEM with default OnStep config; ±90° is the horizon. NaN when the
+        // firmware doesn't expose the command (older non-X builds).
+        public double Axis1Deg = double.NaN;
+        public double Axis2Deg = double.NaN;
 
         public event EventHandler Updated;
 
@@ -75,6 +82,9 @@ namespace ASCOM.OnStepX.Hardware.State
                     var gus  = _p.GetStatus();
                     double rateHz = 0.0;
                     try { rateHz = _p.GetTrackingRateHz(); } catch { }
+                    double a1 = double.NaN, a2 = double.NaN;
+                    try { a1 = _p.GetAxis1Degrees(); } catch { }
+                    try { a2 = _p.GetAxis2Degrees(); } catch { }
 
                     RightAscension = CoordFormat.ParseHours(raS);
                     if (CoordFormat.TryParseDegrees(decS, out var dVal)) Declination = dVal;
@@ -94,6 +104,8 @@ namespace ASCOM.OnStepX.Hardware.State
                             "h gu='" + (gus ?? "").TrimEnd('#') + "'");
                     }
                     LastStatusString = gus ?? "";
+                    Axis1Deg = a1;
+                    Axis2Deg = a2;
 
                     // :GU# bytes: 'n'=not tracking, 'N'=not slewing, 'P'=parked,
                     // 'p'=not parked, 'I'=park in progress, 'F'=park failed,

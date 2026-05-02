@@ -1,0 +1,56 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Source of truth: Ui/Theming/Theme.cs:121-156. Same brush keys as the
+       dark dictionary; ThemeService swaps which one is merged. -->
+
+  <SolidColorBrush x:Key="Brush.Bg"               Color="#eef0f3"/>
+  <SolidColorBrush x:Key="Brush.Panel"            Color="#ffffff"/>
+  <SolidColorBrush x:Key="Brush.Panel2"           Color="#f7f8fa"/>
+  <SolidColorBrush x:Key="Brush.PanelInset"       Color="#f1f3f6"/>
+  <SolidColorBrush x:Key="Brush.Border"           Color="#dde1e7"/>
+  <SolidColorBrush x:Key="Brush.BorderStrong"     Color="#c6ccd5"/>
+
+  <SolidColorBrush x:Key="Brush.Text"             Color="#1a1d22"/>
+  <SolidColorBrush x:Key="Brush.TextDim"          Color="#51585f"/>
+  <SolidColorBrush x:Key="Brush.TextFaint"        Color="#7a818a"/>
+  <SolidColorBrush x:Key="Brush.Label"            Color="#5a626c"/>
+
+  <SolidColorBrush x:Key="Brush.Accent"           Color="#e5482d"/>
+  <SolidColorBrush x:Key="Brush.AccentInk"        Color="#ffffff"/>
+  <SolidColorBrush x:Key="Brush.AccentSoft"       Color="#1Fe5482d"/>
+
+  <SolidColorBrush x:Key="Brush.Danger"           Color="#e5482d"/>
+  <SolidColorBrush x:Key="Brush.Ok"               Color="#3aa26a"/>
+  <SolidColorBrush x:Key="Brush.Warn"             Color="#b9983a"/>
+  <SolidColorBrush x:Key="Brush.Info"             Color="#4a86b8"/>
+
+  <SolidColorBrush x:Key="Brush.InputBg"          Color="#ffffff"/>
+  <SolidColorBrush x:Key="Brush.InputBorder"      Color="#c8cdd5"/>
+  <SolidColorBrush x:Key="Brush.InputBorderHover" Color="#9aa2ad"/>
+
+  <SolidColorBrush x:Key="Brush.BtnBg"            Color="#f3f5f8"/>
+  <SolidColorBrush x:Key="Brush.BtnBgHover"       Color="#e8ebf0"/>
+  <SolidColorBrush x:Key="Brush.BtnBgActive"      Color="#dde1e7"/>
+
+  <SolidColorBrush x:Key="Brush.Chip"             Color="#eef1f5"/>
+
+  <SolidColorBrush x:Key="Brush.ConsoleBg"        Color="#f5f7fa"/>
+  <SolidColorBrush x:Key="Brush.ConsoleLine"      Color="#e6eaef"/>
+
+  <SolidColorBrush x:Key="Brush.ScrollTrack"      Color="#e3e6eb"/>
+  <SolidColorBrush x:Key="Brush.ScrollThumb"      Color="#b6bcc6"/>
+  <SolidColorBrush x:Key="Brush.ScrollThumbHover" Color="#9aa2ad"/>
+
+  <SolidColorBrush x:Key="Brush.ColTs"            Color="#2b5aaa"/>
+  <SolidColorBrush x:Key="Brush.ColCmd"           Color="#9a5f00"/>
+  <SolidColorBrush x:Key="Brush.ColResp"          Color="#1d7a44"/>
+  <SolidColorBrush x:Key="Brush.ColMeta"          Color="#5a626c"/>
+
+  <Color x:Key="Color.Accent">#e5482d</Color>
+  <Color x:Key="Color.Ok">#3aa26a</Color>
+  <Color x:Key="Color.Warn">#b9983a</Color>
+  <Color x:Key="Color.Danger">#e5482d</Color>
+  <Color x:Key="Color.Info">#4a86b8</Color>
+
+</ResourceDictionary>
