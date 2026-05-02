@@ -333,6 +333,13 @@
                 </c:Section.Body>
               </c:Section>
 
+              <!-- ───── 3D Visualizer ───── -->
+              <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}">
+                <c:Section.Body>
+                  <c:MountVisualizer DataContext="{Binding Visualizer}" Height="280"/>
+                </c:Section.Body>
+              </c:Section>
+
               <!-- ───── Park / Home / Go To ───── -->
               <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}">
                 <c:Section.Body>

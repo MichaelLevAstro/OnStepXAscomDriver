@@ -12,6 +12,16 @@ namespace ASCOM.OnStepX.ViewModels
     // Sticky slew-rejection wins over live alt/HA limit checks for ~10 s.
     public sealed class LimitsViewModel : ViewModelBase
     {
+        // Mount's :GX42# (axis-1 mechanical) reading at the SearchHome / Park
+        // position. Subtracted from the live axis-1 angle before the meridian-
+        // envelope check, so "home" is treated as 0° in our reference frame.
+        // OnStepX firmware reports raw mechanical degrees; on a GEM the typical
+        // home pose is counterweight-down (HA = ±6h ⇒ axis1 ≈ ±90°). Without
+        // this offset, a slew that starts at home immediately sits at the
+        // ±90° envelope edge and trips a spurious "past west meridian" warning.
+        // If your mount homes elsewhere, change this constant to match.
+        private const double HomeAxis1Deg = 90.0;
+
         private readonly MainViewModel _main;
         private readonly MountSession _mount = MountSession.Instance;
 
@@ -120,21 +130,21 @@ namespace ASCOM.OnStepX.ViewModels
                 liveReason = "Below horizon " + st.Altitude.ToString("F1", CultureInfo.InvariantCulture) + "°";
 
             // Meridian-limit check using the raw mechanical axis 1 angle
-            // (:GX42#) instead of LST-RA derivation. Axis 1 is in degrees,
-            // 0 at meridian, +west, -east on a GEM with default OnStep config,
-            // ±90° at horizon. Limits are stored as minutes of RA — convert
-            // to degrees: 1 min RA = 0.25°.
+            // (:GX42#) instead of LST-RA derivation. Axis 1 is in degrees;
+            // we subtract HomeAxis1Deg so "home" is the 0° reference for the
+            // envelope check, regardless of where the firmware indexes its
+            // home pose. Limits are stored as minutes of RA — convert to
+            // degrees: 1 min RA = 0.25°.
             //
-            // The "safe" axis-1 envelope is therefore
+            // The "safe" axis-1 envelope (after home offset) is therefore
             //     [-90 - eastLimitDeg, +90 + westLimitDeg]
-            // (user-requested formulation: "between 90 and -90 degrees, plus
-            // limits"). Past either edge → flag the violation.
+            // Past either edge → flag the violation.
             //
             // Gating: only fire while the mount is actively moving — Slewing
-            // or Tracking. A parked or idle mount may sit past these edges
-            // (typical OnStep park position is HA≈±6h ⇒ axis≈±90°), but
-            // there's nothing to warn about while it's stationary; firmware
-            // enforces the wire-side limit on its next slew/track command.
+            // or Tracking. A parked or idle mount may sit past these edges,
+            // but there's nothing to warn about while it's stationary;
+            // firmware enforces the wire-side limit on its next slew/track
+            // command.
             //
             // Falls back to the legacy LST-RA math if Axis1Deg is NaN
             // (firmware doesn't support :GX42#), preserving behavior on
@@ -148,12 +158,13 @@ namespace ASCOM.OnStepX.ViewModels
 
                 if (!double.IsNaN(a1))
                 {
+                    double a1Home = a1 - HomeAxis1Deg;
                     double lowEdge  = -90.0 - eastLimitDeg;
                     double highEdge = +90.0 + westLimitDeg;
-                    if (a1 < lowEdge)
+                    if (a1Home < lowEdge)
                         liveReason = "Past east meridian limit (axis1 " +
                                      a1.ToString("F1", CultureInfo.InvariantCulture) + "°)";
-                    else if (a1 > highEdge)
+                    else if (a1Home > highEdge)
                         liveReason = "Past west meridian limit (axis1 " +
                                      a1.ToString("F1", CultureInfo.InvariantCulture) + "°)";
                 }
