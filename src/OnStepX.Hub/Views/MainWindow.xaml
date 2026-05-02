@@ -299,6 +299,11 @@
                              TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
                   <Button Content="Open Log Folder" Command="{Binding Advanced.OpenLogFolderCommand}"
                           HorizontalAlignment="Left" MinWidth="140"/>
+                  <Button Content="NV Reset…"
+                          Style="{StaticResource Btn.Danger}"
+                          Command="{Binding ParkHome.NvResetCommand}"
+                          HorizontalAlignment="Stretch"
+                          Margin="0,6,0,0"/>
                 </StackPanel>
               </c:Section.Body>
             </c:Section>
@@ -365,7 +370,6 @@
                         <TextBlock Text="Slew to Target…" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                       </StackPanel>
                     </Button>
-                    <Button Content="NV Reset…" Command="{Binding ParkHome.NvResetCommand}" HorizontalAlignment="Stretch"/>
                   </StackPanel>
                 </c:Section.Body>
               </c:Section>
