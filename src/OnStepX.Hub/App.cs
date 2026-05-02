@@ -22,9 +22,9 @@ namespace ASCOM.OnStepX
             // Theme dictionaries own all SolidColorBrush keys (Brush.Bg, Brush.Accent,
             // etc.). ThemeService swaps Dark<->Light at runtime; DynamicResource
             // bindings throughout the XAML re-resolve and the UI recolors live.
-            Add("/OnStepX.Hub.Wpf;component/Resources/Typography.xaml");
-            Add("/OnStepX.Hub.Wpf;component/Resources/Icons.xaml");
-            Add("/OnStepX.Hub.Wpf;component/Resources/Controls.xaml");
+            Add("/OnStepX.Hub;component/Resources/Typography.xaml");
+            Add("/OnStepX.Hub;component/Resources/Icons.xaml");
+            Add("/OnStepX.Hub;component/Resources/Controls.xaml");
         }
 
         private void Add(string pack)

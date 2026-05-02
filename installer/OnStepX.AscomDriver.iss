@@ -1,6 +1,7 @@
 ; OnStepX — Inno Setup script
 ; Build: iscc OnStepX.AscomDriver.iss
-; Prereq: Release build of three projects under src\*\bin\Release\
+; Prereq: Release build of OnStepX.Driver, OnStepX.Shared, OnStepX.Hub
+;         under src\*\bin\Release\
 
 #define MyAppName "OnStepX ASCOM + Hub"
 #define MyAppShortName "OnStepX"
@@ -12,16 +13,17 @@
 #define HubExe     "OnStepX.Hub.exe"
 #define DriverDll  "ASCOM.OnStepX.Telescope.dll"
 #define SharedDll  "OnStepX.Shared.dll"
-; AppId stays the same as v0.3.x so Windows recognises the install as an upgrade
-; and correctly removes the old LocalServer entries before we lay down InprocServer32.
+; AppId stays the same as v0.3.x/v0.4.x so Windows recognises the install as
+; an upgrade and correctly removes prior LocalServer / WinForms hub entries
+; before laying down the current Inproc/Wpf-hub layout.
 #define MyAppAppId "{{A7F3B9C1-4E2D-4F5A-8B1C-9D3E2F4A5B6C}"
-; COM identifiers — must match Telescope class [Guid] and [ProgId] attributes
+; COM identifiers — must match Telescope class [Guid] and [ProgId] attributes.
 #define ComClsid   "{E3F7B8A1-6C2D-4F3E-9A5B-1F2C3D4E5A6B}"
 #define ComProgId  "ASCOM.OnStepX.Telescope"
 #define ComFriendly "OnStepX Telescope Driver"
 ; DriverVersion must match the AssemblyVersion of ASCOM.OnStepX.Telescope.dll —
 ; COM activation fails if the InprocServer32 Assembly=... Version token disagrees
-; with the assembly manifest. build-installer.cmd derives this from the /DVERSION arg.
+; with the assembly manifest. build-installer.cmd derives this from /DVERSION.
 #ifndef DriverVersion
 #define DriverVersion "0.4.0.0"
 #endif
@@ -75,10 +77,6 @@ Source: "{#HubSrc}\*.pdb";                  DestDir: "{app}"; Flags: ignoreversi
 ;
 ; 64-bit view (HKCR64) serves 64-bit COM clients (NINA, SGP x64). 32-bit view
 ; (HKCR32, i.e. Wow6432Node) serves 32-bit clients (PHD2, CdC, legacy x86).
-; The driver DLL is AnyCPU so mscoree.dll loads the correct runtime per-caller;
-; we only need the CLSID keys mirrored in both views. Without the 32-bit
-; mirror, 32-bit clients fail with "Could not establish instance of OnStepX
-; Telescope Driver" because CoCreateInstance can't find the CLSID.
 [Registry]
 Root: HKCR64; Subkey: "CLSID\{{#ComClsid}";                                 ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
 Root: HKCR64; Subkey: "CLSID\{{#ComClsid}\InprocServer32";                  ValueType: string; ValueName: "";               ValueData: "mscoree.dll"
@@ -119,7 +117,10 @@ Root: HKCR32; Subkey: "{#ComProgId}\CLSID";                                 Valu
 Root: HKLM; Subkey: "SOFTWARE\ASCOM\Telescope Drivers\{#ComProgId}";      ValueType: string; ValueName: "";               ValueData: "{#ComFriendly}";                                                               Flags: uninsdeletekey
 
 ; Hub install-path registry hint — HubLauncher in the driver reads this.
+; Stale value WpfInstallPath from a previous beta installer is wiped here so
+; the launcher never picks an exe that no longer exists on disk.
 Root: HKLM; Subkey: "SOFTWARE\OnStepX\Hub";                               ValueType: string; ValueName: "InstallPath";    ValueData: "{app}\{#HubExe}";                                                              Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\OnStepX\Hub";                               ValueType: none;   ValueName: "WpfInstallPath"; Flags: deletevalue
 
 [Icons]
 Name: "{group}\{#MyAppShortName} Hub";               Filename: "{app}\{#HubExe}"
@@ -160,15 +161,30 @@ begin
   Result := True;
 end;
 
-// Best-effort: kill any running v0.3.x LocalServer exe or old Hub still holding
-// a handle on the install dir during upgrade. CloseApplications=force handles
-// most cases; this is belt-and-suspenders.
+// Best-effort: kill any prior LocalServer exe, the legacy WinForms hub, or a
+// running WPF-hub beta build still holding a handle on the install dir during
+// upgrade. CloseApplications=force handles most cases; this is belt-and-
+// suspenders.
 procedure KillLegacyServer();
 var
   ResultCode: Integer;
 begin
   Exec(ExpandConstant('{cmd}'), '/c taskkill /f /im ASCOM.OnStepX.Telescope.exe >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{cmd}'), '/c taskkill /f /im OnStepX.Hub.exe             >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{cmd}'), '/c taskkill /f /im OnStepX.Hub.Wpf.exe         >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Wipe leftover OnStepX.Hub.Wpf.exe binary from the prior beta installer so
+// %ProgramFiles%\OnStepX doesn't sit with two coexisting hub exes.
+procedure RemoveLegacyWpfBinary();
+var
+  app: String;
+begin
+  app := ExpandConstant('{app}');
+  if FileExists(app + '\OnStepX.Hub.Wpf.exe') then
+    DeleteFile(app + '\OnStepX.Hub.Wpf.exe');
+  if FileExists(app + '\OnStepX.Hub.Wpf.pdb') then
+    DeleteFile(app + '\OnStepX.Hub.Wpf.pdb');
 end;
 
 // Register the driver in the ASCOM Profile store via the Profile COM object.
@@ -227,6 +243,7 @@ begin
     ssInstall: begin
       KillLegacyServer();
       CleanLegacyComKeys();
+      RemoveLegacyWpfBinary();
     end;
     ssPostInstall: begin
       RegisterAscomProfile();

@@ -16,8 +16,8 @@ namespace ASCOM.OnStepX.Services
     {
         public static event EventHandler Changed;
 
-        private const string DarkUri = "/OnStepX.Hub.Wpf;component/Resources/Themes/Dark.xaml";
-        private const string LightUri = "/OnStepX.Hub.Wpf;component/Resources/Themes/Light.xaml";
+        private const string DarkUri = "/OnStepX.Hub;component/Resources/Themes/Dark.xaml";
+        private const string LightUri = "/OnStepX.Hub;component/Resources/Themes/Light.xaml";
 
         public static ThemeMode Mode { get; private set; }
 

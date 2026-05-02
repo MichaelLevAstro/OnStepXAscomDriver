@@ -7,8 +7,8 @@
        — falls back to Segoe UI / Cascadia Mono if the .ttf file is missing,
        so the app stays renderable while the font binaries are dropped in. -->
 
-  <FontFamily x:Key="Font.Sans">/OnStepX.Hub.Wpf;component/Resources/Fonts/#Inter, Segoe UI</FontFamily>
-  <FontFamily x:Key="Font.Mono">/OnStepX.Hub.Wpf;component/Resources/Fonts/#JetBrains Mono, Cascadia Mono, Consolas</FontFamily>
+  <FontFamily x:Key="Font.Sans">/OnStepX.Hub;component/Resources/Fonts/#Inter, Segoe UI</FontFamily>
+  <FontFamily x:Key="Font.Mono">/OnStepX.Hub;component/Resources/Fonts/#JetBrains Mono, Cascadia Mono, Consolas</FontFamily>
 
   <sys:Double x:Key="Font.Size.Body">12</sys:Double>
   <sys:Double x:Key="Font.Size.Label">11.5</sys:Double>
