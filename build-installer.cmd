@@ -47,19 +47,31 @@ if /I not "%CONFIG%"=="Release" (
 
 echo.
 echo === [2/2] Inno Setup compile ===
-rem Sweep any prior OnStepX-Setup-*.exe so installer\ never accumulates stale
+rem Sweep prior installer outputs so installer\ never accumulates stale
 rem siblings when the version number changes between builds.
 del /q "%ROOT%installer\OnStepX-Setup-*.exe" >nul 2>&1
+
+rem Retry loop. EndUpdateResource(110) fires when Windows Defender scans the
+rem freshly-written setup exe just as ISCC tries to close its resource handle.
+rem Three attempts with a short delay between is enough in practice.
+set ATTEMPT=0
+:isccretry
+set /a ATTEMPT+=1
 if defined VERSION (
-    echo Overriding installer version: %VERSION%  [DriverVersion=%VERSION%.0]
     "%ISCC%" /DMyAppVersion=%VERSION% /DDriverVersion=%VERSION%.0 "%ISS%"
 ) else (
     "%ISCC%" "%ISS%"
 )
-if errorlevel 1 (
-    echo [ERROR] Installer compile failed.
+if not errorlevel 1 goto isccdone
+if %ATTEMPT% GEQ 3 (
+    echo [ERROR] Installer compile failed after %ATTEMPT% attempts.
     exit /b 1
 )
+echo [WARN] ISCC failed (attempt %ATTEMPT%), retrying in 2s...
+del /q "%ROOT%installer\OnStepX-Setup-*.exe" >nul 2>&1
+timeout /t 2 /nobreak >nul
+goto isccretry
+:isccdone
 
 echo.
 echo === Done ===

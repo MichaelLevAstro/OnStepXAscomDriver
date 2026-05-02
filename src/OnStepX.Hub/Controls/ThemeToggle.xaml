@@ -1,0 +1,48 @@
+<UserControl x:Class="ASCOM.OnStepX.Controls.ThemeToggle"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Height="28">
+  <UserControl.Resources>
+    <Style x:Key="ThemeBtn" TargetType="Button">
+      <Setter Property="Width" Value="22"/>
+      <Setter Property="Height" Value="22"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextDim}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
+  <Border Background="{DynamicResource Brush.PanelInset}"
+          BorderBrush="{DynamicResource Brush.Border}"
+          BorderThickness="1" CornerRadius="6"
+          Padding="3">
+    <StackPanel Orientation="Horizontal">
+      <Button x:Name="DarkBtn" Style="{StaticResource ThemeBtn}" Click="OnDark" ToolTip="Dark">
+        <Path Width="13" Height="13" Stretch="Uniform"
+              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+              StrokeThickness="2"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+              Fill="Transparent"
+              Data="{StaticResource Geo.Moon}"/>
+      </Button>
+      <Button x:Name="LightBtn" Style="{StaticResource ThemeBtn}" Click="OnLight" ToolTip="Light">
+        <Path Width="13" Height="13" Stretch="Uniform"
+              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+              StrokeThickness="2"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+              Fill="Transparent"
+              Data="{StaticResource Geo.Sun}"/>
+      </Button>
+    </StackPanel>
+  </Border>
+</UserControl>
