@@ -6,6 +6,10 @@ If it doesn't, but you like the driver and would like it to, open up an issue st
 
 Windows ASCOM Telescope driver + mediator app for OnStepX mounts. The driver is an in-process ASCOM shim; the hub is a standalone WinForms app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
 
+## Important note
+Currently there is no focuser, rotator or weather support, since i dont use them.
+But if demand will be high, i will implement.
+
 <img width="1226" height="1381" alt="image" src="https://github.com/user-attachments/assets/4226c6a1-b45b-4b3e-9d4e-f42e935a9360" />
 <img width="1225" height="1379" alt="image" src="https://github.com/user-attachments/assets/2b52c40b-ed8e-461e-a55c-26e7be4ff6a0" />
 <img width="965" height="745" alt="image" src="https://github.com/user-attachments/assets/bbfb1c6b-22d9-495d-9871-19682078094a" />
