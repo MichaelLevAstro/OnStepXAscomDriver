@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.Transport;
@@ -50,8 +51,18 @@ namespace ASCOM.OnStepX.ViewModels
             }
         }
 
-        private bool _consoleVisible = true;
-        public bool ConsoleVisible { get => _consoleVisible; set => Set(ref _consoleVisible, value); }
+        private bool _consoleVisible = DriverSettings.ConsoleVisible;
+        public bool ConsoleVisible
+        {
+            get => _consoleVisible;
+            set
+            {
+                if (Set(ref _consoleVisible, value))
+                {
+                    try { DriverSettings.ConsoleVisible = value; } catch { }
+                }
+            }
+        }
 
         private string _commandInput = "";
         public string CommandInput { get => _commandInput; set => Set(ref _commandInput, value); }

@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <PackageReference Include="HelixToolkit.Wpf" Version="2.25.0" />
   </ItemGroup>
 
   <!-- Astronomy catalogs + app icon embedded under namespace-qualified names

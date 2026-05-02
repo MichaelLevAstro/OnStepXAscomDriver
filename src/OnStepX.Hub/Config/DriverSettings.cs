@@ -40,6 +40,9 @@ namespace ASCOM.OnStepX.Config
         // Hub toast notifications (limit reached, etc).
         public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
 
+        // Console pane shown/hidden state, persisted across sessions.
+        public static bool   ConsoleVisible { get => GetBool("ConsoleVisible", true); set => SetBool("ConsoleVisible", value); }
+
         // Persistent log file under %APPDATA%\OnStepX\logs. ON = every line
         // shown in the hub console is also written to disk.
         public static bool   VerboseFileLog { get => GetBool("VerboseFileLog", false); set => SetBool("VerboseFileLog", value); }

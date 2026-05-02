@@ -28,6 +28,7 @@ namespace ASCOM.OnStepX.ViewModels
         public ParkHomeViewModel ParkHome { get; }
         public ConsoleViewModel Console { get; }
         public AdvancedDiagnosticsViewModel Advanced { get; }
+        public VisualizerViewModel Visualizer { get; }
 
         private readonly MountSession _mount = MountSession.Instance;
         private readonly DispatcherTimer _pollTimer;
@@ -81,6 +82,7 @@ namespace ASCOM.OnStepX.ViewModels
             ParkHome   = new ParkHomeViewModel(this);
             Console    = new ConsoleViewModel(this);
             Advanced   = new AdvancedDiagnosticsViewModel();
+            Visualizer = new VisualizerViewModel();
 
             AppTitle = "OnStepX ASCOM Driver";
             AppVersion = GetVersionString();
@@ -146,6 +148,7 @@ namespace ASCOM.OnStepX.ViewModels
             {
                 Position.OnDisconnected();
                 Tracking.OnDisconnected();
+                Visualizer.OnDisconnected();
             }
         }
 
@@ -212,6 +215,7 @@ namespace ASCOM.OnStepX.ViewModels
             Position.OnPollSnapshot(st);
             Tracking.OnPollSnapshot(st);
             Limits.OnPollSnapshot(st);
+            Visualizer.OnPollSnapshot(st);
         }
 
         // Compare hub-stored site with mount site after connect, prompt if differ.
