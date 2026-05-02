@@ -6,7 +6,7 @@ If it doesn't, but you like the driver and would like it to, open up an issue st
 
 Windows ASCOM Telescope driver + mediator app for OnStepX mounts. The driver is an in-process ASCOM shim; the hub is a standalone WinForms app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
 
-<img width="984" height="1328" alt="image" src="https://github.com/user-attachments/assets/8e116790-af3f-495c-9463-9d7cf7b15c8f" />
+<img width="899" height="979" alt="image" src="https://github.com/user-attachments/assets/979d4dcc-ba43-46b2-bec5-30b30f0b42f2" />
 
 # Features
 - Manual slewing
