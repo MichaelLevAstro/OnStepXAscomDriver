@@ -18,19 +18,44 @@ namespace ASCOM.OnStepX.Controls
     public partial class MountVisualizer : UserControl
     {
         // --- Tunable scene dimensions (arbitrary units; HelixViewport ZoomExtents fits).
-        private const double PierHeight       = 1.6;
-        private const double PierWidth        = 0.30;
-        private const double PierDepth        = 0.30;
-        private const double RaShaftLength    = 1.10;
-        private const double RaShaftRadius    = 0.085;
-        private const double SaddleLength     = 0.45;
-        private const double SaddleRadius     = 0.075;
-        private const double CtwShaftLength   = 0.95;
-        private const double CtwShaftRadius   = 0.045;
-        private const double CtwBobRadius     = 0.16;
-        private const double OtaLength        = 1.05;
-        private const double OtaRadius        = 0.135;
-        private const double GroundRadius     = 1.6;
+        private const double PierHeight        = 1.55;
+        private const double PierShaftRadius   = 0.13;
+        private const double PierBaseRadius    = 0.24;
+        private const double PierBaseHeight    = 0.06;
+        private const double PierTopRadius     = 0.20;
+        private const double PierTopHeight     = 0.05;
+        private const double PolarHousingSize  = 0.34;
+
+        private const double RaShaftLength     = 1.05;
+        private const double RaShaftRadius     = 0.085;
+        private const double RaMotorRadius     = 0.135;
+        private const double RaMotorLength     = 0.16;
+
+        private const double SaddleLength      = 0.55;
+        private const double SaddleRadius      = 0.085;
+        private const double DecMotorRadius    = 0.14;
+        private const double DecMotorLength    = 0.20;
+
+        private const double DovetailWidth     = 0.13;
+        private const double DovetailHeight    = 0.045;
+        private const double DovetailLength    = 0.60;
+
+        private const double CtwShaftLength    = 0.75;
+        private const double CtwShaftRadius    = 0.04;
+        private const double CtwDiscRadius     = 0.21;
+        private const double CtwDiscLength     = 0.16;
+
+        private const double OtaLength         = 1.10;
+        private const double OtaRadius         = 0.135;
+
+        private const double FinderRadius      = 0.042;
+        private const double FinderLength      = 0.40;
+        private const double FocuserRadius     = 0.075;
+        private const double FocuserLength     = 0.18;
+        private const double FocuserKnobRadius = 0.03;
+
+        private const double PointingLineLength = 8.0;
+        private const double GroundRadius       = 1.7;
 
         // --- Animation
         private static readonly Duration EaseDuration = new Duration(TimeSpan.FromMilliseconds(750));
@@ -43,6 +68,13 @@ namespace ASCOM.OnStepX.Controls
         private RotateTransform3D _raAxisRotation;
         private RotateTransform3D _decAxisRotation;
 
+        // --- Initial camera state captured after BuildScene; restored on
+        // double-click in the viewport.
+        private Point3D  _initialCameraPos;
+        private Vector3D _initialCameraLook;
+        private Vector3D _initialCameraUp;
+        private double   _initialCameraFov;
+
         // --- VM subscription
         private VisualizerViewModel _vm;
 
@@ -53,6 +85,19 @@ namespace ASCOM.OnStepX.Controls
             DataContextChanged += OnDataContextChanged;
             Loaded += (_, __) => ApplyVmSnapshot();
             Unloaded += (_, __) => DetachVm();
+            Viewport.MouseDoubleClick += OnViewportDoubleClick;
+        }
+
+        private void OnViewportDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (Viewport.Camera is PerspectiveCamera cam)
+            {
+                cam.Position      = _initialCameraPos;
+                cam.LookDirection = _initialCameraLook;
+                cam.UpDirection   = _initialCameraUp;
+                cam.FieldOfView   = _initialCameraFov;
+            }
+            e.Handled = true;
         }
 
         // ── Proxy DPs animated by DoubleAnimation; their callbacks
@@ -180,89 +225,119 @@ namespace ASCOM.OnStepX.Controls
             // World convention: Y = up, Z = north (toward celestial pole projection),
             // X = east. Pier sits at world origin on the ground plane.
 
-            var pierColor   = ResolveColor("Brush.BorderStrong", Color.FromRgb(0x3a, 0x42, 0x50));
-            var raColor     = ResolveColor("Brush.Border",       Color.FromRgb(0x2a, 0x31, 0x3c));
-            var saddleColor = ResolveColor("Brush.TextDim",      Color.FromRgb(0x9a, 0xa4, 0xb2));
-            var otaColor    = ResolveColor("Brush.Accent",       Color.FromRgb(0xe5, 0x48, 0x2d));
-            var frontColor  = ResolveColor("Brush.Info",         Color.FromRgb(0x5f, 0x9e, 0xd4));
-            var lensColor   = ResolveColor("Brush.Ok",           Color.FromRgb(0x4a, 0xc2, 0x7a));
-            var ctwColor    = ResolveColor("Brush.BorderStrong", Color.FromRgb(0x3a, 0x42, 0x50));
-            var groundColor = ResolveColor("Brush.Panel",        Color.FromRgb(0x1b, 0x1f, 0x26));
-            var northColor  = ResolveColor("Brush.Info",         Color.FromRgb(0x5f, 0x9e, 0xd4));
+            var pierColor    = ResolveColor("Brush.BorderStrong", Color.FromRgb(0x3a, 0x42, 0x50));
+            var housingColor = ResolveColor("Brush.Border",       Color.FromRgb(0x2a, 0x31, 0x3c));
+            var metalColor   = ResolveColor("Brush.TextDim",      Color.FromRgb(0x9a, 0xa4, 0xb2));
+            var otaColor     = ResolveColor("Brush.Accent",       Color.FromRgb(0xe5, 0x48, 0x2d));
+            var frontColor   = ResolveColor("Brush.Info",         Color.FromRgb(0x5f, 0x9e, 0xd4));
+            var lensColor    = ResolveColor("Brush.Ok",           Color.FromRgb(0x4a, 0xc2, 0x7a));
+            var ctwColor     = ResolveColor("Brush.BorderStrong", Color.FromRgb(0x3a, 0x42, 0x50));
+            var groundColor  = ResolveColor("Brush.Panel",        Color.FromRgb(0x1b, 0x1f, 0x26));
+            var gridColor    = ResolveColor("Brush.TextFaint",    Color.FromRgb(0x6b, 0x75, 0x82));
 
-            var pierMat   = MakeMaterial(pierColor);
-            var raMat     = MakeMaterial(raColor);
-            var saddleMat = MakeMaterial(saddleColor);
-            var otaMat    = MakeMaterial(otaColor);
-            var frontMat  = MakeMaterial(frontColor);
-            var lensMat   = MakeMaterial(lensColor);
-            var ctwMat    = MakeMaterial(ctwColor);
-            var groundMat = MakeMaterial(groundColor);
-            var northMat  = MakeMaterial(northColor);
+            var pierMat    = MakeMaterial(pierColor,    softSpec: true);
+            var housingMat = MakeMaterial(housingColor, softSpec: true);
+            var metalMat   = MakeMaterial(metalColor,   softSpec: true);
+            var otaMat     = MakeMaterial(otaColor,     softSpec: true);
+            var frontMat   = MakeMaterial(frontColor,   softSpec: true);
+            var lensMat    = MakeLensMaterial(lensColor);
+            var ctwMat     = MakeMaterial(ctwColor,     softSpec: true);
+            var groundMat  = MakeMaterial(groundColor,  softSpec: false);
 
-            // Ground disc — flat circle at y=0
+            // ── Ground: solid disc at y=0 plus a square wireframe grid on top.
             var groundMb = new MeshBuilder();
-            groundMb.AddCylinder(new Point3D(0, -0.005, 0), new Point3D(0, 0.0, 0), GroundRadius, 48);
+            groundMb.AddCylinder(new Point3D(0, -0.005, 0), new Point3D(0, 0.0, 0), GroundRadius, 64);
             Viewport.Children.Add(MakeVisual(groundMb, groundMat));
 
-            // North arrow on the ground (small triangle along +Z)
-            var northMb = new MeshBuilder();
-            northMb.AddBox(new Point3D(0, 0.005, GroundRadius * 0.55), 0.05, 0.005, 0.55);
-            northMb.AddCone(new Point3D(0, 0.005, GroundRadius * 0.85), new Vector3D(0, 0, 1), 0.09, 0.09, 0.18, true, true, 16);
-            Viewport.Children.Add(MakeVisual(northMb, northMat));
+            Viewport.Children.Add(new GridLinesVisual3D
+            {
+                Center = new Point3D(0, 0.001, 0),
+                Length = GroundRadius * 2.0,
+                Width  = GroundRadius * 2.0,
+                LengthDirection = new Vector3D(0, 0, 1),
+                Normal = new Vector3D(0, 1, 0),
+                MajorDistance = 0.5,
+                MinorDistance = 0.1,
+                Thickness = 0.0035,
+                Fill = new SolidColorBrush(Color.FromArgb(140, gridColor.R, gridColor.G, gridColor.B))
+            });
 
-            // Pier — a vertical box from y=0 up to y=PierHeight
+            // ── Pier: base flange + cylindrical shaft + top flange.
             var pierMb = new MeshBuilder();
-            pierMb.AddBox(new Point3D(0, PierHeight / 2.0, 0), PierWidth, PierHeight, PierDepth);
+            pierMb.AddCylinder(new Point3D(0, 0,             0), new Point3D(0, PierBaseHeight,             0), PierBaseRadius, 36);
+            pierMb.AddCylinder(new Point3D(0, PierBaseHeight, 0), new Point3D(0, PierHeight - PierTopHeight, 0), PierShaftRadius, 36);
+            pierMb.AddCylinder(new Point3D(0, PierHeight - PierTopHeight, 0), new Point3D(0, PierHeight, 0), PierTopRadius, 36);
             Viewport.Children.Add(MakeVisual(pierMb, pierMat));
 
-            // ── Polar frame: tilts the RA shaft to point at the celestial pole.
-            //    Rotation about world X by (90 - LatitudeAngle).
+            // ── Polar frame: tilts so its +Y axis points at the celestial pole.
             _latitudeRotation = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(1, 0, 0), 45.0));
             UpdateLatitudeRotation();
-
-            // The polar frame's origin sits at the top of the pier.
             var polarTransform = new Transform3DGroup();
             polarTransform.Children.Add(_latitudeRotation);
             polarTransform.Children.Add(new TranslateTransform3D(0, PierHeight, 0));
-
             var polarFrame = new ModelVisual3D { Transform = polarTransform };
             Viewport.Children.Add(polarFrame);
 
-            // ── Static RA shaft (cylinder along polar Y, centered on origin).
-            var raShaftMb = new MeshBuilder();
-            raShaftMb.AddCylinder(
-                new Point3D(0, -RaShaftLength * 0.45, 0),
-                new Point3D(0,  RaShaftLength * 0.45, 0),
-                RaShaftRadius, 24);
-            polarFrame.Children.Add(MakeVisual(raShaftMb, raMat));
+            // Polar housing — fixed (does NOT rotate with HA). The chunk that
+            // sits on top of the pier and houses the RA bearing.
+            var polarHousingMb = new MeshBuilder();
+            polarHousingMb.AddBox(new Point3D(0, 0, 0), PolarHousingSize, PolarHousingSize * 0.55, PolarHousingSize);
+            polarFrame.Children.Add(MakeVisual(polarHousingMb, housingMat));
 
-            // ── RA-rotated subtree: anything that swings with HA.
+            // ── RA-rotated subtree: shaft + saddle + DEC head + counterweight
+            //    all swing with HA.
             _raAxisRotation = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(0, 1, 0), 0.0));
             var raRotated = new ModelVisual3D { Transform = _raAxisRotation };
             polarFrame.Children.Add(raRotated);
 
-            // Saddle — short cylinder perpendicular to RA shaft, at +Y end.
-            // Lies along X within the rotated frame.
+            // RA shaft (rotates with HA, runs through the polar housing).
+            var raShaftMb = new MeshBuilder();
+            raShaftMb.AddCylinder(
+                new Point3D(0, -RaShaftLength * 0.5, 0),
+                new Point3D(0,  RaShaftLength * 0.5, 0),
+                RaShaftRadius, 28);
+            // RA motor cap at the counterweight end of the shaft.
+            raShaftMb.AddCylinder(
+                new Point3D(0, -RaShaftLength * 0.5,                    0),
+                new Point3D(0, -RaShaftLength * 0.5 - RaMotorLength,    0),
+                RaMotorRadius, 32);
+            raRotated.Children.Add(MakeVisual(raShaftMb, housingMat));
+
+            // ── Saddle / DEC head assembly (in raRotated, lies along X at +Y end).
+            // Saddle bar.
             var saddleMb = new MeshBuilder();
             saddleMb.AddCylinder(
-                new Point3D(-SaddleLength / 2.0, RaShaftLength * 0.45, 0),
-                new Point3D( SaddleLength / 2.0, RaShaftLength * 0.45, 0),
-                SaddleRadius, 24);
-            raRotated.Children.Add(MakeVisual(saddleMb, saddleMat));
+                new Point3D(-SaddleLength / 2.0, RaShaftLength * 0.5, 0),
+                new Point3D( SaddleLength / 2.0, RaShaftLength * 0.5, 0),
+                SaddleRadius, 28);
+            raRotated.Children.Add(MakeVisual(saddleMb, metalMat));
 
-            // Counterweight bar + bob, pointing along -Y (opposite the saddle).
+            // DEC motor housing — chunky cylinder at the -X end of the saddle
+            // (opposite the OTA mount). Stays with raRotated; doesn't pivot
+            // with Dec.
+            var decMotorMb = new MeshBuilder();
+            decMotorMb.AddCylinder(
+                new Point3D(-SaddleLength / 2.0,                  RaShaftLength * 0.5, 0),
+                new Point3D(-SaddleLength / 2.0 - DecMotorLength, RaShaftLength * 0.5, 0),
+                DecMotorRadius, 32);
+            raRotated.Children.Add(MakeVisual(decMotorMb, housingMat));
+
+            // ── Counterweight: thin shaft + flat disc weight (replaces the
+            //    earlier sphere "bob"). Disc radius >> length, perpendicular
+            //    to the shaft axis.
             var ctwMb = new MeshBuilder();
             ctwMb.AddCylinder(
-                new Point3D(0, -RaShaftLength * 0.45, 0),
-                new Point3D(0, -RaShaftLength * 0.45 - CtwShaftLength, 0),
-                CtwShaftRadius, 16);
-            ctwMb.AddSphere(
-                new Point3D(0, -RaShaftLength * 0.45 - CtwShaftLength + CtwBobRadius * 0.4, 0),
-                CtwBobRadius, 18, 12);
+                new Point3D(0, -RaShaftLength * 0.5,                  0),
+                new Point3D(0, -RaShaftLength * 0.5 - RaMotorLength - CtwShaftLength, 0),
+                CtwShaftRadius, 18);
+            double discCenterY = -RaShaftLength * 0.5 - RaMotorLength - CtwShaftLength * 0.85;
+            ctwMb.AddCylinder(
+                new Point3D(0, discCenterY + CtwDiscLength * 0.5, 0),
+                new Point3D(0, discCenterY - CtwDiscLength * 0.5, 0),
+                CtwDiscRadius, 36);
             raRotated.Children.Add(MakeVisual(ctwMb, ctwMat));
 
-            // ── DEC-rotated subtree: holds the OTA. Pivots about X (saddle axis).
+            // ── DEC-rotated subtree: dovetail + OTA + finder + focuser.
             _decAxisRotation = new RotateTransform3D(new AxisAngleRotation3D(new Vector3D(1, 0, 0), 0.0));
             var decFrame = new ModelVisual3D
             {
@@ -271,12 +346,20 @@ namespace ASCOM.OnStepX.Controls
                     Children =
                     {
                         _decAxisRotation,
-                        // Move the OTA out to the +X end of the saddle so it doesn't intersect the shaft.
-                        new TranslateTransform3D(SaddleLength / 2.0, RaShaftLength * 0.45, 0)
+                        // OTA mount sits at +X end of the saddle — offset out
+                        // far enough that the tube doesn't intersect the shaft.
+                        new TranslateTransform3D(SaddleLength / 2.0, RaShaftLength * 0.5, 0)
                     }
                 }
             };
             raRotated.Children.Add(decFrame);
+
+            // Dovetail saddle plate — thin box on top of the DEC head, parallel
+            // to the OTA. Connects the saddle to the OTA tube.
+            const double dovetailY = OtaRadius + DovetailHeight * 0.5 + 0.005;
+            var dovetailMb = new MeshBuilder();
+            dovetailMb.AddBox(new Point3D(0, -dovetailY, 0), DovetailWidth, DovetailHeight, DovetailLength);
+            decFrame.Children.Add(MakeVisual(dovetailMb, metalMat));
 
             // OTA — split into three colored sections so "front" is unambiguous:
             //   rear 70% = accent (orange),
@@ -284,43 +367,92 @@ namespace ASCOM.OnStepX.Controls
             //   front face = ok (green) objective disc.
             // Tube points along polar -Z within the dec-rotated frame: at
             // HA=0 / Dec=0 that direction maps to up-and-south in world space
-            // (the celestial-equator point above the southern horizon), which
-            // is where a GEM physically points when it's on the meridian.
-            const double otaRearZ     =  OtaLength / 2.0;                       //  +0.5 L
-            const double otaSplitZ    =  OtaLength / 2.0 - OtaLength * 0.30;    //  +0.2 L (body→front boundary)
-            const double otaFrontEndZ = -OtaLength / 2.0;                       //  -0.5 L
+            // (the celestial equator point above the southern horizon).
+            const double otaRearZ     =  OtaLength / 2.0;
+            const double otaSplitZ    =  OtaLength / 2.0 - OtaLength * 0.30;
+            const double otaFrontEndZ = -OtaLength / 2.0;
 
             var otaBodyMb = new MeshBuilder();
-            otaBodyMb.AddCylinder(
-                new Point3D(0, 0, otaRearZ),
-                new Point3D(0, 0, otaSplitZ),
-                OtaRadius, 28);
+            otaBodyMb.AddCylinder(new Point3D(0, 0, otaRearZ), new Point3D(0, 0, otaSplitZ), OtaRadius, 32);
             decFrame.Children.Add(MakeVisual(otaBodyMb, otaMat));
 
             var otaFrontMb = new MeshBuilder();
-            otaFrontMb.AddCylinder(
-                new Point3D(0, 0, otaSplitZ),
-                new Point3D(0, 0, otaFrontEndZ),
-                OtaRadius * 1.06, 28);
+            otaFrontMb.AddCylinder(new Point3D(0, 0, otaSplitZ), new Point3D(0, 0, otaFrontEndZ), OtaRadius * 1.06, 32);
             decFrame.Children.Add(MakeVisual(otaFrontMb, frontMat));
 
-            // Objective lens disc — short, fat, at the very front face. Vivid
-            // accent so the front is readable from any camera angle.
+            // Objective lens disc — short, fat, at the very front face.
             var lensMb = new MeshBuilder();
             lensMb.AddCylinder(
                 new Point3D(0, 0, otaFrontEndZ + 0.005),
                 new Point3D(0, 0, otaFrontEndZ - 0.025),
-                OtaRadius * 1.10, 28);
+                OtaRadius * 1.10, 32);
             decFrame.Children.Add(MakeVisual(lensMb, lensMat));
 
-            // Camera — front-south, slightly elevated.
-            Viewport.Camera = new PerspectiveCamera
+            // Focuser — drawtube + side knob, at the rear face of the OTA.
+            var focuserMb = new MeshBuilder();
+            focuserMb.AddCylinder(
+                new Point3D(0, 0, otaRearZ),
+                new Point3D(0, 0, otaRearZ + FocuserLength),
+                FocuserRadius, 28);
+            focuserMb.AddCylinder(
+                new Point3D(FocuserRadius + 0.005, 0, otaRearZ + FocuserLength * 0.55),
+                new Point3D(FocuserRadius + FocuserKnobRadius * 1.6, 0, otaRearZ + FocuserLength * 0.55),
+                FocuserKnobRadius, 18);
+            decFrame.Children.Add(MakeVisual(focuserMb, metalMat));
+
+            // Finder scope — small parallel tube riding on top of the OTA,
+            // mid-tube. Built in DEC frame's +Y so it follows OTA rotation.
+            const double finderOffsetY = OtaRadius + FinderRadius + 0.025 + DovetailHeight;
+            const double finderCenterZ = otaSplitZ - 0.05;
+            var finderMb = new MeshBuilder();
+            finderMb.AddCylinder(
+                new Point3D(0, finderOffsetY, finderCenterZ + FinderLength * 0.5),
+                new Point3D(0, finderOffsetY, finderCenterZ - FinderLength * 0.5),
+                FinderRadius, 24);
+            // Finder objective ring (slightly larger) at front end.
+            finderMb.AddCylinder(
+                new Point3D(0, finderOffsetY, finderCenterZ - FinderLength * 0.5 + 0.005),
+                new Point3D(0, finderOffsetY, finderCenterZ - FinderLength * 0.5 - 0.02),
+                FinderRadius * 1.18, 24);
+            // Finder mounting brackets (two short stubs).
+            finderMb.AddCylinder(
+                new Point3D(0, finderOffsetY - 0.03, finderCenterZ - FinderLength * 0.30),
+                new Point3D(0, OtaRadius + 0.005,    finderCenterZ - FinderLength * 0.30),
+                0.012, 12);
+            finderMb.AddCylinder(
+                new Point3D(0, finderOffsetY - 0.03, finderCenterZ + FinderLength * 0.30),
+                new Point3D(0, OtaRadius + 0.005,    finderCenterZ + FinderLength * 0.30),
+                0.012, 12);
+            decFrame.Children.Add(MakeVisual(finderMb, housingMat));
+
+            // Pointing line — long thin line extending from the front of the
+            // objective straight along the OTA's optical axis, into "the sky."
+            // Helps locate where the scope is pointing from any camera angle.
+            var pointingLine = new LinesVisual3D
             {
-                Position = new Point3D(2.4, 2.0, 3.6),
-                LookDirection = new Vector3D(-2.4, -1.0, -3.6),
-                UpDirection = new Vector3D(0, 1, 0),
-                FieldOfView = 45
+                Color = lensColor,
+                Thickness = 1.4,
+                Points = new Point3DCollection
+                {
+                    new Point3D(0, 0, otaFrontEndZ - 0.04),
+                    new Point3D(0, 0, otaFrontEndZ - PointingLineLength)
+                }
             };
+            decFrame.Children.Add(pointingLine);
+
+            // ── Camera — front-south, slightly elevated. Saved for double-click reset.
+            var camera = new PerspectiveCamera
+            {
+                Position      = new Point3D(2.6, 2.1, 3.8),
+                LookDirection = new Vector3D(-2.6, -1.2, -3.8),
+                UpDirection   = new Vector3D(0, 1, 0),
+                FieldOfView   = 45
+            };
+            Viewport.Camera = camera;
+            _initialCameraPos  = camera.Position;
+            _initialCameraLook = camera.LookDirection;
+            _initialCameraUp   = camera.UpDirection;
+            _initialCameraFov  = camera.FieldOfView;
         }
 
         private static ModelVisual3D MakeVisual(MeshBuilder mb, Material mat)
@@ -329,12 +461,29 @@ namespace ASCOM.OnStepX.Controls
             return new ModelVisual3D { Content = geom };
         }
 
-        private static Material MakeMaterial(Color c)
+        private static Material MakeMaterial(Color c, bool softSpec = true)
         {
             var group = new MaterialGroup();
             group.Children.Add(new DiffuseMaterial(new SolidColorBrush(c)));
-            // Soft specular for a hint of shape definition under DefaultLights.
-            group.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(64, 255, 255, 255)), 24));
+            if (softSpec)
+            {
+                // Specular hint for shape definition under DefaultLights — gives
+                // the dull-metal appearance on housings and the painted finish on
+                // the OTA without going full chrome.
+                group.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)), 32));
+            }
+            return group;
+        }
+
+        private static Material MakeLensMaterial(Color c)
+        {
+            // Lens face: diffuse + emissive so the green objective glows from
+            // any camera angle, plus a hot specular highlight for a "glassy"
+            // glint.
+            var group = new MaterialGroup();
+            group.Children.Add(new DiffuseMaterial(new SolidColorBrush(c)));
+            group.Children.Add(new EmissiveMaterial(new SolidColorBrush(Color.FromArgb(110, c.R, c.G, c.B))));
+            group.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)), 80));
             return group;
         }
 
