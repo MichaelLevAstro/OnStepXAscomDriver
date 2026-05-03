@@ -5,17 +5,17 @@
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>ASCOM.OnStepX</RootNamespace>
-    <AssemblyName>ASCOM.OnStepX.Telescope</AssemblyName>
-    <Version>0.4.0</Version>
-    <AssemblyVersion>0.4.0.0</AssemblyVersion>
-    <FileVersion>0.4.0.0</FileVersion>
+    <AssemblyName>ASCOM.OnStepX</AssemblyName>
+    <Version>0.5.0</Version>
+    <AssemblyVersion>0.5.0.0</AssemblyVersion>
+    <FileVersion>0.5.0.0</FileVersion>
     <Platforms>AnyCPU;x86;x64</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Product>OnStepX</Product>
     <Company>OnStepX Community</Company>
-    <AssemblyTitle>ASCOM OnStepX Telescope Driver</AssemblyTitle>
-    <Description>ASCOM InprocServer driver for OnStepX mounts — pipes to OnStepX.Hub.</Description>
+    <AssemblyTitle>ASCOM OnStepX Drivers (Telescope + Focuser)</AssemblyTitle>
+    <Description>ASCOM InprocServer drivers for OnStepX mounts and focusers — pipe to OnStepX.Hub.</Description>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <LangVersion>9.0</LangVersion>
     <EnableComHosting>false</EnableComHosting>

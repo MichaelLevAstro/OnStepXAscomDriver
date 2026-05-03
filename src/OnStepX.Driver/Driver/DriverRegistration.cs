@@ -11,8 +11,6 @@ namespace ASCOM.OnStepX.Driver
     // the installer. Drop LocalServer32 / AppID / /embedding surface entirely.
     internal static class DriverRegistration
     {
-        private const string DeviceType = "Telescope";
-
         [ComRegisterFunction]
         public static void RegisterAsCom(Type t)
         {
@@ -20,6 +18,7 @@ namespace ASCOM.OnStepX.Driver
             // .NET runtime shim — we only need to add ProgID + ASCOM profile.
             string progId = GetProgId(t);
             string friendly = GetFriendlyName(t) ?? progId;
+            string deviceType = GetDeviceType(t);
             string clsid = "{" + t.GUID.ToString().ToUpperInvariant() + "}";
 
             using (var clsidKey = Registry.ClassesRoot.CreateSubKey(@"CLSID\" + clsid))
@@ -38,15 +37,22 @@ namespace ASCOM.OnStepX.Driver
                 using (var c = progKey.CreateSubKey("CLSID")) c?.SetValue(null, clsid);
             }
 
-            try { AscomProfileRegister(progId, friendly, true); }
-            catch { /* ASCOM Platform may not be installed on dev box; ignore */ }
+            if (deviceType != null)
+            {
+                try { AscomProfileRegister(deviceType, progId, friendly, true); }
+                catch { /* ASCOM Platform may not be installed on dev box; ignore */ }
+            }
         }
 
         [ComUnregisterFunction]
         public static void UnregisterAsCom(Type t)
         {
             string progId = GetProgId(t);
-            try { AscomProfileRegister(progId, null, false); } catch { }
+            string deviceType = GetDeviceType(t);
+            if (deviceType != null)
+            {
+                try { AscomProfileRegister(deviceType, progId, null, false); } catch { }
+            }
             try { Registry.ClassesRoot.DeleteSubKeyTree(progId, false); } catch { }
             // Leave CLSID tree — regasm strips it on its own pass.
         }
@@ -63,14 +69,24 @@ namespace ASCOM.OnStepX.Driver
             return a?.DisplayName;
         }
 
-        private static void AscomProfileRegister(string progId, string friendly, bool register)
+        // Driver classes opt in to ASCOM Profile registration by tagging
+        // themselves with [AscomDeviceType("Telescope" | "Focuser" | …)]. Classes
+        // without the attribute (e.g. helper COM types like AxisRatesImpl) skip
+        // the Profile entry entirely.
+        private static string GetDeviceType(Type t)
+        {
+            var a = (AscomDeviceTypeAttribute)Attribute.GetCustomAttribute(t, typeof(AscomDeviceTypeAttribute));
+            return a?.DeviceType;
+        }
+
+        private static void AscomProfileRegister(string deviceType, string progId, string friendly, bool register)
         {
             Type profType = Type.GetTypeFromProgID("ASCOM.Utilities.Profile");
             if (profType == null) return;
             object profile = Activator.CreateInstance(profType);
             try
             {
-                profType.GetProperty("DeviceType").SetValue(profile, DeviceType, null);
+                profType.GetProperty("DeviceType").SetValue(profile, deviceType, null);
                 bool isReg = (bool)profType.GetMethod("IsRegistered").Invoke(profile, new object[] { progId });
                 if (register && !isReg)
                     profType.GetMethod("Register").Invoke(profile, new object[] { progId, friendly ?? progId });

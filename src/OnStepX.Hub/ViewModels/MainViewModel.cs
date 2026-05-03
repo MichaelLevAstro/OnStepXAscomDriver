@@ -29,6 +29,7 @@ namespace ASCOM.OnStepX.ViewModels
         public ConsoleViewModel Console { get; }
         public AdvancedDiagnosticsViewModel Advanced { get; }
         public VisualizerViewModel Visualizer { get; }
+        public FocuserViewModel Focuser { get; }
 
         private readonly MountSession _mount = MountSession.Instance;
         private readonly DispatcherTimer _pollTimer;
@@ -55,6 +56,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Limits.OnConnStateChanged();
                 ParkHome.OnConnStateChanged();
                 Console.OnConnStateChanged();
+                Focuser.OnConnStateChanged();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -83,6 +85,7 @@ namespace ASCOM.OnStepX.ViewModels
             Console    = new ConsoleViewModel(this);
             Advanced   = new AdvancedDiagnosticsViewModel();
             Visualizer = new VisualizerViewModel();
+            Focuser    = new FocuserViewModel(this);
 
             AppTitle = "OnStepX ASCOM Driver";
             AppVersion = GetVersionString();
@@ -138,6 +141,8 @@ namespace ASCOM.OnStepX.ViewModels
                 catch (Exception ex) { TransportLogger.Note("Auto-sync time failed: " + ex.Message); }
             }
             ReapplyAdvancedSettingsOnConnect();
+            try { Focuser.OnConnected(); }
+            catch (Exception ex) { TransportLogger.Note("Focuser OnConnected failed: " + ex.Message); }
         }
 
         public void SetState(ConnState s)
@@ -149,6 +154,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Position.OnDisconnected();
                 Tracking.OnDisconnected();
                 Visualizer.OnDisconnected();
+                Focuser.OnDisconnected();
             }
         }
 
@@ -216,6 +222,7 @@ namespace ASCOM.OnStepX.ViewModels
             Tracking.OnPollSnapshot(st);
             Limits.OnPollSnapshot(st);
             Visualizer.OnPollSnapshot(st);
+            Focuser.OnPollSnapshot(st);
         }
 
         // Compare hub-stored site with mount site after connect, prompt if differ.

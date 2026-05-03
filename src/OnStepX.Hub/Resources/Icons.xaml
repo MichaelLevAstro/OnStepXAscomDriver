@@ -15,6 +15,9 @@
   <Geometry x:Key="Geo.Slew">M12 3 V21 M3 12 H21 M12 3 L9 6 M12 3 L15 6 M12 21 L9 18 M12 21 L15 18 M3 12 L6 9 M3 12 L6 15 M21 12 L18 9 M21 12 L18 15</Geometry>
   <Geometry x:Key="Geo.Console">M4 6 L8 10 L4 14 M12 16 H20</Geometry>
   <Geometry x:Key="Geo.Pin">M12 22 S5 15.5 5 10 A7 7 0 0 1 19 10 C19 15.5 12 22 12 22 Z M14.4 10 A2.4 2.4 0 1 1 9.6 10 A2.4 2.4 0 1 1 14.4 10 Z</Geometry>
+  <!-- Focuser: a draw-tube outline with internal stops + bidirectional motion arrows.
+       24x24 viewBox, stroke-only, matches the Geo.Telescope/Geo.Tracking aesthetic. -->
+  <Geometry x:Key="Geo.Focuser">M4 9 H20 V15 H4 Z M9 9 V15 M15 9 V15 M2 12 L5 12 M19 12 L22 12 M3 10 L5 12 L3 14 M21 10 L19 12 L21 14</Geometry>
 
   <!-- Window chrome glyphs -->
   <Geometry x:Key="Geo.WinMin">M1 5 H9</Geometry>
