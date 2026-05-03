@@ -16,6 +16,7 @@ namespace ASCOM.OnStepX.Driver
     [ClassInterface(ClassInterfaceType.None)]
     [ProgId("ASCOM.OnStepX.Telescope")]
     [ServedClassName("OnStepX Telescope Driver")]
+    [AscomDeviceType("Telescope")]
     public class Telescope : ITelescopeV3, IDisposable
     {
         private PipeTransport _transport;

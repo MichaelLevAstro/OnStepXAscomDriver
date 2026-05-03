@@ -6,8 +6,8 @@
         xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="OnStepX ASCOM Driver"
-        Width="980" Height="780"
-        MinWidth="900" MinHeight="600"
+        Width="1280" Height="780"
+        MinWidth="1100" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Brush.Bg}"
         Foreground="{DynamicResource Brush.Text}"
@@ -37,9 +37,10 @@
            the body so the body fills remaining space). -->
       <c:ConsoleView DockPanel.Dock="Bottom" DataContext="{Binding Console}"/>
 
-      <!-- Two-column section grid -->
+      <!-- Three-column section grid: LEFT (mount config) | MIDDLE (mount live ops) | RIGHT (focuser, future devices). -->
       <Grid>
         <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -391,6 +392,160 @@
                              Pulsing="{Binding ClientCountPulse}"
                              Text="{Binding ClientCountText}"
                              Margin="4,8,0,0"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Border>
+
+        <!-- THIRD column: focuser + future device sections (rotator, dome, weather…). -->
+        <Border Grid.Column="2" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1,0,0,0">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
+            <StackPanel>
+              <!-- ───── Focuser ───── -->
+              <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
+                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <c:Section.HeaderRight>
+                  <c:StatusBadge Status="{Binding Focuser.StatusKind}"
+                                 Pulsing="{Binding Focuser.StatusPulse}"
+                                 Text="{Binding Focuser.StatusText}"/>
+                </c:Section.HeaderRight>
+                <c:Section.Body>
+                  <StackPanel>
+                    <!-- Focuser # selector — only shown when more than one is detected. -->
+                    <Grid Margin="0,0,0,6"
+                          Visibility="{Binding Focuser.FocuserSelectionVisible, Converter={StaticResource BoolToVis}}">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Focuser #" Style="{StaticResource Text.Label}"/>
+                      <ComboBox Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                                ItemsSource="{Binding Focuser.FocuserOptions}"
+                                SelectedItem="{Binding Focuser.ActiveIndex}"
+                                IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Position readout (live, polled). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Position" Style="{StaticResource Text.Label}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Focuser.Position}" Style="{StaticResource Text.Mono}" Margin="0,0,8,0"/>
+                      <TextBlock Grid.Column="2" Text="{Binding Focuser.PositionMm}" Style="{StaticResource Text.Hint}"/>
+                    </Grid>
+
+                    <!-- Goto target. -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Goto" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                    Min="{Binding Focuser.MinSteps}" Max="{Binding Focuser.MaxSteps}" Step="1" DecimalPlaces="0"
+                                    Value="{Binding Focuser.TargetPosition}"
+                                    IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                      <Button Grid.Column="2" Style="{StaticResource Btn.SmPrimary}"
+                              Content="Goto" Command="{Binding Focuser.GotoCommand}" Margin="6,0,0,0"/>
+                    </Grid>
+
+                    <!-- Manual move + halt. Each click moves StepSize via :Fr[±N]#. -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Move" Style="{StaticResource Text.Label}"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource Btn.Sm}" Content="◀ In"  Command="{Binding Focuser.MoveInCommand}"  Margin="0,0,4,0"/>
+                        <Button Style="{StaticResource Btn.SmPrimary}" Content="Halt" Command="{Binding Focuser.HaltCommand}" Margin="0,0,4,0"/>
+                        <Button Style="{StaticResource Btn.Sm}" Content="Out ▶" Command="{Binding Focuser.MoveOutCommand}"/>
+                      </StackPanel>
+                    </Grid>
+
+                    <!-- Step size (per-click, in motor steps). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Step" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                    Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                    Value="{Binding Focuser.StepSize}"
+                                    IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Rate (governs In/Out, Goto, Go Home — OnStepX goto-rate presets 5..9). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Rate" Style="{StaticResource Text.Label}"/>
+                      <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                                ItemsSource="{Binding Focuser.GotoRateOptions}"
+                                DisplayMemberPath="Label"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding Focuser.GotoRatePreset}"
+                                IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Home / zero. -->
+                    <UniformGrid Columns="3" Margin="0,0,0,6">
+                      <Button Content="Set Home" Command="{Binding Focuser.SetHomeCommand}" Margin="0,0,3,0"/>
+                      <Button Content="Go Home"  Command="{Binding Focuser.GoHomeCommand}"  Margin="3,0,3,0"/>
+                      <Button Content="Zero"     Command="{Binding Focuser.ZeroCommand}"    Margin="3,0,0,0"/>
+                    </UniformGrid>
+
+                    <!-- Backlash. -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Backlash" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                                    Min="0" Max="10000" Step="1" DecimalPlaces="0"
+                                    Value="{Binding Focuser.Backlash}"
+                                    IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                      <Button Grid.Column="2" Style="{StaticResource Btn.Sm}"
+                              Content="Apply" Command="{Binding Focuser.ApplyBacklashCommand}" Margin="6,0,0,0"/>
+                    </Grid>
+
+                    <!-- Limits readout (firmware-owned, read-only). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Limits" Style="{StaticResource Text.Label}"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <TextBlock Text="min " Style="{StaticResource Text.Hint}"/>
+                        <TextBlock Text="{Binding Focuser.MinSteps}" Style="{StaticResource Text.Mono}" Margin="0,0,12,0"/>
+                        <TextBlock Text="max " Style="{StaticResource Text.Hint}"/>
+                        <TextBlock Text="{Binding Focuser.MaxSteps}" Style="{StaticResource Text.Mono}"/>
+                      </StackPanel>
+                    </Grid>
+
+                    <!-- Temperature + TCF. -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Temp" Style="{StaticResource Text.Label}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Focuser.TemperatureText}" Style="{StaticResource Text.Mono}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,6"
+                          IsEnabled="{Binding Focuser.TempCompAvailable}">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="TCF" Style="{StaticResource Text.Label}"/>
+                      <CheckBox Grid.Column="1" Content="Enabled"
+                                IsChecked="{Binding Focuser.TempCompEnabled}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,0"
+                          IsEnabled="{Binding Focuser.TempCompAvailable}">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Coeff (μm/°C)" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="72"
+                                    Min="0" Max="999" Step="0.5" DecimalPlaces="2"
+                                    Value="{Binding Focuser.TcfCoeff}"
+                                    IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                      <TextBlock Grid.Column="2" Text="band" Style="{StaticResource Text.Label}" Margin="8,0,4,0"/>
+                      <c:NumericBox Grid.Column="3" Width="64"
+                                    Min="1" Max="10000" Step="1" DecimalPlaces="0"
+                                    Value="{Binding Focuser.TcfDeadband}"
+                                    IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+                      <Button Grid.Column="5" Style="{StaticResource Btn.Sm}"
+                              Content="Apply" Command="{Binding Focuser.ApplyTcfCommand}"/>
+                    </Grid>
+                  </StackPanel>
+                </c:Section.Body>
+              </c:Section>
+
+              <!-- Hint card when no focuser is configured on the board. -->
+              <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
+                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                <c:Section.Body>
+                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                             Text="No focuser detected on this OnStepX board. Enable AXIS4_DRIVER_MODEL (or higher) in the firmware Config.h and reflash to use a focuser here."/>
+                </c:Section.Body>
+              </c:Section>
             </StackPanel>
           </ScrollViewer>
         </Border>

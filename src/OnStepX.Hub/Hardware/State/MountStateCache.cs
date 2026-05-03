@@ -30,12 +30,33 @@ namespace ASCOM.OnStepX.Hardware.State
         public double Axis1Deg = double.NaN;
         public double Axis2Deg = double.NaN;
 
+        // Focuser snapshot. FocuserAvailable + FocuserCount are probed once at
+        // connect (see TryProbeFocuser); the per-tick fields are refreshed on a
+        // 4× slower cadence than the main mount poll because focuser state
+        // changes are infrequent and an extra ~3 round-trips per cycle would
+        // bite into UI responsiveness.
+        public bool FocuserAvailable;
+        public int  FocuserCount;        // 0..6 detected at connect
+        public int  FocuserActiveIndex;  // last known firmware-active focuser
+        public int  FocuserPosition;     // steps
+        public bool FocuserMoving;
+        public double FocuserTempC = double.NaN;
+
         public event EventHandler Updated;
 
         private readonly LX200Protocol _p;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _pollTask;
         private int _pollMs;
+        private int _focuserPollTick; // counter for slow-cadence focuser ride-along
+
+        // Lazy re-probe budget. On a cold mount boot the focuser axis often
+        // isn't ready when MountSession declares the mount responsive (:GVP#
+        // returned), so the initial :Fa# can come back empty even though
+        // the axis is enabled in firmware. We retry from inside the poll loop
+        // until either we find a focuser or burn through this counter.
+        private int _focuserLateProbeAttempts;
+        private const int FocuserLateProbeMaxAttempts = 30; // ~30 cycles × 750 ms ≈ 22 s
 
         // 750ms is a good middle ground: each poll cycle issues ~7 serial round-trips
         // (~200ms total), so tighter intervals starve UI-thread commands of lock time
@@ -55,7 +76,66 @@ namespace ASCOM.OnStepX.Hardware.State
         public void Start()
         {
             if (_pollTask != null) return;
+            RunInitialFocuserProbe();
             _pollTask = Task.Run(() => PollLoop(_cts.Token));
+        }
+
+        // Probe how many focusers are configured by walking :FA[1..6]#. The
+        // last index that accepts the select is the count. Restores the prior
+        // active index. Returns true on a successful detection (focuser
+        // present), false when :Fa# reported zero or the wire didn't answer.
+        private bool TryProbeFocuser()
+        {
+            try
+            {
+                if (!_p.HasAnyFocuser())
+                {
+                    FocuserAvailable = false;
+                    FocuserCount = 0;
+                    return false;
+                }
+                int prior = 1;
+                try { prior = _p.GetActiveFocuser(); if (prior < 1 || prior > 6) prior = 1; } catch { }
+                int found = 0;
+                for (int i = 1; i <= 6; i++)
+                {
+                    bool ok = false;
+                    try { ok = _p.SetActiveFocuser(i); } catch { }
+                    if (ok) found = i;
+                    else break; // OnStepX rejects the first absent index — stop probing.
+                }
+                if (found < 1) found = 1; // :Fa# said yes; trust at least 1.
+                FocuserAvailable = true;
+                FocuserCount = found;
+                try { _p.SetActiveFocuser(prior >= 1 && prior <= found ? prior : 1); } catch { }
+                FocuserActiveIndex = prior >= 1 && prior <= found ? prior : 1;
+                DebugLogger.Log("FOCUSER", "probe found=" + found + " restored active=" + FocuserActiveIndex);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.LogException("FOCUSER", ex);
+                FocuserAvailable = false;
+                FocuserCount = 0;
+                return false;
+            }
+        }
+
+        // Initial-connect probe: try a few times back-to-back with short gaps
+        // to catch the common case where :Fa# answers empty for the first one
+        // or two queries after the firmware comes online. Failures here arm
+        // the lazy re-probe in the poll loop.
+        private void RunInitialFocuserProbe()
+        {
+            const int initialAttempts = 6;
+            for (int i = 0; i < initialAttempts; i++)
+            {
+                if (TryProbeFocuser()) { _focuserLateProbeAttempts = 0; return; }
+                try { Thread.Sleep(500); } catch { }
+            }
+            _focuserLateProbeAttempts = FocuserLateProbeMaxAttempts;
+            DebugLogger.Log("FOCUSER", "initial probe empty after " + initialAttempts +
+                            " attempts; lazy retry armed (" + FocuserLateProbeMaxAttempts + " cycles)");
         }
 
         public void Stop()
@@ -117,6 +197,41 @@ namespace ASCOM.OnStepX.Hardware.State
                     AtHome   = raw.IndexOf('H') >= 0;
                     AutoMeridianFlip = raw.IndexOf('a') >= 0;
                     TrackingMode = ClassifyTrackingRate(rateHz);
+
+                    // Lazy re-probe for cold-boot mounts where the focuser
+                    // axis comes online after the initial :Fa# query. Runs
+                    // each cycle until we either find a focuser or burn the
+                    // attempt budget.
+                    if (!FocuserAvailable && _focuserLateProbeAttempts > 0)
+                    {
+                        _focuserLateProbeAttempts--;
+                        if (TryProbeFocuser())
+                        {
+                            DebugLogger.Log("FOCUSER",
+                                "late probe succeeded with " + _focuserLateProbeAttempts + " cycles remaining");
+                            _focuserLateProbeAttempts = 0;
+                        }
+                    }
+
+                    // Focuser ride-along — every 4th cycle (~3 s at 750 ms) when
+                    // a focuser is present. Each value is independently guarded
+                    // so a single firmware hiccup doesn't take all three down.
+                    if (FocuserAvailable)
+                    {
+                        _focuserPollTick = (_focuserPollTick + 1) & 0x03;
+                        if (_focuserPollTick == 0)
+                        {
+                            try { FocuserPosition = _p.GetFocuserPositionSteps(); } catch { }
+                            try
+                            {
+                                var ft = _p.GetFocuserStatus();
+                                ft = string.IsNullOrEmpty(ft) ? "" : ft.TrimEnd('#');
+                                FocuserMoving = ft.Length > 0 && (ft[0] == 'M' || ft[0] == 'm');
+                            }
+                            catch { }
+                            try { FocuserTempC = _p.GetFocuserTemperatureC(); } catch { }
+                        }
+                    }
 
                     LastUpdateUtc = DateTime.UtcNow;
                     Updated?.Invoke(this, EventArgs.Empty);

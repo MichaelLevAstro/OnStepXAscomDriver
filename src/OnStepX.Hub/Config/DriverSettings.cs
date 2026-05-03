@@ -50,6 +50,13 @@ namespace ASCOM.OnStepX.Config
         // Auto-switch tracking rate to match Sun/Moon/planet target.
         public static bool   AutoSwitchPlanetTrackingRate { get => GetBool("AutoSwitchPlanetTrackingRate", true); set => SetBool("AutoSwitchPlanetTrackingRate", value); }
 
+        // Focuser preferences. Backlash / TCF coefficients live in firmware NV;
+        // hub reads on connect, writes through on edit, no caching here.
+        public static int    FocuserDefaultIndex { get => GetInt("FocuserDefaultIndex", 1); set => SetInt("FocuserDefaultIndex", value); }
+        public static bool   FocuserAutoExpand   { get => GetBool("FocuserAutoExpand", true); set => SetBool("FocuserAutoExpand", value); }
+        // Per-click step size for the FOCUSER section In/Out buttons.
+        public static int    FocuserStepSize     { get => GetInt("FocuserStepSize", 100); set => SetInt("FocuserStepSize", value); }
+
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
 
         // Longitude on-disk convention. Pre-1: west-positive (raw wire).

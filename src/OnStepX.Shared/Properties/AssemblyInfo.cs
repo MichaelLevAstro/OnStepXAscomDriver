@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 
 // Driver + Hub are the only intended consumers of internal types (LX200Protocol,
 // CoordFormat, ITransport, PipeTransport, TransportLogger).
-[assembly: InternalsVisibleTo("ASCOM.OnStepX.Telescope")]
+[assembly: InternalsVisibleTo("ASCOM.OnStepX")]
 [assembly: InternalsVisibleTo("OnStepX.Hub")]

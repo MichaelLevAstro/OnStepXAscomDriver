@@ -349,6 +349,17 @@ namespace ASCOM.OnStepX.Hardware
             return v;
         }
 
+        // Tolerant integer parse: handles signed digits, ignores extra trailing
+        // chars (e.g. firmware sending "12345#extra"). Returns 0 on empty or
+        // non-numeric reply — callers treat 0 as a missing reading.
+        private static int ParseInt(string s)
+        {
+            s = Digits(s);
+            if (string.IsNullOrEmpty(s)) return 0;
+            int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v);
+            return v;
+        }
+
         // ---------- Guide rate (custom) ----------
         public bool SetGuideRateMultiplier(double xSidereal) =>
             Bool(_transport.SendAndReceive(string.Format(CultureInfo.InvariantCulture, ":SX90,{0:0.00}#", xSidereal)));
@@ -358,6 +369,63 @@ namespace ASCOM.OnStepX.Hardware
             double.TryParse(Strip(s), NumberStyles.Float, CultureInfo.InvariantCulture, out var v);
             return v;
         }
+
+        // ---------- Focuser ----------
+        // OnStepX command set: src/telescope/focuser/local/Focuser.command.cpp
+        // All ":F…#" commands address the firmware-active focuser. ":FA[n]#"
+        // selects which of the up to 6 focusers (AXIS4..AXIS9) is active. The
+        // ASCOM Focuser driver always uses the bare commands; the Hub UI owns
+        // the active-focuser dropdown.
+        //
+        // Case sensitivity matters: uppercase = microns, lowercase = steps.
+        // The ASCOM IFocuserV3 surface speaks steps, so prefer the lowercase
+        // variants for position get/set.
+
+        public bool   HasAnyFocuser()        => Strip(_transport.SendAndReceive(":Fa#")) == "1";
+        public int    GetActiveFocuser()     => ParseInt(_transport.SendAndReceive(":FA#"));
+        public bool   SetActiveFocuser(int n) =>
+            n >= 1 && n <= 6 && Bool(_transport.SendAndReceive(":FA" + n.ToString(CultureInfo.InvariantCulture) + "#"));
+        public string GetFocuserStatus()     => _transport.SendAndReceive(":FT#");
+
+        public int  GetFocuserPositionSteps() => ParseInt(_transport.SendAndReceive(":Fg#"));
+        public bool SetFocuserPositionSteps(int steps) =>
+            Bool(_transport.SendAndReceive(":Fs" + steps.ToString(CultureInfo.InvariantCulture) + "#"));
+        // :Fr[sn]# requires an explicit sign on the integer (Meade convention).
+        // Format with "+0;-0" so positive deltas get the leading '+'.
+        public bool SetFocuserPositionRelativeSteps(int delta) =>
+            Bool(_transport.SendAndReceive(":Fr" + delta.ToString("+0;-0", CultureInfo.InvariantCulture) + "#"));
+
+        public void FocuserMoveIn()      => _transport.SendBlind(":F+#");
+        public void FocuserMoveOut()     => _transport.SendBlind(":F-#");
+        public void FocuserHalt()        => _transport.SendBlind(":FQ#");
+        public bool SetFocuserRatePreset(int preset) =>
+            preset >= 1 && preset <= 9 &&
+            Bool(_transport.SendAndReceive(":F" + preset.ToString(CultureInfo.InvariantCulture) + "#"));
+
+        public void FocuserZero()        => _transport.SendBlind(":FZ#");
+        public void FocuserSetHomeHere() => _transport.SendBlind(":FH#");
+        public void FocuserGoHome()      => _transport.SendBlind(":Fh#");
+
+        public int    GetFocuserMinSteps()       => ParseInt(_transport.SendAndReceive(":Fi#"));
+        public int    GetFocuserMaxSteps()       => ParseInt(_transport.SendAndReceive(":Fm#"));
+        public double GetFocuserMicronsPerStep() => ParseDouble(_transport.SendAndReceive(":Fu#"));
+        public int    GetFocuserBacklashSteps()  => ParseInt(_transport.SendAndReceive(":Fb#"));
+        public bool   SetFocuserBacklashSteps(int steps) =>
+            Bool(_transport.SendAndReceive(":Fb" + steps.ToString(CultureInfo.InvariantCulture) + "#"));
+
+        // Temperature compensation. :Ft# returns NaN-equivalent text when no
+        // sensor is wired — callers must treat 0 / parse failure as "not
+        // available" and gate TempCompAvailable accordingly.
+        public double GetFocuserTemperatureC() => ParseDouble(_transport.SendAndReceive(":Ft#"));
+        public bool   GetFocuserTcfEnabled()   => Strip(_transport.SendAndReceive(":Fc#")) == "1";
+        public bool   SetFocuserTcfEnabled(bool on) =>
+            Bool(_transport.SendAndReceive(":Fc" + (on ? "1" : "0") + "#"));
+        public double GetFocuserTcfCoeffUmPerC() => ParseDouble(_transport.SendAndReceive(":FC#"));
+        public bool   SetFocuserTcfCoeffUmPerC(double umPerC) =>
+            Bool(_transport.SendAndReceive(":FC" + umPerC.ToString("0.000", CultureInfo.InvariantCulture) + "#"));
+        public int    GetFocuserTcfDeadbandSteps() => ParseInt(_transport.SendAndReceive(":Fd#"));
+        public bool   SetFocuserTcfDeadbandSteps(int steps) =>
+            Bool(_transport.SendAndReceive(":Fd" + steps.ToString(CultureInfo.InvariantCulture) + "#"));
 
         // ---------- Parsers ----------
         private static bool Bool(string reply)
