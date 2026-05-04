@@ -7,13 +7,17 @@ If it doesn't, but you like the driver and would like it to, open up an issue st
 Windows ASCOM Telescope driver + mediator app for OnStepX mounts. The driver is an in-process ASCOM shim; the hub is a standalone WinForms app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
 
 ## Important note
-Currently there is no focuser, rotator or weather support, since i dont use them.
-But if demand will be high, i will implement.
+Currently there is no switch, auxillary functions or weather support.
 
 <img width="1226" height="1381" alt="image" src="https://github.com/user-attachments/assets/4226c6a1-b45b-4b3e-9d4e-f42e935a9360" />
+
 <img width="1225" height="1379" alt="image" src="https://github.com/user-attachments/assets/2b52c40b-ed8e-461e-a55c-26e7be4ff6a0" />
+
 <img width="965" height="745" alt="image" src="https://github.com/user-attachments/assets/bbfb1c6b-22d9-495d-9871-19682078094a" />
+
 <img width="967" height="642" alt="image" src="https://github.com/user-attachments/assets/87020df3-98e4-4f49-9eae-6512e3d65a4a" />
+
+<img width="522" height="1095" alt="image" src="https://github.com/user-attachments/assets/729ea97a-9a58-4d17-98f3-abca6e4de25d" />
 
 # Features
 - Manual slewing
@@ -22,6 +26,7 @@ But if demand will be high, i will implement.
 - Sites: Save site locations in the app (not saved in mount due to 3 sites limitation)
 - GOTO: Common catalogs added (Planets, Messier, NGC etc...)
 - 3D Visualizer
+- And more!
 
 # Install
 Go to Install folder, and run installer, done :)
