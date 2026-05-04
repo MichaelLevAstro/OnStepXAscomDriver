@@ -30,6 +30,12 @@ namespace ASCOM.OnStepX.ViewModels
         public AdvancedDiagnosticsViewModel Advanced { get; }
         public VisualizerViewModel Visualizer { get; }
         public FocuserViewModel Focuser { get; }
+        public RotatorViewModel Rotator { get; }
+
+        // Drives the third-column collapse when the firmware exposes neither
+        // focuser nor rotator. MainWindow listens to PropertyChanged on this
+        // to resize the window between 3-column and 2-column widths.
+        public bool Show3rdColumn => Focuser.IsAvailable || Rotator.IsAvailable;
 
         private readonly MountSession _mount = MountSession.Instance;
         private readonly DispatcherTimer _pollTimer;
@@ -57,6 +63,7 @@ namespace ASCOM.OnStepX.ViewModels
                 ParkHome.OnConnStateChanged();
                 Console.OnConnStateChanged();
                 Focuser.OnConnStateChanged();
+                Rotator.OnConnStateChanged();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -86,6 +93,19 @@ namespace ASCOM.OnStepX.ViewModels
             Advanced   = new AdvancedDiagnosticsViewModel();
             Visualizer = new VisualizerViewModel();
             Focuser    = new FocuserViewModel(this);
+            Rotator    = new RotatorViewModel(this);
+
+            // Re-emit Show3rdColumn whenever either child availability flips.
+            Focuser.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(FocuserViewModel.IsAvailable))
+                    OnPropertyChanged(nameof(Show3rdColumn));
+            };
+            Rotator.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(RotatorViewModel.IsAvailable))
+                    OnPropertyChanged(nameof(Show3rdColumn));
+            };
 
             AppTitle = "OnStepX ASCOM Driver";
             AppVersion = GetVersionString();
@@ -143,6 +163,8 @@ namespace ASCOM.OnStepX.ViewModels
             ReapplyAdvancedSettingsOnConnect();
             try { Focuser.OnConnected(); }
             catch (Exception ex) { TransportLogger.Note("Focuser OnConnected failed: " + ex.Message); }
+            try { Rotator.OnConnected(); }
+            catch (Exception ex) { TransportLogger.Note("Rotator OnConnected failed: " + ex.Message); }
         }
 
         public void SetState(ConnState s)
@@ -155,6 +177,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Tracking.OnDisconnected();
                 Visualizer.OnDisconnected();
                 Focuser.OnDisconnected();
+                Rotator.OnDisconnected();
             }
         }
 
@@ -223,6 +246,7 @@ namespace ASCOM.OnStepX.ViewModels
             Limits.OnPollSnapshot(st);
             Visualizer.OnPollSnapshot(st);
             Focuser.OnPollSnapshot(st);
+            Rotator.OnPollSnapshot(st);
         }
 
         // Compare hub-stored site with mount site after connect, prompt if differ.

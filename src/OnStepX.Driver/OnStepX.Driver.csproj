@@ -14,8 +14,8 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Product>OnStepX</Product>
     <Company>OnStepX Community</Company>
-    <AssemblyTitle>ASCOM OnStepX Drivers (Telescope + Focuser)</AssemblyTitle>
-    <Description>ASCOM InprocServer drivers for OnStepX mounts and focusers — pipe to OnStepX.Hub.</Description>
+    <AssemblyTitle>ASCOM OnStepX Drivers (Telescope + Focuser + Rotator)</AssemblyTitle>
+    <Description>ASCOM InprocServer drivers for OnStepX mounts, focusers, and rotators — pipe to OnStepX.Hub.</Description>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <LangVersion>9.0</LangVersion>
     <EnableComHosting>false</EnableComHosting>

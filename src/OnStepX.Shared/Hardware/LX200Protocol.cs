@@ -427,6 +427,90 @@ namespace ASCOM.OnStepX.Hardware
         public bool   SetFocuserTcfDeadbandSteps(int steps) =>
             Bool(_transport.SendAndReceive(":Fd" + steps.ToString(CultureInfo.InvariantCulture) + "#"));
 
+        // ---------- Rotator ----------
+        // OnStepX command set: src/telescope/rotator/local/Rotator.command.cpp
+        // AXIS3 in firmware. Angles travel in DMS (sDDD*MM) on the wire. The
+        // ASCOM IRotatorV3 surface speaks 0..360° degrees; the driver normalizes
+        // around this protocol layer.
+
+        public bool   HasRotator()                  => Strip(_transport.SendAndReceive(":rA#")) == "1";
+        // :GX98# capability:  D = derotate-capable (AltAz), R = rotate-only,
+        // N = none / "" if firmware doesn't recognize the query.
+        public string GetRotatorCapability()        => Strip(_transport.SendAndReceive(":GX98#"));
+
+        // :rG# returns "sDDD*MM#" (no seconds in current OnStepX). Returns NaN
+        // on parse failure — caller treats NaN as "no reading".
+        public double GetRotatorAngleDeg()
+        {
+            var s = _transport.SendAndReceive(":rG#");
+            return CoordFormat.TryParseDegrees(s, out var v) ? v : double.NaN;
+        }
+
+        // :rS<sDDD*MM># goto absolute. OnStepX firmware parses %d*%d for the
+        // rotator (no seconds component on this axis); reuse the integer-second
+        // formatter and trim to 2-part to keep firmware happy.
+        public bool SetRotatorAngleDeg(double deg) =>
+            Bool(_transport.SendAndReceive(":rS" + FormatRotatorAngle(deg) + "#"));
+
+        // :rr<sDDD*MM># goto relative. Same 2-part wire format as :rS.
+        public bool SetRotatorAngleRelativeDeg(double deg) =>
+            Bool(_transport.SendAndReceive(":rr" + FormatRotatorAngle(deg) + "#"));
+
+        public void RotatorJogCw()    => _transport.SendBlind(":r>#");
+        public void RotatorJogCcw()   => _transport.SendBlind(":r<#");
+        public void RotatorHalt()     => _transport.SendBlind(":rQ#");
+
+        // :rT# raw status: "[M|S][D][R][1-5]#" — moving, derotating, derot
+        // reversed, current goto-rate digit. Caller parses via RotatorStatus.
+        public string GetRotatorStatusRaw() => _transport.SendAndReceive(":rT#");
+
+        public void RotatorZero()         => _transport.SendBlind(":rZ#");
+        public void RotatorSetHalfTravel()=> _transport.SendBlind(":rF#");
+        public void RotatorGoHome()       => _transport.SendBlind(":rC#");
+
+        // :r1#..:r4# select the move-rate band (used by jog CCW/CW), :r5#..:r9#
+        // select the goto-rate band (used by :rS/:rr). Firmware accepts both as
+        // blind single-character commands with no reply.
+        public bool SetRotatorMoveRatePreset(int preset)
+        {
+            if (preset < 1 || preset > 4) return false;
+            _transport.SendBlind(":r" + preset.ToString(CultureInfo.InvariantCulture) + "#");
+            return true;
+        }
+        public bool SetRotatorGotoRatePreset(int preset)
+        {
+            if (preset < 5 || preset > 9) return false;
+            _transport.SendBlind(":r" + preset.ToString(CultureInfo.InvariantCulture) + "#");
+            return true;
+        }
+
+        public double GetRotatorWorkingSlewRate() => ParseDouble(_transport.SendAndReceive(":rW#"));
+        public int    GetRotatorMinDeg()          => ParseInt(_transport.SendAndReceive(":rI#"));
+        public int    GetRotatorMaxDeg()          => ParseInt(_transport.SendAndReceive(":rM#"));
+        public double GetRotatorDegPerStep()      => ParseDouble(_transport.SendAndReceive(":rD#"));
+        public int    GetRotatorBacklashSteps()   => ParseInt(_transport.SendAndReceive(":rb#"));
+        public bool   SetRotatorBacklashSteps(int steps) =>
+            Bool(_transport.SendAndReceive(":rb" + steps.ToString(CultureInfo.InvariantCulture) + "#"));
+
+        // Derotator (AltAz parallactic angle tracking). :r+# / :r-# blind.
+        public void EnableDerotator(bool on) => _transport.SendBlind(on ? ":r+#" : ":r-#");
+        // :rR# is a toggle, not an absolute set — firmware has no read-back of
+        // derotator-reverse state; the caller mirrors it from :rT# parsing.
+        public void RotatorReverseToggle()       => _transport.SendBlind(":rR#");
+        public void RotatorGotoParallactic()     => _transport.SendBlind(":rP#");
+
+        // 2-part DMS for the rotator wire. OnStepX rotator parser doesn't
+        // accept the 3-part "sDD*MM:SS" used elsewhere; trim to "sDDD*MM".
+        private static string FormatRotatorAngle(double deg)
+        {
+            char sign = deg < 0 ? '-' : '+';
+            deg = Math.Abs(deg);
+            int d = (int)deg;
+            int m = (int)Math.Round((deg - d) * 60.0);
+            if (m >= 60) { m = 0; d++; }
+            return string.Format(CultureInfo.InvariantCulture, "{0}{1:000}*{2:00}", sign, d, m);
+        }
+
         // ---------- Parsers ----------
         private static bool Bool(string reply)
         {
@@ -476,5 +560,33 @@ namespace ASCOM.OnStepX.Hardware
         AtHome          = 1 << 5,
         WaitingAtHome   = 1 << 6,
         PauseAtHome     = 1 << 7,
+    }
+
+    // Parsed view of the :rT# rotator status reply. Wire format: a single
+    // character M (moving) or S (stopped), optionally followed by D (derotator
+    // enabled), R (derot reversed), and a digit 1..9 (current rate band).
+    internal struct RotatorStatus
+    {
+        public bool Moving;
+        public bool Derotating;
+        public bool DerotReversed;
+        public int  RatePreset;
+
+        public static RotatorStatus Parse(string raw)
+        {
+            var r = new RotatorStatus();
+            if (string.IsNullOrEmpty(raw)) return r;
+            string s = raw.Trim().TrimEnd('#');
+            if (s.Length == 0) return r;
+            r.Moving = s[0] == 'M' || s[0] == 'm';
+            for (int i = 1; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == 'D') r.Derotating = true;
+                else if (c == 'R') r.DerotReversed = true;
+                else if (c >= '1' && c <= '9') r.RatePreset = c - '0';
+            }
+            return r;
+        }
     }
 }

@@ -57,6 +57,20 @@ namespace ASCOM.OnStepX.Config
         // Per-click step size for the FOCUSER section In/Out buttons.
         public static int    FocuserStepSize     { get => GetInt("FocuserStepSize", 100); set => SetInt("FocuserStepSize", value); }
 
+        // Rotator preferences. Reverse + sync offset are driver-side state
+        // (ASCOM IRotatorV3.Reverse / Sync). Persisted on the same registry
+        // root so the in-proc driver and the hub share one config surface.
+        public static bool   RotatorReverse      { get => GetBool("RotatorReverse", false); set => SetBool("RotatorReverse", value); }
+        public static double RotatorSyncOffsetDeg{ get => GetDouble("RotatorSyncOffsetDeg", 0.0); set => SetDouble("RotatorSyncOffsetDeg", value); }
+        // Rate combo selections survive disconnect/reconnect.
+        public static int    RotatorMoveRatePreset { get => GetInt("RotatorMoveRatePreset", 3); set => SetInt("RotatorMoveRatePreset", value); }
+        public static int    RotatorGotoRatePreset { get => GetInt("RotatorGotoRatePreset", 7); set => SetInt("RotatorGotoRatePreset", value); }
+        // Last displayed rotator angle (degrees, 0..360). Saved on each poll;
+        // OnStepX firmware only persists position to NV when explicitly parked,
+        // so cold boots typically come back at 0°. The Hub uses this to offer
+        // a one-click "Restore last angle" sync after such a power cycle.
+        public static double RotatorLastAngleDeg { get => GetDouble("RotatorLastAngleDeg", double.NaN); set => SetDouble("RotatorLastAngleDeg", value); }
+
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
 
         // Longitude on-disk convention. Pre-1: west-positive (raw wire).

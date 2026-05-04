@@ -18,6 +18,9 @@
   <!-- Focuser: a draw-tube outline with internal stops + bidirectional motion arrows.
        24x24 viewBox, stroke-only, matches the Geo.Telescope/Geo.Tracking aesthetic. -->
   <Geometry x:Key="Geo.Focuser">M4 9 H20 V15 H4 Z M9 9 V15 M15 9 V15 M2 12 L5 12 M19 12 L22 12 M3 10 L5 12 L3 14 M21 10 L19 12 L21 14</Geometry>
+  <!-- Rotator: open circular arrow with two arrowheads — bidirectional rotation.
+       Same 24x24 stroke aesthetic as Geo.Focuser / Geo.Tracking. -->
+  <Geometry x:Key="Geo.Rotator">M19 12 A7 7 0 1 1 12 5 M19 12 L21 9 M19 12 L16 13 M12 5 L9 3 M12 5 L11 8</Geometry>
 
   <!-- Window chrome glyphs -->
   <Geometry x:Key="Geo.WinMin">M1 5 H9</Geometry>

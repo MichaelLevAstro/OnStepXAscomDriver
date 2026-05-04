@@ -42,6 +42,23 @@ namespace ASCOM.OnStepX.Hardware.State
         public bool FocuserMoving;
         public double FocuserTempC = double.NaN;
 
+        // Rotator snapshot. Probed once at connect; per-tick fields (angle,
+        // moving, derot state) ride along on the same 4× slow cadence as the
+        // focuser fields. Only one rotator on AXIS3 (no equivalent of focuser
+        // 1..6 walk). Capability is "D" derotate-capable, "R" rotate-only,
+        // or "" / "N" if firmware doesn't expose :GX98#.
+        public bool   RotatorAvailable;
+        public string RotatorCapability = "";
+        public double RotatorAngleDeg = double.NaN;
+        public bool   RotatorMoving;
+        public bool   RotatorDerotating;
+        public bool   RotatorDerotReversed;
+        public int    RotatorRatePreset;
+        public int    RotatorMinDeg;
+        public int    RotatorMaxDeg;
+        public double RotatorStepSizeDeg;
+        public int    RotatorBacklashSteps;
+
         public event EventHandler Updated;
 
         private readonly LX200Protocol _p;
@@ -57,6 +74,12 @@ namespace ASCOM.OnStepX.Hardware.State
         // until either we find a focuser or burn through this counter.
         private int _focuserLateProbeAttempts;
         private const int FocuserLateProbeMaxAttempts = 30; // ~30 cycles × 750 ms ≈ 22 s
+
+        // Rotator parallel: same cold-boot late-probe budget. AXIS3 sometimes
+        // initializes after MountSession declares the mount responsive.
+        private int _rotatorPollTick;
+        private int _rotatorLateProbeAttempts;
+        private const int RotatorLateProbeMaxAttempts = 30;
 
         // 750ms is a good middle ground: each poll cycle issues ~7 serial round-trips
         // (~200ms total), so tighter intervals starve UI-thread commands of lock time
@@ -77,6 +100,7 @@ namespace ASCOM.OnStepX.Hardware.State
         {
             if (_pollTask != null) return;
             RunInitialFocuserProbe();
+            RunInitialRotatorProbe();
             _pollTask = Task.Run(() => PollLoop(_cts.Token));
         }
 
@@ -136,6 +160,52 @@ namespace ASCOM.OnStepX.Hardware.State
             _focuserLateProbeAttempts = FocuserLateProbeMaxAttempts;
             DebugLogger.Log("FOCUSER", "initial probe empty after " + initialAttempts +
                             " attempts; lazy retry armed (" + FocuserLateProbeMaxAttempts + " cycles)");
+        }
+
+        // Rotator analogue of TryProbeFocuser. Probes :rA# for presence then
+        // :GX98# / :rD# / :rI# / :rM# / :rb# to fill the static capability
+        // fields. No active-index walk because OnStepX exposes a single
+        // rotator on AXIS3.
+        private bool TryProbeRotator()
+        {
+            try
+            {
+                if (!_p.HasRotator())
+                {
+                    RotatorAvailable = false;
+                    return false;
+                }
+                RotatorAvailable = true;
+                try { RotatorCapability     = _p.GetRotatorCapability(); }   catch { RotatorCapability = ""; }
+                try { RotatorStepSizeDeg    = _p.GetRotatorDegPerStep(); }   catch { }
+                try { RotatorMinDeg         = _p.GetRotatorMinDeg(); }       catch { }
+                try { RotatorMaxDeg         = _p.GetRotatorMaxDeg(); }       catch { }
+                try { RotatorBacklashSteps  = _p.GetRotatorBacklashSteps(); } catch { }
+                DebugLogger.Log("ROTATOR",
+                    "probe cap='" + RotatorCapability + "' step=" +
+                    RotatorStepSizeDeg.ToString("0.000000", CultureInfo.InvariantCulture) +
+                    "° lim=[" + RotatorMinDeg + ".." + RotatorMaxDeg + "]°");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.LogException("ROTATOR", ex);
+                RotatorAvailable = false;
+                return false;
+            }
+        }
+
+        private void RunInitialRotatorProbe()
+        {
+            const int initialAttempts = 6;
+            for (int i = 0; i < initialAttempts; i++)
+            {
+                if (TryProbeRotator()) { _rotatorLateProbeAttempts = 0; return; }
+                try { Thread.Sleep(500); } catch { }
+            }
+            _rotatorLateProbeAttempts = RotatorLateProbeMaxAttempts;
+            DebugLogger.Log("ROTATOR", "initial probe empty after " + initialAttempts +
+                            " attempts; lazy retry armed (" + RotatorLateProbeMaxAttempts + " cycles)");
         }
 
         public void Stop()
@@ -230,6 +300,39 @@ namespace ASCOM.OnStepX.Hardware.State
                             }
                             catch { }
                             try { FocuserTempC = _p.GetFocuserTemperatureC(); } catch { }
+                        }
+                    }
+
+                    // Rotator lazy re-probe (cold-boot AXIS3 init).
+                    if (!RotatorAvailable && _rotatorLateProbeAttempts > 0)
+                    {
+                        _rotatorLateProbeAttempts--;
+                        if (TryProbeRotator())
+                        {
+                            DebugLogger.Log("ROTATOR",
+                                "late probe succeeded with " + _rotatorLateProbeAttempts + " cycles remaining");
+                            _rotatorLateProbeAttempts = 0;
+                        }
+                    }
+
+                    // Rotator ride-along — same 4th-cycle cadence. Angle + status
+                    // are the only frequently-changing fields; capability,
+                    // limits, step size, backlash were captured at probe time.
+                    if (RotatorAvailable)
+                    {
+                        _rotatorPollTick = (_rotatorPollTick + 1) & 0x03;
+                        if (_rotatorPollTick == 0)
+                        {
+                            try { RotatorAngleDeg = _p.GetRotatorAngleDeg(); } catch { }
+                            try
+                            {
+                                var rs = RotatorStatus.Parse(_p.GetRotatorStatusRaw());
+                                RotatorMoving        = rs.Moving;
+                                RotatorDerotating    = rs.Derotating;
+                                RotatorDerotReversed = rs.DerotReversed;
+                                RotatorRatePreset    = rs.RatePreset;
+                            }
+                            catch { }
                         }
                     }
 
