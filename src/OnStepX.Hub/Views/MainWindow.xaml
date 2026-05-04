@@ -27,6 +27,7 @@
   <Window.Resources>
     <cv:BoolToVisibilityConverter x:Key="BoolToVis"/>
     <cv:InverseBoolConverter x:Key="Invert"/>
+    <cv:BoolToGridLengthConverter x:Key="BoolToGridLen"/>
   </Window.Resources>
 
   <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1">
@@ -38,11 +39,14 @@
       <c:ConsoleView DockPanel.Dock="Bottom" DataContext="{Binding Console}"/>
 
       <!-- Three-column section grid: LEFT (mount config) | MIDDLE (mount live ops) | RIGHT (focuser, future devices). -->
+      <!-- Third column collapses to width 0 when the firmware reports no focuser
+           AND no rotator (Show3rdColumn=false). MainWindow.xaml.cs shrinks the
+           Window width to match. -->
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="{Binding Show3rdColumn, Converter={StaticResource BoolToGridLen}}"/>
         </Grid.ColumnDefinitions>
 
         <!-- LEFT pane -->
@@ -397,7 +401,8 @@
         </Border>
 
         <!-- THIRD column: focuser + future device sections (rotator, dome, weather…). -->
-        <Border Grid.Column="2" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1,0,0,0">
+        <Border Grid.Column="2" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1,0,0,0"
+                Visibility="{Binding Show3rdColumn, Converter={StaticResource BoolToVis}}">
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
             <StackPanel>
               <!-- ───── Focuser ───── -->
@@ -422,12 +427,19 @@
                     </Grid>
 
                     <!-- Position readout (live, polled). -->
-                    <Grid Margin="0,0,0,6">
+                    <Grid Margin="0,0,0,4">
                       <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                       <TextBlock Text="Position" Style="{StaticResource Text.Label}"/>
                       <TextBlock Grid.Column="1" Text="{Binding Focuser.Position}" Style="{StaticResource Text.Mono}" Margin="0,0,8,0"/>
                       <TextBlock Grid.Column="2" Text="{Binding Focuser.PositionMm}" Style="{StaticResource Text.Hint}"/>
                     </Grid>
+
+                    <!-- Position progress bar — fills 0..MaxSteps. Pure visual,
+                         no drag input. Move via Goto / In / Out below. -->
+                    <ProgressBar Margin="0,0,0,6"
+                                 Minimum="{Binding Focuser.MinSteps}"
+                                 Maximum="{Binding Focuser.MaxSteps}"
+                                 Value="{Binding Focuser.Position, Mode=OneWay}"/>
 
                     <!-- Goto target. -->
                     <Grid Margin="0,0,0,6">
@@ -544,6 +556,208 @@
                 <c:Section.Body>
                   <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
                              Text="No focuser detected on this OnStepX board. Enable AXIS4_DRIVER_MODEL (or higher) in the firmware Config.h and reflash to use a focuser here."/>
+                </c:Section.Body>
+              </c:Section>
+
+              <!-- ───── Rotator ───── -->
+              <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
+                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <c:Section.HeaderRight>
+                  <c:StatusBadge Status="{Binding Rotator.StatusKind}"
+                                 Pulsing="{Binding Rotator.StatusPulse}"
+                                 Text="{Binding Rotator.StatusText}"/>
+                </c:Section.HeaderRight>
+                <c:Section.Body>
+                  <StackPanel>
+                    <!-- Dial reticle. 0° at top, increasing clockwise. The
+                         needle is rotated by DisplayAngleDegSafe (raw + sync
+                         offset). Aesthetic mirrors the section card chrome. -->
+                    <Grid Width="130" Height="130" HorizontalAlignment="Center" Margin="0,2,0,8">
+                      <Ellipse Stroke="{DynamicResource Brush.InputBorder}" StrokeThickness="1.4"
+                               Fill="{DynamicResource Brush.InputBg}"/>
+                      <!-- Cardinal tick marks: top (0°), right (90°), bottom (180°), left (270°). -->
+                      <Path Stroke="{DynamicResource Brush.TextFaint}" StrokeThickness="1"
+                            Data="M65,5 L65,14 M125,65 L116,65 M65,125 L65,116 M5,65 L14,65"/>
+                      <!-- "0°" reference label at top inside the ring. -->
+                      <TextBlock Text="0°" FontSize="10"
+                                 Foreground="{DynamicResource Brush.TextFaint}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Top"
+                                 Margin="0,16,0,0"/>
+                      <!-- 90/180/270 mini-labels. -->
+                      <TextBlock Text="90"  FontSize="9" Foreground="{DynamicResource Brush.TextFaint}"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                      <TextBlock Text="180" FontSize="9" Foreground="{DynamicResource Brush.TextFaint}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14"/>
+                      <TextBlock Text="270" FontSize="9" Foreground="{DynamicResource Brush.TextFaint}"
+                                 HorizontalAlignment="Left"  VerticalAlignment="Center" Margin="14,0,0,0"/>
+                      <!-- Needle. Drawn pointing up from the center; rotated by
+                           DisplayAngleDegSafe so 0=up, 90=right (clockwise). -->
+                      <Path Stroke="{DynamicResource Brush.Accent}" StrokeThickness="2.4"
+                            StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                            Data="M65,65 L65,18">
+                        <Path.RenderTransform>
+                          <RotateTransform CenterX="65" CenterY="65"
+                                           Angle="{Binding Rotator.DisplayAngleDegSafe}"/>
+                        </Path.RenderTransform>
+                      </Path>
+                      <!-- Center hub dot. -->
+                      <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.Accent}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      <!-- Live readout near the bottom of the dial. -->
+                      <TextBlock Text="{Binding Rotator.AngleText}"
+                                 Style="{StaticResource Text.Mono}" FontSize="14"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Margin="0,46,0,0"/>
+                    </Grid>
+
+                    <!-- Restore-last-angle card — appears only after a cold-boot
+                         pattern (firmware reports ~0° while the registry has a
+                         non-zero saved value). Restore is purely driver-side:
+                         applies a sync offset so the displayed angle (and the
+                         angle ASCOM clients see) matches what was saved before
+                         power-off. Rotator does NOT physically move. -->
+                    <Border Margin="0,0,0,8" Padding="8,6" CornerRadius="4"
+                            Background="{DynamicResource Brush.AccentSoft}"
+                            BorderBrush="{DynamicResource Brush.Accent}" BorderThickness="1"
+                            Visibility="{Binding Rotator.RestoreVisible, Converter={StaticResource BoolToVis}}">
+                      <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                          <StackPanel>
+                            <TextBlock Text="Last position recorded" Style="{StaticResource Text.Label}"/>
+                            <TextBlock Text="{Binding Rotator.LastSavedAngleText}" Style="{StaticResource Text.Mono}" FontSize="14"/>
+                          </StackPanel>
+                          <Button Grid.Column="1" Style="{StaticResource Btn.SmPrimary}"
+                                  Content="Restore" Command="{Binding Rotator.RestoreLastAngleCommand}"
+                                  ToolTip="Update displayed angle to the saved value. Does not move the rotator."
+                                  Margin="0,0,4,0"/>
+                          <Button Grid.Column="2" Style="{StaticResource Btn.Sm}"
+                                  Content="Dismiss" Command="{Binding Rotator.DismissRestoreCommand}"
+                                  ToolTip="Forget the saved value and start fresh."/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                                   Text="Firmware doesn't persist rotator position across power cycles. Restore re-applies a sync offset so the app angle matches last session. Use only if the camera train hasn't moved while powered off."/>
+                      </StackPanel>
+                    </Border>
+
+                    <!-- Position readout (live, polled). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Position" Style="{StaticResource Text.Label}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Rotator.AngleText}" Style="{StaticResource Text.Mono}"/>
+                    </Grid>
+
+                    <!-- Goto target (degrees). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Goto (°)" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                    Min="0" Max="360" Step="0.1" DecimalPlaces="2"
+                                    Value="{Binding Rotator.TargetDeg}"
+                                    IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+                      <Button Grid.Column="2" Style="{StaticResource Btn.SmPrimary}"
+                              Content="Goto" Command="{Binding Rotator.GotoCommand}" Margin="6,0,0,0"/>
+                    </Grid>
+
+                    <!-- Manual jog + halt. -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Move" Style="{StaticResource Text.Label}"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource Btn.Sm}"        Content="◀ CCW" Command="{Binding Rotator.JogCcwCommand}" Margin="0,0,4,0"/>
+                        <Button Style="{StaticResource Btn.SmPrimary}" Content="Halt"  Command="{Binding Rotator.HaltCommand}"   Margin="0,0,4,0"/>
+                        <Button Style="{StaticResource Btn.Sm}"        Content="CW ▶"  Command="{Binding Rotator.JogCwCommand}"/>
+                      </StackPanel>
+                    </Grid>
+
+                    <!-- Move rate (governs CCW/CW jog — OnStepX move presets 1..4). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Move rate" Style="{StaticResource Text.Label}"/>
+                      <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                                ItemsSource="{Binding Rotator.MoveRateOptions}"
+                                DisplayMemberPath="Label"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding Rotator.MoveRatePreset}"
+                                IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Goto rate (governs Goto + Go Home — OnStepX goto presets 5..9). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Goto rate" Style="{StaticResource Text.Label}"/>
+                      <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                                ItemsSource="{Binding Rotator.GotoRateOptions}"
+                                DisplayMemberPath="Label"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding Rotator.GotoRatePreset}"
+                                IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Home / zero / half-travel. -->
+                    <UniformGrid Columns="3" Margin="0,0,0,6">
+                      <Button Content="Half-Travel" Command="{Binding Rotator.HalfTravelCommand}" Margin="0,0,3,0"/>
+                      <Button Content="Go Home"     Command="{Binding Rotator.GoHomeCommand}"     Margin="3,0,3,0"/>
+                      <Button Content="Zero"        Command="{Binding Rotator.ZeroCommand}"       Margin="3,0,0,0"/>
+                    </UniformGrid>
+
+                    <!-- Backlash (steps). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Backlash" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                                    Min="0" Max="10000" Step="1" DecimalPlaces="0"
+                                    Value="{Binding Rotator.Backlash}"
+                                    IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+                      <Button Grid.Column="2" Style="{StaticResource Btn.Sm}"
+                              Content="Apply" Command="{Binding Rotator.ApplyBacklashCommand}" Margin="6,0,0,0"/>
+                    </Grid>
+
+                    <!-- Limits readout (firmware-owned, read-only). -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Limits" Style="{StaticResource Text.Label}"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <TextBlock Text="min " Style="{StaticResource Text.Hint}"/>
+                        <TextBlock Text="{Binding Rotator.MinDeg}" Style="{StaticResource Text.Mono}" Margin="0,0,4,0"/>
+                        <TextBlock Text="°"   Style="{StaticResource Text.Hint}" Margin="0,0,12,0"/>
+                        <TextBlock Text="max " Style="{StaticResource Text.Hint}"/>
+                        <TextBlock Text="{Binding Rotator.MaxDeg}" Style="{StaticResource Text.Mono}" Margin="0,0,4,0"/>
+                        <TextBlock Text="°"   Style="{StaticResource Text.Hint}"/>
+                      </StackPanel>
+                    </Grid>
+
+                    <!-- Step size readout. -->
+                    <Grid Margin="0,0,0,6">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Step size" Style="{StaticResource Text.Label}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Rotator.StepSizeText}" Style="{StaticResource Text.Mono}"/>
+                    </Grid>
+
+                    <!-- Derotator subgroup — only visible when :GX98# == "D" (AltAz parallactic-tracking capable). -->
+                    <StackPanel Visibility="{Binding Rotator.IsDerotateCapable, Converter={StaticResource BoolToVis}}">
+                      <Grid Margin="0,4,0,6">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Derotator" Style="{StaticResource Text.Label}"/>
+                        <CheckBox  Grid.Column="1" Content="Enable parallactic tracking"
+                                   IsChecked="{Binding Rotator.DerotEnabled}"
+                                   IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+                      </Grid>
+                      <UniformGrid Columns="2" Margin="0,0,0,0">
+                        <Button Content="Reverse direction" Command="{Binding Rotator.ToggleDerotReverseCommand}" Margin="0,0,3,0"/>
+                        <Button Content="Goto Parallactic"  Command="{Binding Rotator.ParallacticCommand}"        Margin="3,0,0,0"/>
+                      </UniformGrid>
+                    </StackPanel>
+                  </StackPanel>
+                </c:Section.Body>
+              </c:Section>
+
+              <!-- Hint card when no rotator is configured on the board. -->
+              <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
+                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                <c:Section.Body>
+                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                             Text="No rotator detected on this OnStepX board. Enable AXIS3_DRIVER_MODEL in the firmware Config.h and reflash to use a rotator here."/>
                 </c:Section.Body>
               </c:Section>
             </StackPanel>

@@ -3,9 +3,10 @@
 ; Prereq: Release build of OnStepX.Driver, OnStepX.Shared, OnStepX.Hub
 ;         under src\*\bin\Release\
 ;
-; Single combined assembly (ASCOM.OnStepX.dll) hosts both ASCOM drivers:
+; Single combined assembly (ASCOM.OnStepX.dll) hosts three ASCOM drivers:
 ;   ASCOM.OnStepX.Telescope (ITelescopeV3)
 ;   ASCOM.OnStepX.Focuser   (IFocuserV2)
+;   ASCOM.OnStepX.Rotator   (IRotatorV3)
 
 #define MyAppName "OnStepX ASCOM + Hub"
 #define MyAppShortName "OnStepX"
@@ -35,6 +36,12 @@
 #define FocuserProgId   "ASCOM.OnStepX.Focuser"
 #define FocuserFriendly "OnStepX Focuser Driver"
 #define FocuserClass    "ASCOM.OnStepX.Driver.Focuser"
+
+; --- Rotator COM identifiers (must match Rotator class [Guid]/[ProgId]) ---
+#define RotatorClsid    "{B6A2D5F4-7C8E-4B3A-9D1F-3E5C7A8B9D2E}"
+#define RotatorProgId   "ASCOM.OnStepX.Rotator"
+#define RotatorFriendly "OnStepX Rotator Driver"
+#define RotatorClass    "ASCOM.OnStepX.Driver.Rotator"
 
 ; DriverVersion must match AssemblyVersion of ASCOM.OnStepX.dll — COM activation
 ; fails if the InprocServer32 Assembly=... Version token disagrees with the
@@ -173,9 +180,50 @@ Root: HKCR32; Subkey: "CLSID\{{#FocuserClsid}\Implemented Categories\{{62C8FE65-
 Root: HKCR32; Subkey: "{#FocuserProgId}";                                       ValueType: string; ValueName: "";               ValueData: "{#FocuserFriendly}";                                                           Flags: uninsdeletekey
 Root: HKCR32; Subkey: "{#FocuserProgId}\CLSID";                                 ValueType: string; ValueName: "";               ValueData: "{{#FocuserClsid}"
 
+; ============================================================================
+; Rotator CLSID — 64-bit view
+; ============================================================================
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}";                                 ValueType: string; ValueName: "";               ValueData: "{#RotatorFriendly}";                                                           Flags: uninsdeletekey
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "";               ValueData: "mscoree.dll"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "Class";          ValueData: "{#RotatorClass}"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Class";          ValueData: "{#RotatorClass}"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\ProgId";                          ValueType: string; ValueName: "";               ValueData: "{#RotatorProgId}"
+Root: HKCR64; Subkey: "CLSID\{{#RotatorClsid}\Implemented Categories\{{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
+
+Root: HKCR64; Subkey: "{#RotatorProgId}";                                       ValueType: string; ValueName: "";               ValueData: "{#RotatorFriendly}";                                                           Flags: uninsdeletekey
+Root: HKCR64; Subkey: "{#RotatorProgId}\CLSID";                                 ValueType: string; ValueName: "";               ValueData: "{{#RotatorClsid}"
+
+; ============================================================================
+; Rotator CLSID — 32-bit view (Wow6432Node)
+; ============================================================================
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}";                                 ValueType: string; ValueName: "";               ValueData: "{#RotatorFriendly}";                                                           Flags: uninsdeletekey
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "";               ValueData: "mscoree.dll"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "Class";          ValueData: "{#RotatorClass}"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32";                  ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Class";          ValueData: "{#RotatorClass}"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "Assembly";       ValueData: "{#DriverAsmName}, Version={#DriverVersion}, Culture=neutral, PublicKeyToken=null"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "RuntimeVersion"; ValueData: "v4.0.30319"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\InprocServer32\{#DriverVersion}"; ValueType: string; ValueName: "CodeBase";       ValueData: "file:///{app}\{#DriverDll}"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\ProgId";                          ValueType: string; ValueName: "";               ValueData: "{#RotatorProgId}"
+Root: HKCR32; Subkey: "CLSID\{{#RotatorClsid}\Implemented Categories\{{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
+
+Root: HKCR32; Subkey: "{#RotatorProgId}";                                       ValueType: string; ValueName: "";               ValueData: "{#RotatorFriendly}";                                                           Flags: uninsdeletekey
+Root: HKCR32; Subkey: "{#RotatorProgId}\CLSID";                                 ValueType: string; ValueName: "";               ValueData: "{{#RotatorClsid}"
+
 ; ASCOM Profile registry-mirror store (Platform 6/7 compatible).
 Root: HKLM; Subkey: "SOFTWARE\ASCOM\Telescope Drivers\{#TelescopeProgId}";   ValueType: string; ValueName: "";               ValueData: "{#TelescopeFriendly}";                                                         Flags: uninsdeletekey
 Root: HKLM; Subkey: "SOFTWARE\ASCOM\Focuser Drivers\{#FocuserProgId}";       ValueType: string; ValueName: "";               ValueData: "{#FocuserFriendly}";                                                           Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\ASCOM\Rotator Drivers\{#RotatorProgId}";       ValueType: string; ValueName: "";               ValueData: "{#RotatorFriendly}";                                                           Flags: uninsdeletekey
 
 ; Hub install-path registry hint — HubLauncher in the driver reads this.
 ; Stale value WpfInstallPath from a previous beta installer is wiped here so
@@ -299,6 +347,7 @@ procedure RegisterAscomProfile();
 begin
   RegisterAscomProfileEntry('Telescope', '{#TelescopeProgId}', '{#TelescopeFriendly}');
   RegisterAscomProfileEntry('Focuser',   '{#FocuserProgId}',   '{#FocuserFriendly}');
+  RegisterAscomProfileEntry('Rotator',   '{#RotatorProgId}',   '{#RotatorFriendly}');
 end;
 
 procedure UnregisterAscomProfileEntry(deviceType, progId: String);
@@ -319,6 +368,7 @@ procedure UnregisterAscomProfile();
 begin
   UnregisterAscomProfileEntry('Telescope', '{#TelescopeProgId}');
   UnregisterAscomProfileEntry('Focuser',   '{#FocuserProgId}');
+  UnregisterAscomProfileEntry('Rotator',   '{#RotatorProgId}');
 end;
 
 // Drop legacy v0.3.x LocalServer32 / AppID keys left over from an in-place

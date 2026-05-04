@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Diagnostics;
@@ -75,14 +76,14 @@ namespace ASCOM.OnStepX.ViewModels
                 if (value < 1 || value > Math.Max(1, _count)) return;
                 if (!Set(ref _activeIndex, value)) return;
                 if (_suppressActiveIndexEvent || _main.State != ConnState.Connected) return;
-                try
+                DriverSettings.FocuserDefaultIndex = value;
+                int idx = value;
+                RunBg(() =>
                 {
-                    _mount.Protocol.SetActiveFocuser(value);
-                    DriverSettings.FocuserDefaultIndex = value;
-                    DebugLogger.Log("FOCUSER", "active -> " + value);
-                    RefreshNvBackedState();
-                }
-                catch (Exception ex) { DebugLogger.LogException("FOCUSER", ex); }
+                    _mount.Protocol.SetActiveFocuser(idx);
+                    DebugLogger.Log("FOCUSER", "active -> " + idx);
+                    RefreshNvBackedStateBg();
+                });
             }
         }
         private bool _suppressActiveIndexEvent;
@@ -120,8 +121,8 @@ namespace ASCOM.OnStepX.ViewModels
                 if (value < 5 || value > 9) return;
                 if (!Set(ref _gotoRatePreset, value)) return;
                 if (_main.State != ConnState.Connected || !IsAvailable) return;
-                try { _mount.Protocol.SetFocuserRatePreset(value); }
-                catch (Exception ex) { DebugLogger.LogException("FOCUSER", ex); }
+                int rate = value;
+                RunBg(() => _mount.Protocol.SetFocuserRatePreset(rate));
             }
         }
 
@@ -160,8 +161,8 @@ namespace ASCOM.OnStepX.ViewModels
             {
                 if (!Set(ref _tempCompEnabled, value)) return;
                 if (_suppressTcfEvent || _main.State != ConnState.Connected || !IsAvailable) return;
-                try { _mount.Protocol.SetFocuserTcfEnabled(value); }
-                catch (Exception ex) { DebugLogger.LogException("FOCUSER", ex); }
+                bool on = value;
+                RunBg(() => _mount.Protocol.SetFocuserTcfEnabled(on));
             }
         }
         private bool _suppressTcfEvent;
@@ -186,13 +187,16 @@ namespace ASCOM.OnStepX.ViewModels
         public FocuserViewModel(MainViewModel main)
         {
             _main = main;
+            // All command bodies dispatch to the threadpool — pipe round-trips
+            // can block 100s of ms (poll loop arbitration + serial wire) and
+            // we don't want the WPF UI thread to freeze on a button click.
             GotoCommand          = new RelayCommand(DoGoto,    () => MountActionsEnabled);
             HaltCommand          = new RelayCommand(DoHalt,    () => MountActionsEnabled);
             MoveInCommand        = new RelayCommand(DoMoveIn,  () => MountActionsEnabled);
             MoveOutCommand       = new RelayCommand(DoMoveOut, () => MountActionsEnabled);
-            SetHomeCommand       = new RelayCommand(() => Guard(() => _mount.Protocol.FocuserSetHomeHere()), () => MountActionsEnabled);
-            GoHomeCommand        = new RelayCommand(() => Guard(() => { _mount.Protocol.SetFocuserRatePreset(_gotoRatePreset); _mount.Protocol.FocuserGoHome(); }), () => MountActionsEnabled);
-            ZeroCommand          = new RelayCommand(() => Guard(() => _mount.Protocol.FocuserZero()),       () => MountActionsEnabled);
+            SetHomeCommand       = new RelayCommand(() => GuardBg(() => _mount.Protocol.FocuserSetHomeHere()), () => MountActionsEnabled);
+            GoHomeCommand        = new RelayCommand(() => GuardBg(() => { _mount.Protocol.SetFocuserRatePreset(_gotoRatePreset); _mount.Protocol.FocuserGoHome(); }), () => MountActionsEnabled);
+            ZeroCommand          = new RelayCommand(() => GuardBg(() => _mount.Protocol.FocuserZero()),       () => MountActionsEnabled);
             ApplyBacklashCommand = new RelayCommand(DoApplyBacklash, () => MountActionsEnabled);
             ApplyTcfCommand      = new RelayCommand(DoApplyTcf,      () => MountActionsEnabled && TempCompAvailable);
         }
@@ -282,30 +286,43 @@ namespace ASCOM.OnStepX.ViewModels
         private void RefreshNvBackedState()
         {
             if (_main.State != ConnState.Connected) return;
-            try { MinSteps        = _mount.Protocol.GetFocuserMinSteps(); }       catch { }
-            try { MaxSteps        = _mount.Protocol.GetFocuserMaxSteps(); }       catch { }
-            try { StepSizeMicrons = _mount.Protocol.GetFocuserMicronsPerStep(); } catch { }
-            try { Backlash        = _mount.Protocol.GetFocuserBacklashSteps(); }  catch { }
+            // Dispatch the multi-roundtrip read pass to the threadpool — this
+            // path runs from OnConnected and from the ActiveIndex setter on
+            // the UI thread.
+            RunBg(RefreshNvBackedStateBg);
+        }
 
-            double t = double.NaN;
-            try { t = _mount.Protocol.GetFocuserTemperatureC(); } catch { }
-            TempCompAvailable = !double.IsNaN(t) && !double.IsInfinity(t) && Math.Abs(t) < 1000.0;
+        private void RefreshNvBackedStateBg()
+        {
+            if (_main.State != ConnState.Connected) return;
+            int min = 0, max = 0, backlash = 0, tcfDeadband = 0, target = 0;
+            double stepSize = 0, tcfCoeff = 0, t = double.NaN;
+            bool tcfOn = false;
+            try { min        = _mount.Protocol.GetFocuserMinSteps(); }       catch { }
+            try { max        = _mount.Protocol.GetFocuserMaxSteps(); }       catch { }
+            try { stepSize   = _mount.Protocol.GetFocuserMicronsPerStep(); } catch { }
+            try { backlash   = _mount.Protocol.GetFocuserBacklashSteps(); }  catch { }
+            try { t          = _mount.Protocol.GetFocuserTemperatureC(); }   catch { }
+            try { tcfOn      = _mount.Protocol.GetFocuserTcfEnabled(); }     catch { }
+            try { tcfCoeff   = _mount.Protocol.GetFocuserTcfCoeffUmPerC(); } catch { }
+            try { tcfDeadband= _mount.Protocol.GetFocuserTcfDeadbandSteps();} catch { }
+            try { target     = _mount.Protocol.GetFocuserPositionSteps(); }  catch { }
+            bool tcfAvail = !double.IsNaN(t) && !double.IsInfinity(t) && Math.Abs(t) < 1000.0;
 
-            _suppressTcfEvent = true;
-            try
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
             {
-                bool on = false;
-                try { on = _mount.Protocol.GetFocuserTcfEnabled(); } catch { }
-                TempCompEnabled = on;
-            }
-            finally { _suppressTcfEvent = false; }
-
-            try { TcfCoeff    = _mount.Protocol.GetFocuserTcfCoeffUmPerC(); }    catch { }
-            try { TcfDeadband = _mount.Protocol.GetFocuserTcfDeadbandSteps(); }  catch { }
-
-            // Default the goto target to current position so accidentally
-            // clicking Goto without typing doesn't yank the focuser to 0.
-            try { TargetPosition = _mount.Protocol.GetFocuserPositionSteps(); } catch { }
+                MinSteps        = min;
+                MaxSteps        = max;
+                StepSizeMicrons = stepSize;
+                Backlash        = backlash;
+                TempCompAvailable = tcfAvail;
+                _suppressTcfEvent = true;
+                try { TempCompEnabled = tcfOn; }
+                finally { _suppressTcfEvent = false; }
+                TcfCoeff        = tcfCoeff;
+                TcfDeadband     = tcfDeadband;
+                TargetPosition  = target;
+            }));
         }
 
         // ---------- Command bodies ----------
@@ -319,61 +336,88 @@ namespace ASCOM.OnStepX.ViewModels
                     "Target " + target + " is outside the firmware limits [" + MinSteps + ".." + MaxSteps + "].");
                 return;
             }
-            try
+            int rate = _gotoRatePreset;
+            RunBg(() =>
             {
                 // Reapply goto-rate preset so a prior In/Out click (which set
                 // the move-rate register, 1..4) doesn't leave the firmware on
                 // the wrong rate band when we issue :Fs#.
-                try { _mount.Protocol.SetFocuserRatePreset(_gotoRatePreset); } catch { }
+                try { _mount.Protocol.SetFocuserRatePreset(rate); } catch { }
                 if (!_mount.Protocol.SetFocuserPositionSteps(target))
                 {
                     string err = ""; try { err = _mount.Protocol.GetLastError(); } catch { }
-                    Views.CopyableMessage.Show("Focuser", "Goto rejected by mount." +
+                    ShowOnUi("Goto rejected by mount." +
                         (string.IsNullOrEmpty(err) ? "" : "\r\nMount error: " + err));
                 }
-            }
-            catch (Exception ex) { Views.CopyableMessage.Show("Focuser", ex.ToString()); }
+            });
         }
 
-        private void DoHalt()    => Guard(() => _mount.Protocol.FocuserHalt());
+        private void DoHalt() => GuardBg(() => _mount.Protocol.FocuserHalt());
 
         // Step-based manual move via :Fr[±N]#. OnStepX convention: positive
         // delta increases position (= "out"), negative delta = "in" toward
         // the objective. :Fr# runs on the goto-rate register so reapply the
         // user's selected goto rate before issuing the relative move.
-        private void DoMoveIn()  => Guard(() => { _mount.Protocol.SetFocuserRatePreset(_gotoRatePreset); _mount.Protocol.SetFocuserPositionRelativeSteps(-_stepSize); });
-        private void DoMoveOut() => Guard(() => { _mount.Protocol.SetFocuserRatePreset(_gotoRatePreset); _mount.Protocol.SetFocuserPositionRelativeSteps(+_stepSize); });
+        private void DoMoveIn()
+        {
+            int step = _stepSize, rate = _gotoRatePreset;
+            GuardBg(() => { _mount.Protocol.SetFocuserRatePreset(rate); _mount.Protocol.SetFocuserPositionRelativeSteps(-step); });
+        }
+        private void DoMoveOut()
+        {
+            int step = _stepSize, rate = _gotoRatePreset;
+            GuardBg(() => { _mount.Protocol.SetFocuserRatePreset(rate); _mount.Protocol.SetFocuserPositionRelativeSteps(+step); });
+        }
 
         private void DoApplyBacklash()
         {
             if (!MountActionsEnabled) return;
-            try
+            int v = Backlash;
+            RunBg(() =>
             {
-                if (!_mount.Protocol.SetFocuserBacklashSteps(Backlash))
+                if (!_mount.Protocol.SetFocuserBacklashSteps(v))
                 {
                     string err = ""; try { err = _mount.Protocol.GetLastError(); } catch { }
-                    Views.CopyableMessage.Show("Focuser", "Backlash apply rejected." +
+                    ShowOnUi("Backlash apply rejected." +
                         (string.IsNullOrEmpty(err) ? "" : "\r\nMount error: " + err));
                 }
-            }
-            catch (Exception ex) { Views.CopyableMessage.Show("Focuser", ex.ToString()); }
+            });
         }
 
         private void DoApplyTcf()
         {
             if (!MountActionsEnabled || !TempCompAvailable) return;
-            try
+            double coeff = TcfCoeff; int dead = TcfDeadband;
+            RunBg(() =>
             {
-                _mount.Protocol.SetFocuserTcfCoeffUmPerC(TcfCoeff);
-                _mount.Protocol.SetFocuserTcfDeadbandSteps(TcfDeadband);
-            }
-            catch (Exception ex) { Views.CopyableMessage.Show("Focuser", ex.ToString()); }
+                _mount.Protocol.SetFocuserTcfCoeffUmPerC(coeff);
+                _mount.Protocol.SetFocuserTcfDeadbandSteps(dead);
+            });
         }
 
-        private void Guard(Action a)
+        private void GuardBg(Action a)
         {
-            try { if (MountActionsEnabled) a(); }
-            catch (Exception ex) { Views.CopyableMessage.Show("Focuser", ex.ToString()); }
+            if (!MountActionsEnabled) return;
+            RunBg(a);
+        }
+
+        private static void RunBg(Action a)
+        {
+            Task.Run(() =>
+            {
+                try { a(); }
+                catch (Exception ex) { DebugLogger.LogException("FOCUSER", ex); }
+            });
+        }
+
+        private static void ShowOnUi(string msg)
+        {
+            try
+            {
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    Views.CopyableMessage.Show("Focuser", msg)));
+            }
+            catch { }
         }
     }
 

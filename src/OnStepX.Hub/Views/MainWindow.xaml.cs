@@ -17,15 +17,44 @@ namespace ASCOM.OnStepX.Views
         // looping until tray Exit is invoked.
         private bool _exiting;
 
+        // Window-width presets — keep in sync with MainWindow.xaml's Width and
+        // MinWidth. The 2-column variant is 2/3 of the original 1280 minus a
+        // touch of slack so the console toolbar still fits.
+        private const double Width3Col = 1280;
+        private const double Width2Col = 880;
+        private const double MinWidth3Col = 1100;
+        private const double MinWidth2Col = 760;
+
         public MainWindow()
         {
             InitializeComponent();
             VM = new MainViewModel();
             DataContext = VM;
             try { Icon = WindowIconLoader.LoadImageSource(); } catch { }
-            Loaded += (s, e) => VM.TryAutoConnect();
+            Loaded += (s, e) => { VM.TryAutoConnect(); ApplyColumnLayout(); };
+            VM.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.Show3rdColumn))
+                    Dispatcher.BeginInvoke(new Action(ApplyColumnLayout));
+            };
             Closed += MainWindow_Closed;
             Closing += MainWindow_Closing;
+        }
+
+        // Resize the window to match the current column count. Skipped while
+        // the user has maximized the window (state is preserved on restore)
+        // or has manually resized to a much wider value.
+        private void ApplyColumnLayout()
+        {
+            if (WindowState == WindowState.Maximized) return;
+            bool show3 = VM?.Show3rdColumn ?? true;
+            double targetW = show3 ? Width3Col : Width2Col;
+            double minW    = show3 ? MinWidth3Col : MinWidth2Col;
+            MinWidth = minW;
+            // Only auto-shrink if the user hasn't widened the window past our
+            // 2-col preset. Auto-grow back up when the 3rd column re-appears.
+            if (!show3 && Width > targetW) Width = targetW;
+            if (show3 && Width < targetW) Width = targetW;
         }
 
         // X button policy:

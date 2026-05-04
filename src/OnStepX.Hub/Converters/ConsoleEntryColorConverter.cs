@@ -52,4 +52,14 @@ namespace ASCOM.OnStepX.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
             => !(value is bool b && b);
     }
+
+    // Maps bool → GridLength. true = star (1*), false = zero. Used to collapse
+    // the 3rd column when no focuser/rotator is configured on the board.
+    public sealed class BoolToGridLengthConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+            => (value is bool b && b) ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotSupportedException();
+    }
 }

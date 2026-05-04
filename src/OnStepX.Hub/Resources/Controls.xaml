@@ -580,6 +580,36 @@
     </Style.Triggers>
   </Style>
 
+  <!-- ───────── ProgressBar (slim, accent-filled) ───────── -->
+  <!-- Used by the FOCUSER section to show position-vs-max-step. Pure visual,
+       no drag/click interaction — the user moves via Goto / In / Out. -->
+  <Style x:Key="Progress.Slim" TargetType="ProgressBar">
+    <Setter Property="Height" Value="6"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ProgressBar">
+          <Border CornerRadius="3"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  ClipToBounds="True">
+            <Grid>
+              <Rectangle x:Name="PART_Track"/>
+              <Rectangle x:Name="PART_Indicator"
+                         HorizontalAlignment="Left"
+                         Fill="{TemplateBinding Foreground}"/>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style TargetType="ProgressBar" BasedOn="{StaticResource Progress.Slim}"/>
+
   <!-- Default styles applied implicitly so legacy <TextBlock>, <Button> etc.
        inherit theme without explicit Style references. -->
   <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}"/>
