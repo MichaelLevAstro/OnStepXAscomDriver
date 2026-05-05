@@ -5,9 +5,10 @@ using ASCOM.OnStepX.ViewModels;
 
 namespace ASCOM.OnStepX.Controls
 {
-    // Click-to-step pad for the Polar Alignment Wedge panel. Each non-STOP
-    // button carries a "axis,dir,speed" CommandParameter; OnJog parses and
-    // dispatches to PolarAlignmentViewModel.Jog. STOP halts both axes.
+    // 5-button plus pad. Each direction button carries
+    // "<focuser>,<dirSign>" as CommandParameter; speed comes from the
+    // PolarAlignmentViewModel.SelectedSpeed dropdown so users don't have
+    // to pick speed every click.
     public partial class PolarAlignmentPad : UserControl
     {
         public PolarAlignmentPad() { InitializeComponent(); }
@@ -23,11 +24,10 @@ namespace ASCOM.OnStepX.Controls
             string raw = btn?.CommandParameter as string;
             if (string.IsNullOrEmpty(raw)) return;
             var parts = raw.Split(',');
-            if (parts.Length != 3) return;
+            if (parts.Length != 2) return;
             if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int axis)) return;
             if (!int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int dir)) return;
-            if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int speed)) return;
-            PadVM.Jog(axis, dir, speed);
+            PadVM.Jog(axis, dir, PadVM.SelectedSpeed);
         }
 
         private void OnStopAll(object sender, RoutedEventArgs e)

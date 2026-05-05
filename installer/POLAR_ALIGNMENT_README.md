@@ -1,6 +1,6 @@
 # Polar Alignment Wedge Mode
 
-When enabled, the OnStepX hub repurposes firmware **AXIS4** as the **Altitude** screw motor and **AXIS5** as the **Azimuth** screw motor of a motorized polar alignment wedge. The hub's Focuser and Rotator panels disappear, replaced by a Polar Alignment panel with manual jog controls. The hub also exposes a serial bridge that NINA's **Three Point Polar Alignment (TPPA)** plugin can drive via its built-in UPAS profile — no custom NINA plugin needed.
+When enabled, the OnStepX hub repurposes firmware **AXIS4** as the **Altitude** screw motor and **AXIS5** as the **Azimuth** screw motor of a motorized polar alignment wedge. The hub's Focuser and Rotator panels disappear, replaced by a Polar Alignment panel with manual jog controls. The hub also exposes a serial bridge that NINA's **Three Point Polar Alignment (TPPA)** plugin can drive via its built-in **OAPA** profile — no custom NINA plugin needed.
 
 ## Firmware prerequisites
 
@@ -11,77 +11,98 @@ In OnStepX `Config.h`, enable **both** axes:
 #define AXIS5_DRIVER_MODEL  TMC2209
 ```
 
-Reflash. The hub auto-detects both axes via `:Fa#` / `:FA[1..6]#`.
+Reflash. The hub auto-detects both axes via `:Fa#` / `:FA[1..6]#`. They appear on the wire as **focuser 1** + **focuser 2** (OnStepX's `:FA[n]#` numbers focusers, not physical axes).
 
 ## Enabling the mode in the hub
 
-1. Open the **Hub → Advanced Settings**.
+1. Open the **Hub → ADVANCED card** in the left column (or the modal Advanced Settings).
 2. Tick **"Use AXIS4 + AXIS5 as Polar Alignment Wedge"**.
-3. Click **Apply**, then disconnect and reconnect to the mount.
+3. Disconnect and reconnect to the mount.
 
-You should now see the **POLAR ALIGNMENT** section in the right column. The Focuser and Rotator sections are gone (and the ASCOM Focuser + Rotator drivers will refuse Connect — third-party apps cannot accidentally drive the wedge).
+You should now see the **POLAR ALIGNMENT** section in the right column. The Focuser and Rotator sections are gone, and the ASCOM Focuser + Rotator drivers refuse Connect so third-party apps cannot accidentally drive the wedge.
 
 ## Manual jog panel
 
-Two rows of seven buttons each (one row per axis):
+Plus-shape pad with five buttons + one shared STOP:
 
 ```
-Alt:  [«« VF] [«« F] [« S]  [STOP]  [S »] [F »»] [VF »»]
-Az:   [«« VF] [«« F] [« S]  [STOP]  [S »] [F »»] [VF »»]
+       ↑
+  ←  STOP  →
+       ↓
 ```
 
-Each click moves **StepSize** motor steps at the chosen rate (Slow / Fast / VeryFast). Step size is configurable per axis in the panel; this caps how far one click can move so a misclick doesn't drive the wedge into a hard stop. STOP halts both axes.
+- **Up / Down** = Alt screw (focuser 1)
+- **Left / Right** = Az screw (focuser 2)
+- **STOP** halts both axes
 
-Speed mapping (OnStepX goto-rate band):
+Each click moves the per-axis **Step** amount at the **Slew speed** dropdown's selected rate. Per-axis **Goto** field + button issues an absolute move.
 
-| Button | Preset | Rate |
-| ------ | ------ | ---- |
-| S      | `:F5#` | 0.5× |
-| F      | `:F7#` | 1×   |
-| VF     | `:F9#` | 2×   |
+Speed mapping (OnStepX goto-rate band, applies to all moves):
+
+| Speed     | Preset | Rate |
+| --------- | ------ | ---- |
+| Slow      | `:F5#` | 0.5× |
+| Fast      | `:F7#` | 1×   |
+| Very Fast | `:F9#` | 2×   |
+
+### Driver currents (Advanced popup)
+
+Click **Advanced…** in the section header to open the TMC tuning popup. Per-axis:
+
+- **Run (mA)** — motor current during slews. Higher = more torque, more heat.
+- **Hold (%)** — standstill current as % of run. Higher = better against drift / vibration, more standby heat.
+
+Apply pushes `:SXAn,IRUN=<mA>#` / `:SXAn,IHOLD=<%>#` to firmware (n=4 for Alt, n=5 for Az). Persisted across reconnects.
+
+NINA's OAPA plugin can also write these values via its serial command set (`XC<mA>`, `XH<%>`, `YC<mA>`, `YH<%>`). The bridge forwards those to the same firmware commands.
 
 ## NINA TPPA bridge (com0com setup)
 
-NINA's TPPA UPAS profile auto-discovers polar alignment hardware by scanning serial ports for a GRBL-style status reply. To present the hub on a port that NINA can find, you need a **virtual COM port pair**.
+NINA's TPPA OAPA profile auto-discovers polar alignment hardware by scanning serial ports for a GRBL-style status reply. To present the hub on a port that NINA can find, you need a **virtual COM port pair**.
 
 ### One-time setup
 
 1. Install **com0com** (free, GPL): <https://com0com.sourceforge.net/>.
-2. Run the **Setup** GUI as Administrator.
-3. Add a new pair (e.g. `COM10` ↔ `COM11`). Tick "use Ports class" on both halves so Windows lists them in the COM port chooser.
+2. Open **Setup Command Prompt for com0com** as Administrator.
+3. `install PortName=COM10 PortName=COM11` (or run the GUI Setup, add pair).
+4. Verify in Device Manager → Ports (COM & LPT). May appear under **com0com** category if "use Ports class" wasn't ticked — works either way.
 
 ### Hub side
 
-1. **Hub → Advanced Settings → NINA TPPA bridge port**: enter `COM10` (the first half of the com0com pair).
-2. Click **Apply**. The hub opens `COM10` and starts speaking GRBL on it. Confirm in the hub console log: `PABRIDGE  started on COM10`.
+1. Hub → **ADVANCED card → TPPA port**: enter `COM10` (the first half of the com0com pair).
+2. Click outside the field to commit. Hub opens `COM10` and starts speaking OAPA on it. Confirm in console: `PABRIDGE  started on COM10`.
 
 ### NINA side
 
-1. In NINA, open the **TPPA plugin → Options**.
-2. Set **Polar Alignment System** = `UPAS` (Avalon Universal Polar Alignment).
-3. The plugin auto-scans serial ports at 115200 8N1 and binds to whichever port answers the GRBL `?` query. With com0com paired, this will be `COM11`.
-4. Configure **XGearRatio** and **YGearRatio** in the plugin settings: this is the number of OnStepX motor steps per arcminute of mount-axis rotation. Calibrate empirically:
-   - Move axis 4 (Alt) by a known number of steps.
-   - Measure the change in mount altitude (e.g. via plate-solve before/after).
+1. NINA → **TPPA plugin → Options**.
+2. Set **Polar Alignment System** = `OAPA System`.
+3. Plugin scans 115200 8N1 ports and binds to whichever answers the OAPA `?` query. With com0com paired, this is `COM11`.
+4. Configure **XGearRatio** and **YGearRatio** in the plugin settings: number of OnStepX motor steps per arcminute of mount-axis rotation. Calibrate empirically:
+   - Move axis 4 (Alt) by a known number of steps via hub Goto.
+   - Measure mount altitude change (e.g. plate-solve before/after).
    - `gearRatio = steps / arcminutes_observed`.
 
 ### Running an alignment
 
-In NINA, drop a **Polar Alignment** sequence item. With the TPPA system connected and your mount talking ASCOM, TPPA will:
+In NINA, drop a **Polar Alignment** sequence item. With OAPA connected and mount talking ASCOM, TPPA will:
 
 1. Capture three plate-solved positions at different RA points.
-2. Compute the current Az/Alt error from the polar axis vector.
-3. Loop: capture → solve → call `MoveCloser` → wedge motors run → settle → recapture, until error ≤ tolerance.
+2. Compute Az/Alt error from the polar-axis vector.
+3. Loop: capture → solve → `MoveCloser` → wedge motors run → settle → recapture, until error ≤ tolerance.
 
-The continuous-correction loop drives the bridge's `MoveRelative` calls. Each iteration moves only the larger error axis by 75% of the measured error.
+Each iteration moves only the larger error axis by 75% of measured error.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 | --- | --- |
-| POLAR ALIGNMENT section doesn't appear after toggling | Reconnect to the mount. Mode is resolved at connect time. |
-| ASCOM Focuser/Rotator driver refuses Connect | Expected when PA mode is on. Disable PA mode if you actually want focuser/rotator. |
-| NINA TPPA UPAS doesn't find a port | Is the bridge running? Hub log should say `PABRIDGE started on COM10`. Is the com0com pair installed and visible in Device Manager → Ports (COM & LPT)? |
-| Wedge moves the wrong direction | Set `ReverseAzimuth` / `ReverseAltitude` in NINA TPPA settings, or flip `AXIS4_REVERSE` / `AXIS5_REVERSE` in firmware. |
-| First TPPA iteration overshoots wildly | Gear ratio is too high. Halve `XGearRatio` / `YGearRatio` and retry. |
-| Wedge hits hard stop | Reduce per-axis StepSize in the manual panel. TPPA's auto-correction is already capped at 75% of error per iteration so it won't run away. |
+| POLAR ALIGNMENT section doesn't appear after toggling | Reconnect to the mount. Mode resolves at connect time. |
+| ASCOM Focuser/Rotator driver refuses Connect | Expected when PA mode is on. Disable PA mode to use focuser/rotator. |
+| NINA OAPA doesn't find a port | Is the bridge running? Hub console should show `PABRIDGE started on COMxx`. Is the com0com pair installed? |
+| `:FA1#` / `:FA2#` rejected in console | Firmware doesn't have AXIS4 + AXIS5 both enabled. Check `Config.h` and reflash. |
+| Wedge moves wrong direction | Set `ReverseAzimuth` / `ReverseAltitude` in NINA TPPA settings, or flip `AXIS4_REVERSE` / `AXIS5_REVERSE` in firmware. |
+| First TPPA iteration overshoots | Gear ratio too high. Halve `XGearRatio` / `YGearRatio` and retry. |
+| Motor stalls or skips steps | Bump **Run (mA)** in Advanced popup. Default 500 mA — try 800-1200 mA depending on stepper. |
+| Wedge drifts when idle | Bump **Hold (%)** in Advanced popup. Default 50% — try 70-90% for high-load wedges. |
+| Wedge hits hard stop | Reduce per-axis Step in the panel. TPPA's auto-correction caps at 75% per iteration so it won't run away. |
+| NINA throws "Motor appears stuck" | Hub log should show motor moving (`:Fg#` value changing). If position never changes, firmware isn't accepting commands — try lower goto-rate (slower speed) or check wiring. |

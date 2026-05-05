@@ -83,12 +83,36 @@ namespace ASCOM.OnStepX.ViewModels
             }
         }
 
+        // Speed dropdown (1=Slow, 2=Fast, 3=Very Fast). Shared by both axes.
+        public System.Collections.ObjectModel.ObservableCollection<RateOption> SpeedOptions { get; } =
+            new System.Collections.ObjectModel.ObservableCollection<RateOption>
+            {
+                new RateOption(1, "Slow"),
+                new RateOption(2, "Fast"),
+                new RateOption(3, "Very Fast"),
+            };
+        private int _selectedSpeed = 1;
+        public int SelectedSpeed { get => _selectedSpeed; set => Set(ref _selectedSpeed, Math.Max(1, Math.Min(3, value))); }
+
+        // Per-axis Goto target (motor steps absolute). Bound to NumericBox in
+        // the PA section; GotoAlt/Az commands fire :Fs<n># on the chosen axis.
+        private int _altGotoTarget;
+        public int AltGotoTarget { get => _altGotoTarget; set => Set(ref _altGotoTarget, value); }
+        private int _azGotoTarget;
+        public int AzGotoTarget { get => _azGotoTarget; set => Set(ref _azGotoTarget, value); }
+
         public ICommand StopAllCommand { get; }
+        public ICommand GotoAltCommand { get; }
+        public ICommand GotoAzCommand  { get; }
+        public ICommand OpenAdvancedCommand { get; }
 
         public PolarAlignmentViewModel(MainViewModel main)
         {
             _main = main;
             StopAllCommand = new RelayCommand(DoStopAll, () => _main.State == ConnState.Connected);
+            GotoAltCommand = new RelayCommand(() => DoGoto(1, _altGotoTarget), () => MountActionsEnabled);
+            GotoAzCommand  = new RelayCommand(() => DoGoto(2, _azGotoTarget),  () => MountActionsEnabled);
+            OpenAdvancedCommand = new RelayCommand(OpenAdvanced, () => MountActionsEnabled);
         }
 
         internal void OnConnStateChanged()
@@ -163,6 +187,78 @@ namespace ASCOM.OnStepX.ViewModels
                     DebugLogger.Log("PA",
                         "focuser=" + focuserIdx + " :FA" + focuserIdx + "# :F" + rate + "# :Fr" +
                         delta.ToString("+0;-0", System.Globalization.CultureInfo.InvariantCulture) + "#");
+                }
+            });
+        }
+
+        // Absolute goto for one axis. Issues :FA[n]# + :F<rate># + :Fs<steps>#
+        // under PaAxisLock to avoid colliding with the cache poll.
+        private void DoGoto(int focuserIdx, int targetSteps)
+        {
+            if (!MountActionsEnabled) return;
+            if (focuserIdx != 1 && focuserIdx != 2) return;
+            int rate = _selectedSpeed == 1 ? GotoRateSlow
+                     : _selectedSpeed == 2 ? GotoRateFast
+                     : GotoRateVeryFast;
+            int target = targetSteps;
+            RunBg(() =>
+            {
+                var st = _mount.State;
+                if (st == null) return;
+                lock (st.PaAxisLock)
+                {
+                    bool ok = false;
+                    try { ok = _mount.Protocol.SetActiveFocuser(focuserIdx); }
+                    catch (Exception ex) { DebugLogger.LogException("PA", ex); return; }
+                    if (!ok)
+                    {
+                        DebugLogger.Log("PA", ":FA" + focuserIdx + "# rejected — focuser not present");
+                        return;
+                    }
+                    try { _mount.Protocol.SetFocuserRatePresetBlind(rate); }
+                    catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                    try { _mount.Protocol.SetFocuserPositionStepsBlind(target); }
+                    catch (Exception ex) { DebugLogger.LogException("PA", ex); return; }
+                    DebugLogger.Log("PA",
+                        "goto focuser=" + focuserIdx + " :FA" + focuserIdx + "# :F" + rate + "# :Fs" + target + "#");
+                }
+            });
+        }
+
+        private void OpenAdvanced()
+        {
+            try
+            {
+                var dlg = new Views.PolarAlignmentAdvancedWindow(this)
+                {
+                    Owner = System.Windows.Application.Current?.MainWindow
+                };
+                dlg.ShowDialog();
+            }
+            catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+        }
+
+        // Apply current/hold settings to firmware. Called from the advanced
+        // dialog's Apply button. Persists to DriverSettings + sends to mount.
+        public void ApplyDriverCurrents(int altRunMa, int altHoldPct, int azRunMa, int azHoldPct)
+        {
+            DriverSettings.PolarAlignAltRunCurrent  = altRunMa;
+            DriverSettings.PolarAlignAltHoldPercent = altHoldPct;
+            DriverSettings.PolarAlignAzRunCurrent   = azRunMa;
+            DriverSettings.PolarAlignAzHoldPercent  = azHoldPct;
+            RunBg(() =>
+            {
+                var st = _mount.State;
+                if (st == null) return;
+                lock (st.PaAxisLock)
+                {
+                    try { _mount.Protocol.SetAxisRunCurrentMa(4, altRunMa); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                    try { _mount.Protocol.SetAxisHoldPercent(4, altHoldPct); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                    try { _mount.Protocol.SetAxisRunCurrentMa(5, azRunMa); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                    try { _mount.Protocol.SetAxisHoldPercent(5, azHoldPct); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                    DebugLogger.Log("PA",
+                        "applied currents Alt run=" + altRunMa + "mA hold=" + altHoldPct +
+                        "%, Az run=" + azRunMa + "mA hold=" + azHoldPct + "%");
                 }
             });
         }

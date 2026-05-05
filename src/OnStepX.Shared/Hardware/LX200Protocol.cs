@@ -424,6 +424,25 @@ namespace ASCOM.OnStepX.Hardware
             _transport.SendBlind(":Fs" + steps.ToString(CultureInfo.InvariantCulture) + "#");
         }
 
+        // OnStepX TMC driver per-axis tuning. axis is the physical AXIS
+        // number (4 or 5 in PA mode). Run current is in milliamperes,
+        // hold percent is 0..100 (mapped to IHOLD as % of IRUN by firmware).
+        // The :SXAn,IRUN= / :SXAn,IHOLD= form is the OnStepX extended-set
+        // syntax; sent blind because the firmware ack varies by build.
+        public void SetAxisRunCurrentMa(int axis, int milliamps)
+        {
+            if (axis < 1 || axis > 9) return;
+            _transport.SendBlind(":SXA" + axis.ToString(CultureInfo.InvariantCulture) +
+                                 ",IRUN=" + milliamps.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+        public void SetAxisHoldPercent(int axis, int percent)
+        {
+            if (axis < 1 || axis > 9) return;
+            int clamped = Math.Max(0, Math.Min(100, percent));
+            _transport.SendBlind(":SXA" + axis.ToString(CultureInfo.InvariantCulture) +
+                                 ",IHOLD=" + clamped.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+
         public void FocuserZero()        => _transport.SendBlind(":FZ#");
         public void FocuserSetHomeHere() => _transport.SendBlind(":FH#");
         public void FocuserGoHome()      => _transport.SendBlind(":Fh#");

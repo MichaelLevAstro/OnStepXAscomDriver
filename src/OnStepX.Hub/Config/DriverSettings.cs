@@ -83,6 +83,13 @@ namespace ASCOM.OnStepX.Config
         // Alignment panel. One click moves StepSize motor steps via :Fr[±N]#.
         public static int    PolarAlignAltStepSize { get => GetInt("PolarAlignAltStepSize", 100); set => SetInt("PolarAlignAltStepSize", value); }
         public static int    PolarAlignAzStepSize  { get => GetInt("PolarAlignAzStepSize",  100); set => SetInt("PolarAlignAzStepSize",  value); }
+        // PA-mode TMC driver tuning. Run current in mA (full goto-rate move
+        // current), hold percent (0..100, % of run for standstill). Persisted
+        // here + sent to firmware on every change so reconnect restores them.
+        public static int    PolarAlignAltRunCurrent  { get => GetInt("PolarAlignAltRunCurrent",  500); set => SetInt("PolarAlignAltRunCurrent",  value); }
+        public static int    PolarAlignAzRunCurrent   { get => GetInt("PolarAlignAzRunCurrent",   500); set => SetInt("PolarAlignAzRunCurrent",   value); }
+        public static int    PolarAlignAltHoldPercent { get => GetInt("PolarAlignAltHoldPercent", 50);  set => SetInt("PolarAlignAltHoldPercent", value); }
+        public static int    PolarAlignAzHoldPercent  { get => GetInt("PolarAlignAzHoldPercent",  50);  set => SetInt("PolarAlignAzHoldPercent",  value); }
         // Local serial port the hub opens for the NINA TPPA UPAS bridge. User
         // pairs this with a com0com partner port and points NINA TPPA at the
         // partner. Empty = bridge disabled.

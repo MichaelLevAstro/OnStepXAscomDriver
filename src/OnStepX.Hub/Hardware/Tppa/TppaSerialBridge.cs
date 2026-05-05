@@ -11,23 +11,29 @@ using ASCOM.OnStepX.Hardware.State;
 
 namespace ASCOM.OnStepX.Hardware.Tppa
 {
-    // Serial bridge that lets NINA's TPPA UPAS plugin auto-discover the hub as
-    // a GRBL-speaking polar alignment wedge. Translates the UPAS subset of
-    // GRBL into OnStepX axis-4 / axis-5 focuser commands.
+    // Serial bridge that lets NINA's TPPA OAPA plugin auto-discover the hub as
+    // a GRBL-speaking polar alignment wedge. Translates the OAPA subset of
+    // GRBL into OnStepX focuser-1 / focuser-2 commands (= AXIS4 / AXIS5).
     //
-    // Wire protocol (UPAS, 115200 8N1):
-    //   ? \r\n                              -> <Idle|MPos:x,y,0.000|...>\r\n
-    //   $J=G91G21X<val>F<speed>\r\n        -> ok\r\n   (relative axis 4)
-    //   $J=G91G21Y<val>F<speed>\r\n        -> ok\r\n   (relative axis 5)
-    //   $J=G53X<val>F<speed>\r\n            -> ok\r\n   (absolute axis 4)
-    //   $J=G53Y<val>F<speed>\r\n            -> ok\r\n   (absolute axis 5)
-    //   ! or 0x18                           -> ok\r\n   (halt)
-    //   anything else                       -> ok\r\n
+    // Wire protocol (OAPA, 115200 8N1, NewLine = "\n"):
+    //   ? \n                                -> <Idle|MPos:x,y,0.000|>\nok\n
+    //   $J=G91G21X<val>F<speed>\n           -> ok\n     (relative focuser 1 = Alt)
+    //   $J=G91G21Y<val>F<speed>\n           -> ok\n     (relative focuser 2 = Az)
+    //   $J=G53X<val>F<speed>\n              -> ok\n     (absolute focuser 1)
+    //   $J=G53Y<val>F<speed>\n              -> ok\n     (absolute focuser 2)
+    //   XC<mA>\n                            -> ok\n     (Alt run current)
+    //   YC<mA>\n                            -> ok\n     (Az run current)
+    //   XH<percent>\n                       -> ok\n     (Alt hold percent)
+    //   YH<percent>\n                       -> ok\n     (Az hold percent)
+    //   ! or 0x18                           -> ok\n     (halt)
+    //   anything else                       -> ok\n
     //
     // Position units: raw OnStepX motor steps. User calibrates
     // XGearRatio/YGearRatio in NINA TPPA settings as steps-per-arcminute.
     // Speed F<value>: opaque pass-through, mapped linearly into the OnStepX
-    // goto-rate band 5..9.
+    // goto-rate band 5..9. Currents are forwarded to firmware via the
+    // hub's per-axis :SXAn,IRUN= / :SXAn,IHOLD= settings, persisted in
+    // DriverSettings so they reapply on reconnect.
     internal sealed class TppaSerialBridge : IDisposable
     {
         private readonly MountSession _mount;
@@ -61,13 +67,17 @@ namespace ASCOM.OnStepX.Hardware.Tppa
         private double _targetX = double.NaN;
         private double _targetY = double.NaN;
 
-        // GRBL motion regex (UPAS subset). G91G21 = relative metric, G53 =
-        // absolute. Letter X|Y selects axis 4|5.
+        // GRBL motion regex (OAPA subset). G91G21 = relative metric, G53 =
+        // absolute. Letter X|Y selects focuser 1|2 (= AXIS4|AXIS5).
         private static readonly Regex JogRelative = new Regex(
             @"^\$J=G91G21\s*(?<ax>[XY])\s*(?<val>-?\d+(\.\d+)?)\s*F\s*(?<spd>\d+(\.\d+)?)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex JogAbsolute = new Regex(
             @"^\$J=G53\s*(?<ax>[XY])\s*(?<val>-?\d+(\.\d+)?)\s*F\s*(?<spd>\d+(\.\d+)?)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // OAPA TMC driver tuning. Run current in mA, hold percent in 0..100.
+        private static readonly Regex CurrentCmd = new Regex(
+            @"^(?<ax>[XY])(?<kind>[CH])\s*(?<val>\d+(\.\d+)?)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public TppaSerialBridge(MountSession mount) { _mount = mount; }
@@ -108,7 +118,7 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                 _port = new SerialPort(portName, 115200, Parity.None, 8, StopBits.One)
                 {
                     Handshake = Handshake.None,
-                    NewLine = "\n",
+                    NewLine = "\n",  // OAPA NewLineSequence
                     ReadTimeout = 200,
                     WriteTimeout = 1000,
                     DtrEnable = true,
@@ -178,7 +188,7 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                         if (b == 0x18 || b == (byte)'!')
                         {
                             HandleHalt();
-                            WriteResponse("ok\r\n");
+                            WriteResponse("ok\n");
                             continue;
                         }
                         if (b == (byte)'\n' || b == (byte)'\r')
@@ -210,7 +220,7 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                 double val = double.Parse(m.Groups["val"].Value, CultureInfo.InvariantCulture);
                 double spd = double.Parse(m.Groups["spd"].Value, CultureInfo.InvariantCulture);
                 IssueMove(focuser, isAbsolute: false, value: val, speed: spd);
-                WriteResponse("ok\r\n");
+                WriteResponse("ok\n");
                 return;
             }
             m = JogAbsolute.Match(line);
@@ -220,11 +230,56 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                 double val = double.Parse(m.Groups["val"].Value, CultureInfo.InvariantCulture);
                 double spd = double.Parse(m.Groups["spd"].Value, CultureInfo.InvariantCulture);
                 IssueMove(focuser, isAbsolute: true, value: val, speed: spd);
-                WriteResponse("ok\r\n");
+                WriteResponse("ok\n");
                 return;
             }
-            // Unknown but harmless — UPAS doesn't expect strict rejection.
-            WriteResponse("ok\r\n");
+            // OAPA TMC tuning: XC<mA> / YC<mA> = run current; XH<%> / YH<%>
+            // = hold percent. Persist + forward to firmware.
+            m = CurrentCmd.Match(line);
+            if (m.Success)
+            {
+                int focuser = m.Groups["ax"].Value.ToUpperInvariant() == "X" ? 1 : 2;
+                bool isHold = m.Groups["kind"].Value.ToUpperInvariant() == "H";
+                int val = (int)Math.Round(double.Parse(m.Groups["val"].Value, CultureInfo.InvariantCulture));
+                IssueCurrentSetting(focuser, isHold, val);
+                WriteResponse("ok\n");
+                return;
+            }
+            // Unknown but harmless — OAPA doesn't expect strict rejection.
+            WriteResponse("ok\n");
+        }
+
+        // OAPA current/hold settings. Persisted in DriverSettings for replay
+        // on reconnect, then forwarded to firmware via OnStepX axis-setting
+        // commands. focuser ∈ {1, 2}, isHold = false for run-current (mA),
+        // true for hold-percent (0..100).
+        private void IssueCurrentSetting(int focuser, bool isHold, int val)
+        {
+            int physicalAxis = focuser == 1 ? 4 : 5;
+            try
+            {
+                if (isHold)
+                {
+                    if (focuser == 1) DriverSettings.PolarAlignAltHoldPercent = val;
+                    else              DriverSettings.PolarAlignAzHoldPercent  = val;
+                }
+                else
+                {
+                    if (focuser == 1) DriverSettings.PolarAlignAltRunCurrent = val;
+                    else              DriverSettings.PolarAlignAzRunCurrent  = val;
+                }
+            }
+            catch (Exception ex) { DebugLogger.LogException("PABRIDGE", ex); }
+
+            // Hand off to the LX200 facade which knows the OnStepX wire format.
+            try
+            {
+                if (isHold) _mount.Protocol.SetAxisHoldPercent(physicalAxis, val);
+                else        _mount.Protocol.SetAxisRunCurrentMa(physicalAxis, val);
+                DebugLogger.Log("PABRIDGE",
+                    "set axis=" + physicalAxis + (isHold ? " hold%=" : " runMa=") + val);
+            }
+            catch (Exception ex) { DebugLogger.LogException("PABRIDGE", ex); }
         }
 
         // Synchronous: select axis, set rate, issue move. Returns once the
@@ -347,14 +402,20 @@ namespace ASCOM.OnStepX.Hardware.Tppa
             }
 
             string status = moving ? "Run" : "Idle";
-            // NINA's UPAS UpdateStatus issues `?` then calls ReadLine TWICE —
-            // first reads the status line, second discards a GRBL "ok"
-            // acknowledgment. Skipping the "ok\r\n" causes the second
-            // ReadLine to block until the 1s scan timeout.
+            int running = moving ? 1 : 0;
+            // OAPA UpdateStatus issues `?` then calls ReadLine TWICE — first
+            // reads the status line, second discards a GRBL "ok" ack.
+            // Skipping the "ok\n" line makes the second ReadLine block to
+            // the 1s scan timeout, breaking port discovery.
+            //
+            // Format must satisfy OAPA regex:
+            //   <(?<status>\w+)\|MPos:x,y,z(?:\|T:t,R:r,E:e,S:s)?\|>
+            // Per-axis target/running/endstop/speed group is optional but
+            // sending it gives the plugin extra signal during MoveCloser.
             return "<" + status + "|MPos:" +
                    x.ToString("0.000", CultureInfo.InvariantCulture) + "," +
                    y.ToString("0.000", CultureInfo.InvariantCulture) + "," +
-                   "0.000|F:0|>\r\nok\r\n";
+                   "0.000|T:0,R:" + running + ",E:0,S:0|>\nok\n";
         }
 
         private void WriteResponse(string s)

@@ -791,48 +791,92 @@
               <!-- ───── Polar Alignment Wedge ─────
                    Replaces FOCUSER + ROTATOR sections when the hub is in
                    PA mode (DriverSettings.PolarAlignmentMode + ≥2 focuser axes
-                   detected). Axis 4 = Alt, axis 5 = Az; click-to-step buttons
-                   issue :FA[n]# + :F[5..9]# + :Fr[±N]#. -->
+                   detected). Axis 4 = Alt, axis 5 = Az.
+                   Plus pad jogs by per-axis StepSize at the dropdown speed.
+                   Goto fields target absolute motor steps. Advanced opens the
+                   driver-current popup. -->
               <c:Section Title="POLAR ALIGNMENT" IconGeometry="{StaticResource Geo.Position}"
                          Visibility="{Binding PolarAlignment.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <c:Section.HeaderRight>
+                  <Button Style="{StaticResource Btn.Sm}" Content="Advanced…"
+                          Command="{Binding PolarAlignment.OpenAdvancedCommand}"/>
+                </c:Section.HeaderRight>
                 <c:Section.Body>
                   <StackPanel>
-                    <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
-                               Text="Axis 4 = Alt, axis 5 = Az. Each click moves StepSize motor steps at the chosen rate. STOP halts both axes."/>
-
-                    <!-- Live position readout. -->
-                    <Grid Margin="0,0,0,4">
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <TextBlock Text="Alt position" Style="{StaticResource Text.Label}"/>
-                      <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AltPosition}" Style="{StaticResource Text.Mono}"/>
-                    </Grid>
-                    <Grid Margin="0,0,0,8">
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <TextBlock Text="Az position" Style="{StaticResource Text.Label}"/>
-                      <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AzPosition}" Style="{StaticResource Text.Mono}"/>
-                    </Grid>
-
-                    <!-- Step size per axis. Caps how far one click can move. -->
-                    <Grid Margin="0,0,0,4">
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <TextBlock Text="Alt step" Style="{StaticResource Text.Label}"/>
-                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
-                                    Min="1" Max="100000" Step="10" DecimalPlaces="0"
-                                    Value="{Binding PolarAlignment.AltStepSize}"
-                                    IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
-                    </Grid>
-                    <Grid Margin="0,0,0,10">
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                      <TextBlock Text="Az step" Style="{StaticResource Text.Label}"/>
-                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
-                                    Min="1" Max="100000" Step="10" DecimalPlaces="0"
-                                    Value="{Binding PolarAlignment.AzStepSize}"
-                                    IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
-                    </Grid>
-
-                    <!-- Two-row jog pad. -->
+                    <!-- Plus pad in the middle. -->
                     <c:PolarAlignmentPad PadVM="{Binding PolarAlignment}"
-                                         IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                                         IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"
+                                         Margin="0,0,0,10"/>
+
+                    <!-- Slew speed (shared by both axes). -->
+                    <Grid Margin="0,0,0,8">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Slew speed" Style="{StaticResource Text.Label}"/>
+                      <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                                ItemsSource="{Binding PolarAlignment.SpeedOptions}"
+                                DisplayMemberPath="Label"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding PolarAlignment.SelectedSpeed}"
+                                IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Alt section: position, step, goto. -->
+                    <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0" Margin="0,0,0,8">
+                      <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Alt position" Style="{StaticResource Text.Label}"/>
+                          <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AltPosition}" Style="{StaticResource Text.Mono}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Alt step" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AltStepSize}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,0">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Alt goto" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="0" Max="100000000" Step="100" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AltGotoTarget}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                          <Button Grid.Column="2" Style="{StaticResource Btn.SmPrimary}"
+                                  Content="Goto" Command="{Binding PolarAlignment.GotoAltCommand}" Margin="6,0,0,0"/>
+                        </Grid>
+                      </StackPanel>
+                    </Border>
+
+                    <!-- Az section: position, step, goto. -->
+                    <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+                      <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Az position" Style="{StaticResource Text.Label}"/>
+                          <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AzPosition}" Style="{StaticResource Text.Mono}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Az step" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AzStepSize}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,0">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Az goto" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="0" Max="100000000" Step="100" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AzGotoTarget}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                          <Button Grid.Column="2" Style="{StaticResource Btn.SmPrimary}"
+                                  Content="Goto" Command="{Binding PolarAlignment.GotoAzCommand}" Margin="6,0,0,0"/>
+                        </Grid>
+                      </StackPanel>
+                    </Border>
                   </StackPanel>
                 </c:Section.Body>
               </c:Section>
