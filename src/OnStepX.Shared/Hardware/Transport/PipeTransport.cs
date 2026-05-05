@@ -120,6 +120,26 @@ namespace ASCOM.OnStepX.Hardware.Transport
             }
         }
 
+        // Out-of-band IPC: ask hub if Polar Alignment Wedge mode is active.
+        // When true, axis 4 + axis 5 are wedge motors and Focuser/Rotator
+        // drivers must refuse Connect to prevent accidental wedge moves from
+        // focuser/rotator-aware apps. Returns false on legacy hubs that don't
+        // know the verb.
+        public bool IsPolarAlignmentMode()
+        {
+            lock (_lock)
+            {
+                if (!Connected) return false;
+                try
+                {
+                    _writer.WriteLine("IPC:ISPAMODE");
+                    string reply = _reader.ReadLine() ?? "";
+                    return reply == "IPC:ISPAMODE:TRUE";
+                }
+                catch (IOException) { Cleanup(); return false; }
+            }
+        }
+
         // Out-of-band IPC: ask the hub to pop its window to the foreground.
         // Unlike CMD/BLIND, carries no LX200 payload. Fire-and-forget from the
         // driver's perspective; hub acknowledges with "OK".

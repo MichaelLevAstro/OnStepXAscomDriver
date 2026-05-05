@@ -73,6 +73,21 @@ namespace ASCOM.OnStepX.Config
 
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
 
+        // Polar Alignment Wedge mode. When true AND firmware exposes ≥2 focuser
+        // axes (axis 4 + axis 5), the hub treats those axes as Alt + Az wedge
+        // motors. Focuser + Rotator panels collapse, Polar Alignment panel
+        // appears, and ASCOM Focuser/Rotator drivers refuse Connect so a
+        // focuser-aware app can't accidentally drive the wedge.
+        public static bool   PolarAlignmentMode { get => GetBool("PolarAlignmentMode", false); set => SetBool("PolarAlignmentMode", value); }
+        // Per-axis step amount used by the click-to-step buttons in the Polar
+        // Alignment panel. One click moves StepSize motor steps via :Fr[±N]#.
+        public static int    PolarAlignAltStepSize { get => GetInt("PolarAlignAltStepSize", 100); set => SetInt("PolarAlignAltStepSize", value); }
+        public static int    PolarAlignAzStepSize  { get => GetInt("PolarAlignAzStepSize",  100); set => SetInt("PolarAlignAzStepSize",  value); }
+        // Local serial port the hub opens for the NINA TPPA UPAS bridge. User
+        // pairs this with a com0com partner port and points NINA TPPA at the
+        // partner. Empty = bridge disabled.
+        public static string TppaBridgePort { get => Get("TppaBridgePort", ""); set => Set("TppaBridgePort", value); }
+
         // Longitude on-disk convention. Pre-1: west-positive (raw wire).
         // >=1: east-positive (ASCOM/civil); migration flips once.
         public static int LongitudeConventionVersion

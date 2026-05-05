@@ -10,7 +10,8 @@ namespace ASCOM.OnStepX.ViewModels
 {
     // The collapsed-by-default "Advanced Settings" card on the main window.
     // (Distinct from AdvancedSettingsViewModel which backs the modal pier/flip
-    // dialog.) Mirrors HubForm.BuildAdvancedGroup.
+    // dialog.) Mirrors HubForm.BuildAdvancedGroup. Also surfaces the Polar
+    // Alignment Wedge mode toggle so users don't have to dig into the modal.
     public sealed class AdvancedDiagnosticsViewModel : ViewModelBase
     {
         private bool _notificationsEnabled;
@@ -27,6 +28,32 @@ namespace ASCOM.OnStepX.ViewModels
             set { if (Set(ref _verboseLog, value)) { try { DriverSettings.VerboseFileLog = value; } catch { } } }
         }
 
+        // Polar Alignment Wedge mode. Persisted on toggle. Reconnect required
+        // for the effect to land (MountStateCache resolves it during Start()).
+        private bool _polarAlignmentMode;
+        public bool PolarAlignmentMode
+        {
+            get => _polarAlignmentMode;
+            set { if (Set(ref _polarAlignmentMode, value)) { try { DriverSettings.PolarAlignmentMode = value; } catch { } } }
+        }
+
+        // Local serial port the hub opens for the NINA TPPA UPAS bridge.
+        // Persisted; bridge reconciles on save (handled in setter via _onBridgeChange).
+        private string _tppaBridgePort = "";
+        public string TppaBridgePort
+        {
+            get => _tppaBridgePort;
+            set
+            {
+                string v = value ?? "";
+                if (!Set(ref _tppaBridgePort, v)) return;
+                try { DriverSettings.TppaBridgePort = v; } catch { }
+                try { _onBridgeChange?.Invoke(); } catch { }
+            }
+        }
+        private Action _onBridgeChange;
+        internal void SetBridgeChangeHandler(Action handler) { _onBridgeChange = handler; }
+
         public string LogPath => DebugLogger.LogDirectory;
 
         public ICommand OpenLogFolderCommand { get; }
@@ -35,6 +62,8 @@ namespace ASCOM.OnStepX.ViewModels
         {
             _notificationsEnabled = DriverSettings.NotificationsEnabled;
             _verboseLog = DriverSettings.VerboseFileLog;
+            _polarAlignmentMode = DriverSettings.PolarAlignmentMode;
+            _tppaBridgePort = DriverSettings.TppaBridgePort ?? "";
             OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
         }
 

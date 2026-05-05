@@ -283,6 +283,35 @@ begin
   Exec(ExpandConstant('{cmd}'), '/c taskkill /f /im OnStepX.Hub.Wpf.exe         >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+// Pre-0.5 LocalServer-style driver shipped ASCOM.OnStepX.Telescope.exe (a
+// hosting EXE registered at the Telescope CLSID via LocalServer32). Newer
+// builds use the Inproc DLL only — leaving the legacy exe on disk lets the
+// stale Start Menu shortcut "OnStepX ASCOM Hub" still resolve and confuses
+// users into running prehistoric UI. Sweep the file + sidecars + shortcuts.
+procedure RemoveLegacyLocalServerExe();
+var
+  app: String;
+  startMenu: String;
+begin
+  app := ExpandConstant('{app}');
+  if FileExists(app + '\ASCOM.OnStepX.Telescope.exe') then
+    DeleteFile(app + '\ASCOM.OnStepX.Telescope.exe');
+  if FileExists(app + '\ASCOM.OnStepX.Telescope.exe.config') then
+    DeleteFile(app + '\ASCOM.OnStepX.Telescope.exe.config');
+  if FileExists(app + '\ASCOM.OnStepX.Telescope.pdb') then
+    DeleteFile(app + '\ASCOM.OnStepX.Telescope.pdb');
+
+  // Stale Start Menu shortcut from prior installer naming.
+  startMenu := ExpandConstant('{commonprograms}') + '\OnStepX';
+  if FileExists(startMenu + '\OnStepX ASCOM Hub.lnk') then
+    DeleteFile(startMenu + '\OnStepX ASCOM Hub.lnk');
+  if FileExists(startMenu + '\Uninstall OnStepX ASCOM.lnk') then
+    DeleteFile(startMenu + '\Uninstall OnStepX ASCOM.lnk');
+
+  // Stale LocalServer32 registry registration at the Telescope CLSID.
+  RegDeleteKeyIncludingSubkeys(HKCR, 'CLSID\{#TelescopeClsid}\LocalServer32');
+end;
+
 // Wipe leftover OnStepX.Hub.Wpf.exe binary from the prior beta installer so
 // %ProgramFiles%\OnStepX doesn't sit with two coexisting hub exes.
 procedure RemoveLegacyWpfBinary();
@@ -390,6 +419,7 @@ begin
       CleanLegacyComKeys();
       RemoveLegacyWpfBinary();
       RemoveLegacyTelescopeDll();
+      RemoveLegacyLocalServerExe();
     end;
     ssPostInstall: begin
       RegisterAscomProfile();

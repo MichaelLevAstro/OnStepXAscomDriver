@@ -402,6 +402,28 @@ namespace ASCOM.OnStepX.Hardware
             preset >= 1 && preset <= 9 &&
             Bool(_transport.SendAndReceive(":F" + preset.ToString(CultureInfo.InvariantCulture) + "#"));
 
+        // Blind variants for PA mode. Some OnStepX firmware builds treat
+        // :F[1-9]# and :Fr<sn># as fire-and-forget — they write no reply
+        // terminator, so SendAndReceive eats the full ReadTimeout (~1500ms)
+        // per command. That stacks to a multi-second motor-start delay,
+        // which trips NINA TPPA's stuck detector before the wedge ever
+        // moves. Fire-and-forget here; the next SendAndReceive
+        // (DiscardInBuffer'd) cleans up any stale bytes if firmware does
+        // happen to reply.
+        public void SetFocuserRatePresetBlind(int preset)
+        {
+            if (preset < 1 || preset > 9) return;
+            _transport.SendBlind(":F" + preset.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+        public void SetFocuserPositionRelativeStepsBlind(int delta)
+        {
+            _transport.SendBlind(":Fr" + delta.ToString("+0;-0", CultureInfo.InvariantCulture) + "#");
+        }
+        public void SetFocuserPositionStepsBlind(int steps)
+        {
+            _transport.SendBlind(":Fs" + steps.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+
         public void FocuserZero()        => _transport.SendBlind(":FZ#");
         public void FocuserSetHomeHere() => _transport.SendBlind(":FH#");
         public void FocuserGoHome()      => _transport.SendBlind(":Fh#");

@@ -294,6 +294,29 @@
               </c:Section.Body>
             </c:Section>
 
+            <!-- ───── Polar Alignment Wedge mode ─────
+                 Visible inline so users don't need to dig into the modal.
+                 Reconnect is required after toggling — MountStateCache
+                 resolves PA mode during Start(). -->
+            <c:Section Title="POLAR ALIGNMENT WEDGE" IconGeometry="{StaticResource Geo.Position}">
+              <c:Section.Body>
+                <StackPanel>
+                  <CheckBox Content="Use AXIS4 + AXIS5 as Polar Alignment Wedge"
+                            IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,6"/>
+                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                             Text="Replaces Focuser + Rotator panels with the wedge jog pad. Requires firmware AXIS4_DRIVER_MODEL + AXIS5_DRIVER_MODEL. Reconnect after toggling."/>
+                  <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="TPPA port" Style="{StaticResource Text.Label}"/>
+                    <TextBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                             Text="{Binding Advanced.TppaBridgePort, UpdateSourceTrigger=LostFocus}"/>
+                  </Grid>
+                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                             Text="Local serial port the hub opens for the NINA TPPA UPAS plugin (pair with com0com). Empty = bridge disabled."/>
+                </StackPanel>
+              </c:Section.Body>
+            </c:Section>
+
             <!-- ───── Advanced (collapsed by default) ───── -->
             <c:Section Title="ADVANCED" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False">
               <c:Section.Body>
@@ -550,9 +573,12 @@
                 </c:Section.Body>
               </c:Section>
 
-              <!-- Hint card when no focuser is configured on the board. -->
+              <!-- Hint card when no focuser is configured on the board. Hidden
+                   in PA mode — Focuser.IsAvailable is forced false there but
+                   showing the hint alongside the polar alignment panel just
+                   confuses the user. -->
               <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
-                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                         Visibility="{Binding ShowFocuserHint, Converter={StaticResource BoolToVis}}">
                 <c:Section.Body>
                   <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
                              Text="No focuser detected on this OnStepX board. Enable AXIS4_DRIVER_MODEL (or higher) in the firmware Config.h and reflash to use a focuser here."/>
@@ -752,12 +778,62 @@
                 </c:Section.Body>
               </c:Section>
 
-              <!-- Hint card when no rotator is configured on the board. -->
+              <!-- Hint card when no rotator is configured on the board. Hidden
+                   in PA mode for the same reason as the focuser hint. -->
               <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
-                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                         Visibility="{Binding ShowRotatorHint, Converter={StaticResource BoolToVis}}">
                 <c:Section.Body>
                   <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
                              Text="No rotator detected on this OnStepX board. Enable AXIS3_DRIVER_MODEL in the firmware Config.h and reflash to use a rotator here."/>
+                </c:Section.Body>
+              </c:Section>
+
+              <!-- ───── Polar Alignment Wedge ─────
+                   Replaces FOCUSER + ROTATOR sections when the hub is in
+                   PA mode (DriverSettings.PolarAlignmentMode + ≥2 focuser axes
+                   detected). Axis 4 = Alt, axis 5 = Az; click-to-step buttons
+                   issue :FA[n]# + :F[5..9]# + :Fr[±N]#. -->
+              <c:Section Title="POLAR ALIGNMENT" IconGeometry="{StaticResource Geo.Position}"
+                         Visibility="{Binding PolarAlignment.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <c:Section.Body>
+                  <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Axis 4 = Alt, axis 5 = Az. Each click moves StepSize motor steps at the chosen rate. STOP halts both axes."/>
+
+                    <!-- Live position readout. -->
+                    <Grid Margin="0,0,0,4">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Alt position" Style="{StaticResource Text.Label}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AltPosition}" Style="{StaticResource Text.Mono}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Az position" Style="{StaticResource Text.Label}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AzPosition}" Style="{StaticResource Text.Mono}"/>
+                    </Grid>
+
+                    <!-- Step size per axis. Caps how far one click can move. -->
+                    <Grid Margin="0,0,0,4">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Alt step" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                    Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                    Value="{Binding PolarAlignment.AltStepSize}"
+                                    IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,10">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Az step" Style="{StaticResource Text.Label}"/>
+                      <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                    Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                    Value="{Binding PolarAlignment.AzStepSize}"
+                                    IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Two-row jog pad. -->
+                    <c:PolarAlignmentPad PadVM="{Binding PolarAlignment}"
+                                         IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                  </StackPanel>
                 </c:Section.Body>
               </c:Section>
             </StackPanel>
