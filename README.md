@@ -1,10 +1,10 @@
 # OnStepX ASCOM + Hub
 
+Windows ASCOM driver bundle (Telescope + Focuser + Rotator) plus mediator app for OnStepX mounts. Drivers are in-process ASCOM shims that all pipe to a single hub; the hub is a standalone WPF app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
+
 ## Disclaimer
 I have tested this with my setup and it works well, but that doesn't mean it'll work well for you.
 If it doesn't, but you like the driver and would like it to, open up an issue stating the bug with as much context as possible, and i'll get on it!
-
-Windows ASCOM driver bundle (Telescope + Focuser + Rotator) plus mediator app for OnStepX mounts. Drivers are in-process ASCOM shims that all pipe to a single hub; the hub is a standalone WPF app that owns the serial/TCP link and serves many ASCOM clients concurrently over a named pipe.
 
 ## Important note
 Currently there is no switch, auxillary functions or weather support.
