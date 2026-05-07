@@ -294,33 +294,14 @@
               </c:Section.Body>
             </c:Section>
 
-            <!-- ───── Polar Alignment Wedge mode ─────
-                 Visible inline so users don't need to dig into the modal.
-                 Reconnect is required after toggling — MountStateCache
-                 resolves PA mode during Start(). -->
-            <c:Section Title="POLAR ALIGNMENT WEDGE" IconGeometry="{StaticResource Geo.Position}">
-              <c:Section.Body>
-                <StackPanel>
-                  <CheckBox Content="Use AXIS4 + AXIS5 as Polar Alignment Wedge"
-                            IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,6"/>
-                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
-                             Text="Replaces Focuser + Rotator panels with the wedge jog pad. Requires firmware AXIS4_DRIVER_MODEL + AXIS5_DRIVER_MODEL. Reconnect after toggling."/>
-                  <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="TPPA port" Style="{StaticResource Text.Label}"/>
-                    <TextBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
-                             Text="{Binding Advanced.TppaBridgePort, UpdateSourceTrigger=LostFocus}"/>
-                  </Grid>
-                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
-                             Text="Local serial port the hub opens for the NINA TPPA UPAS plugin (pair with com0com). Empty = bridge disabled."/>
-                </StackPanel>
-              </c:Section.Body>
-            </c:Section>
-
             <!-- ───── Advanced (collapsed by default) ───── -->
             <c:Section Title="ADVANCED" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False">
               <c:Section.Body>
                 <StackPanel>
+                  <CheckBox Content="Enable Automatic Polar Alignment"
+                            IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,6"/>
+                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,10"
+                             Text="Replaces Focuser + Rotator panels with the wedge jog pad and auto-binds the NINA TPPA OAPA bridge to a Hub-managed virtual port. Requires firmware AXIS4_DRIVER_MODEL + AXIS5_DRIVER_MODEL."/>
                   <CheckBox Content="Notify on limits" IsChecked="{Binding Advanced.NotificationsEnabled}" Margin="0,0,0,6"/>
                   <CheckBox Content="Enable Verbose log file" IsChecked="{Binding Advanced.VerboseLog}" Margin="0,0,0,6"/>
                   <TextBlock Text="{Binding Advanced.LogPath}" Style="{StaticResource Text.Hint}"

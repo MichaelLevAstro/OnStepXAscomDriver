@@ -93,6 +93,11 @@ namespace ASCOM.OnStepX.ViewModels
 
         public MainViewModel()
         {
+            // Auto-default the TPPA bridge port from the installer-written
+            // com0com pair list before any VM reads DriverSettings.TppaBridgePort.
+            // No UAC prompt — registry mirror only.
+            try { DriverSettings.EnsureTppaBridgePortDefaulted(); } catch { }
+
             Connection = new ConnectionViewModel(this);
             Site       = new SiteViewModel(this);
             DateTime   = new DateTimeViewModel(this);
@@ -151,12 +156,22 @@ namespace ASCOM.OnStepX.ViewModels
             ClientRegistry.Changed += OnClientRegistryChanged;
 
             // TPPA bridge: lazily started/stopped based on (mount open, PA mode,
-            // bridge port configured). Reconciled on every connection event.
+            // bridge port configured). Reconciled on every connection event +
+            // any time the user flips the PA toggle.
             _tppaBridge = new TppaSerialBridge(_mount);
-            // Inline ADVANCED card edits the bridge port — push changes to the
-            // bridge immediately so the user doesn't need to reconnect just to
-            // try a new port.
-            try { Advanced.SetBridgeChangeHandler(ReconcileTppaBridge); } catch { }
+            // PA toggle: refresh MountStateCache live (no reconnect) + kick
+            // the bridge to bind/unbind. Re-runs the auto-default lookup so a
+            // first-time toggle picks up a freshly-installed com0com pair.
+            try
+            {
+                Advanced.SetPolarAlignmentChangeHandler(() =>
+                {
+                    try { DriverSettings.EnsureTppaBridgePortDefaulted(); } catch { }
+                    try { _mount.State?.RefreshPolarAlignmentMode(); } catch (Exception ex) { TransportLogger.Note("PA refresh failed: " + ex.Message); }
+                    ReconcileTppaBridge();
+                });
+            }
+            catch { }
 
             _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _pollTimer.Tick += (s, e) => OnTick();

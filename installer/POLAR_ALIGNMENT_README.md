@@ -56,21 +56,39 @@ Apply pushes `:SXAn,IRUN=<mA>#` / `:SXAn,IHOLD=<%>#` to firmware (n=4 for Alt, n
 
 NINA's OAPA plugin can also write these values via its serial command set (`XC<mA>`, `XH<%>`, `YC<mA>`, `YH<%>`). The bridge forwards those to the same firmware commands.
 
-## NINA TPPA bridge (com0com setup)
+## NINA TPPA bridge (virtual COM port pair)
 
-NINA's TPPA OAPA profile auto-discovers polar alignment hardware by scanning serial ports for a GRBL-style status reply. To present the hub on a port that NINA can find, you need a **virtual COM port pair**.
+NINA's TPPA OAPA profile auto-discovers polar alignment hardware by scanning serial ports for a GRBL-style status reply. The hub presents itself on one half of a **virtual COM port pair**; NINA opens the other half.
 
-### One-time setup
+### Automatic setup
+
+The OnStepX installer ships **com0com** and creates one virtual pair on install (default: first free `COM<N>` / `COM<N+1>` ≥ COM10, ComDB-aware to skip stale claims). The hub auto-binds its bridge to that pair the first time you tick **Enable Automatic Polar Alignment** in the ADVANCED card. Nothing else to configure.
+
+Verify after install:
+
+1. Tick **ADVANCED → Enable Automatic Polar Alignment**.
+2. Hub console should show `PABRIDGE  started on COM<N>`.
+3. In NINA → TPPA plugin → set **Polar Alignment System = OAPA System**, scan ports → it will find the partner end (`COM<N+1>`).
+
+### Managing extra pairs (rare)
+
+Hub does **not** create or delete virtual ports at runtime — that would require admin per click. The bundled installer is the only path that touches com0com, so the hub itself never asks for elevation.
+
+If you need a second pair (e.g. multiple hub instances, or you accidentally deleted the first one), open the **com0com Setup Command Prompt** from the Start menu and run:
+
+```
+setupc install PortName=COM<N> PortName=COM<N+1>
+```
+
+Then point NINA at the new pair manually. The hub will still bind to whichever pair is recorded under `HKLM\SOFTWARE\OnStepX\Hub\Com0comManagedPairs` (the installer-created pair).
+
+### Manual setup (only if the bundled driver did not install)
+
+If your machine rejects the bundled signed kernel driver (Secure Boot configuration, conflicting older com0com install, etc.), fall back to a manual com0com install:
 
 1. Install **com0com** (free, GPL): <https://com0com.sourceforge.net/>.
-2. Open **Setup Command Prompt for com0com** as Administrator.
-3. `install PortName=COM10 PortName=COM11` (or run the GUI Setup, add pair).
-4. Verify in Device Manager → Ports (COM & LPT). May appear under **com0com** category if "use Ports class" wasn't ticked — works either way.
-
-### Hub side
-
-1. Hub → **ADVANCED card → TPPA port**: enter `COM10` (the first half of the com0com pair).
-2. Click outside the field to commit. Hub opens `COM10` and starts speaking OAPA on it. Confirm in console: `PABRIDGE  started on COM10`.
+2. Open **Setup Command Prompt for com0com** as Administrator → `install PortName=COM10 PortName=COM11`.
+3. Manually write `HKLM\SOFTWARE\OnStepX\Hub\Com0comManagedPairs` (REG_SZ) with value `0|COM10|COM11` so the hub picks it up.
 
 ### NINA side
 

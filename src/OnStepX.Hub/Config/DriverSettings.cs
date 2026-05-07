@@ -94,6 +94,69 @@ namespace ASCOM.OnStepX.Config
         // pairs this with a com0com partner port and points NINA TPPA at the
         // partner. Empty = bridge disabled.
         public static string TppaBridgePort { get => Get("TppaBridgePort", ""); set => Set("TppaBridgePort", value); }
+        // Tracks how many com0com pairs we'd seen the last time the auto-default
+        // routine ran. Hub auto-fills TppaBridgePort the first time it sees a
+        // pair appear (typically the one the installer just created), then
+        // leaves the field alone — a user who deliberately blanks it stays
+        // blanked until a new pair shows up.
+        public static int    LastSeenManagedPairCount { get => GetInt("LastSeenManagedPairCount", 0); set => SetInt("LastSeenManagedPairCount", value); }
+
+        // Auto-default TppaBridgePort to the A-side of the first Hub-managed
+        // com0com pair. Runs on every Hub launch. Reads the registry mirror
+        // written by the installer + pair UI — never invokes setupc, so no
+        // UAC is triggered at startup. Idempotent.
+        //
+        // Policy:
+        //   - 0 managed pairs -> leave TppaBridgePort alone (user may have
+        //     pointed at an external manually-installed com0com pair).
+        //   - >=1 managed pair AND TppaBridgePort empty -> set to first
+        //     pair's A side.
+        //   - >=1 managed pair AND TppaBridgePort matches some PortA in
+        //     the list -> already correct, leave alone.
+        //   - >=1 managed pair AND TppaBridgePort matches a PortB -> user
+        //     configured the NINA-facing side by mistake; reset to PortA.
+        //   - >=1 managed pair AND TppaBridgePort points elsewhere -> stale
+        //     reference (e.g. previous install's pair that got removed and
+        //     replaced). Reset to first pair's PortA.
+        //
+        // Returns true if a value was written.
+        public static bool EnsureTppaBridgePortDefaulted()
+        {
+            try
+            {
+                var pairs = Hardware.Tppa.Com0comManager.GetManagedPairsFromRegistry();
+                if (pairs == null || pairs.Count == 0)
+                {
+                    LastSeenManagedPairCount = 0;
+                    return false;
+                }
+                LastSeenManagedPairCount = pairs.Count;
+
+                string current = (TppaBridgePort ?? "").Trim();
+                string firstPortA = null;
+                bool currentMatchesPortA = false;
+                bool currentMatchesPortB = false;
+                foreach (var p in pairs)
+                {
+                    if (firstPortA == null && !string.IsNullOrEmpty(p.PortA)) firstPortA = p.PortA;
+                    if (!string.IsNullOrEmpty(current))
+                    {
+                        if (string.Equals(current, p.PortA, StringComparison.OrdinalIgnoreCase)) currentMatchesPortA = true;
+                        if (string.Equals(current, p.PortB, StringComparison.OrdinalIgnoreCase)) currentMatchesPortB = true;
+                    }
+                }
+                if (string.IsNullOrEmpty(firstPortA)) return false;
+                if (currentMatchesPortA) return false;
+                // Reset on: empty, matches B (user mistake), or stale-orphan.
+                if (string.IsNullOrEmpty(current) || currentMatchesPortB || !currentMatchesPortA)
+                {
+                    TppaBridgePort = firstPortA;
+                    return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
 
         // Longitude on-disk convention. Pre-1: west-positive (raw wire).
         // >=1: east-positive (ASCOM/civil); migration flips once.

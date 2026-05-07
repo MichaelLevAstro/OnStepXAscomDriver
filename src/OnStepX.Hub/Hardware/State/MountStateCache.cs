@@ -273,6 +273,57 @@ namespace ASCOM.OnStepX.Hardware.State
             _paFastPollTask = null;
         }
 
+        // Live re-resolve of PA mode without dropping the mount link. Called
+        // when the user flips the Advanced "Enable Automatic Polar Alignment"
+        // toggle. Three transitions to handle:
+        //   1) PA off -> PA on  : resolve again (uses existing focuser probe
+        //                         results), spin up the fast poll task,
+        //                         FocuserAvailable + RotatorAvailable get
+        //                         forced false inside ResolvePolarAlignmentMode.
+        //   2) PA on  -> PA off : re-probe focuser + rotator so their VMs
+        //                         come back online, then resolve again.
+        //                         Stop the fast poll task.
+        //   3) Setting unchanged: no-op.
+        // Bridge reconcile is the caller's responsibility (MainViewModel
+        // chains it after this call).
+        public void RefreshPolarAlignmentMode()
+        {
+            if (_pollTask == null) return; // not connected; Start() will pick it up
+            bool wasInPaMode = PolarAlignmentMode;
+            bool requested = false;
+            try { requested = DriverSettings.PolarAlignmentMode; } catch { }
+
+            if (wasInPaMode && !requested)
+            {
+                // Restore focuser + rotator availability from firmware before
+                // re-resolving — otherwise FocuserAvailable stays false and
+                // those VMs would still report unavailable.
+                try { TryProbeFocuser(); }  catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                try { TryProbeRotator(); }  catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+            }
+
+            ResolvePolarAlignmentMode();
+
+            if (PolarAlignmentMode && _paFastPollTask == null)
+            {
+                _paFastPollTask = Task.Run(() => PaFastPollLoop(_cts.Token));
+                DebugLogger.Log("PA", "live refresh: fast poll task started");
+            }
+            else if (!PolarAlignmentMode && _paFastPollTask != null)
+            {
+                // Fast poll task exits naturally when PolarAlignmentMode flips
+                // false (it checks the flag each tick). Drop the handle so a
+                // future toggle-on starts a fresh task.
+                _paFastPollTask = null;
+                DebugLogger.Log("PA", "live refresh: fast poll task release");
+            }
+            DebugLogger.Log("PA",
+                "live refresh: requested=" + requested +
+                " resolved=" + PolarAlignmentMode +
+                " focuserAvail=" + FocuserAvailable +
+                " rotatorAvail=" + RotatorAvailable);
+        }
+
         public void Dispose() { Stop(); _cts.Dispose(); }
 
         private void PollLoop(CancellationToken ct)
@@ -427,15 +478,20 @@ namespace ASCOM.OnStepX.Hardware.State
         {
             while (!ct.IsCancellationRequested)
             {
+                if (!PolarAlignmentMode)
+                {
+                    // PA mode toggled off live — exit so RefreshPolarAlignmentMode
+                    // can spin a fresh task on the next toggle-on without two
+                    // concurrent loops fighting for the wire.
+                    DebugLogger.Log("PA", "fast poll exit (PolarAlignmentMode=false)");
+                    return;
+                }
                 try
                 {
-                    if (PolarAlignmentMode)
+                    lock (PaAxisLock)
                     {
-                        lock (PaAxisLock)
-                        {
-                            ReadPolarAlignmentAxis(1, ref Axis4PositionSteps, ref Axis4Moving);
-                            ReadPolarAlignmentAxis(2, ref Axis5PositionSteps, ref Axis5Moving);
-                        }
+                        ReadPolarAlignmentAxis(1, ref Axis4PositionSteps, ref Axis4Moving);
+                        ReadPolarAlignmentAxis(2, ref Axis5PositionSteps, ref Axis5Moving);
                     }
                 }
                 catch (Exception ex) { DebugLogger.LogException("PA", ex); }

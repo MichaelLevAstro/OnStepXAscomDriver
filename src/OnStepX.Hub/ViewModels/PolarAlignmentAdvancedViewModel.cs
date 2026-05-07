@@ -30,7 +30,6 @@ namespace ASCOM.OnStepX.ViewModels
         {
             _pa = pa;
             ApplyCommand = new RelayCommand(Apply);
-            // Load current persisted values.
             _altRunMa   = DriverSettings.PolarAlignAltRunCurrent;
             _altHoldPct = DriverSettings.PolarAlignAltHoldPercent;
             _azRunMa    = DriverSettings.PolarAlignAzRunCurrent;

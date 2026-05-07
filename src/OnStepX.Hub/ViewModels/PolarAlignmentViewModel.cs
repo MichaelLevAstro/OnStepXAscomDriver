@@ -238,6 +238,14 @@ namespace ASCOM.OnStepX.ViewModels
             catch (Exception ex) { DebugLogger.LogException("PA", ex); }
         }
 
+        // Bubble TPPA bridge reconcile up to MainViewModel so the advanced
+        // popup can trigger a rebind after editing the active pair.
+        public void RequestTppaBridgeReconcile()
+        {
+            try { _main.ReconcileTppaBridge(); }
+            catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+        }
+
         // Apply current/hold settings to firmware. Called from the advanced
         // dialog's Apply button. Persists to DriverSettings + sends to mount.
         public void ApplyDriverCurrents(int altRunMa, int altHoldPct, int azRunMa, int azHoldPct)

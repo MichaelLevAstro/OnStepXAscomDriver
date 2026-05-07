@@ -28,31 +28,23 @@ namespace ASCOM.OnStepX.ViewModels
             set { if (Set(ref _verboseLog, value)) { try { DriverSettings.VerboseFileLog = value; } catch { } } }
         }
 
-        // Polar Alignment Wedge mode. Persisted on toggle. Reconnect required
-        // for the effect to land (MountStateCache resolves it during Start()).
+        // Polar Alignment Wedge mode. Persisted on toggle. MainViewModel wires
+        // SetPolarAlignmentChangeHandler to refresh MountStateCache live + kick
+        // the TPPA bridge to reconcile, so toggling no longer requires a
+        // disconnect/reconnect.
         private bool _polarAlignmentMode;
         public bool PolarAlignmentMode
         {
             get => _polarAlignmentMode;
-            set { if (Set(ref _polarAlignmentMode, value)) { try { DriverSettings.PolarAlignmentMode = value; } catch { } } }
-        }
-
-        // Local serial port the hub opens for the NINA TPPA UPAS bridge.
-        // Persisted; bridge reconciles on save (handled in setter via _onBridgeChange).
-        private string _tppaBridgePort = "";
-        public string TppaBridgePort
-        {
-            get => _tppaBridgePort;
             set
             {
-                string v = value ?? "";
-                if (!Set(ref _tppaBridgePort, v)) return;
-                try { DriverSettings.TppaBridgePort = v; } catch { }
-                try { _onBridgeChange?.Invoke(); } catch { }
+                if (!Set(ref _polarAlignmentMode, value)) return;
+                try { DriverSettings.PolarAlignmentMode = value; } catch { }
+                try { _onPolarAlignmentChange?.Invoke(); } catch { }
             }
         }
-        private Action _onBridgeChange;
-        internal void SetBridgeChangeHandler(Action handler) { _onBridgeChange = handler; }
+        private Action _onPolarAlignmentChange;
+        internal void SetPolarAlignmentChangeHandler(Action handler) { _onPolarAlignmentChange = handler; }
 
         public string LogPath => DebugLogger.LogDirectory;
 
@@ -63,7 +55,6 @@ namespace ASCOM.OnStepX.ViewModels
             _notificationsEnabled = DriverSettings.NotificationsEnabled;
             _verboseLog = DriverSettings.VerboseFileLog;
             _polarAlignmentMode = DriverSettings.PolarAlignmentMode;
-            _tppaBridgePort = DriverSettings.TppaBridgePort ?? "";
             OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
         }
 
