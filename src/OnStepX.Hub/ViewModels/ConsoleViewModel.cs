@@ -71,8 +71,14 @@ namespace ASCOM.OnStepX.ViewModels
 
         public ICommand ClearCommand { get; }
         public ICommand CopyCommand { get; }
+        public ICommand CopySelectedCommand { get; }
         public ICommand ClearFilterCommand { get; }
         public ICommand SendCommand { get; }
+
+        // Raised when the user invokes "Copy selected" via Ctrl+C / context
+        // menu. The view subscribes and copies the ListBox's SelectedItems —
+        // the VM doesn't have access to selection state, only the view does.
+        public event EventHandler CopySelectedRequested;
 
         public ConsoleViewModel(MainViewModel main)
         {
@@ -95,6 +101,7 @@ namespace ASCOM.OnStepX.ViewModels
                 }
                 catch { }
             });
+            CopySelectedCommand = new RelayCommand(() => CopySelectedRequested?.Invoke(this, EventArgs.Empty));
             ClearFilterCommand = new RelayCommand(() => Filter = "");
             SendCommand = new RelayCommand(SendManualCommand, () => MountActionsEnabled && !string.IsNullOrWhiteSpace(CommandInput));
 
@@ -199,7 +206,11 @@ namespace ASCOM.OnStepX.ViewModels
             while (_pending.TryDequeue(out var entry))
             {
                 _entries.Add(entry);
-                if (_entries.Count > HistoryMax) _entries.RemoveAt(0);
+                // Skip trim while auto-scroll is off so removing the oldest
+                // item doesn't shift the viewport upward and feel like the
+                // console is auto-scrolling. Trim catches up once the user
+                // re-enables auto-scroll.
+                if (_autoScroll && _entries.Count > HistoryMax) _entries.RemoveAt(0);
             }
             if (_autoScroll) AutoScrollRequested?.Invoke(this, EventArgs.Empty);
         }

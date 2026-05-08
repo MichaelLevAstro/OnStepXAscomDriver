@@ -128,6 +128,14 @@ namespace ASCOM.OnStepX.Hardware.Transport
                     return "IPC:ISCONNECTED:" + (open ? "TRUE" : "FALSE");
                 }
 
+                if (line == "IPC:ISPAMODE")
+                {
+                    bool pa = false;
+                    try { pa = _mount.State?.PolarAlignmentMode ?? false; } catch { }
+                    DebugLogger.Log("IPC", "received IPC:ISPAMODE -> " + (pa ? "TRUE" : "FALSE"));
+                    return "IPC:ISPAMODE:" + (pa ? "TRUE" : "FALSE");
+                }
+
                 if (line == "IPC:SHOWHUB")
                 {
                     DebugLogger.Log("IPC", "received IPC:SHOWHUB");

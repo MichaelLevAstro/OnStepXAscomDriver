@@ -90,6 +90,24 @@ namespace ASCOM.OnStepX.Driver
                     _capsCached = false;
                     DebugLogger.Log("CONNECT", "Rotator connected; pipe up");
 
+                    // Mirror the Focuser's PA-mode refusal so users don't run
+                    // a parallactic-derotation routine while the wedge panel
+                    // owns the third column. Rotator (AXIS3) isn't physically
+                    // touched by PA mode, but exposing the rotator while
+                    // focuser is forcibly disabled would be inconsistent.
+                    bool paMode = false;
+                    try { paMode = t.IsPolarAlignmentMode(); }
+                    catch (Exception ex) { DebugLogger.LogException("ROTATOR", ex); }
+                    if (paMode)
+                    {
+                        DebugLogger.Log("ROTATOR", "hub reports Polar Alignment Wedge mode active — refusing Connect");
+                        _clientConnected = false;
+                        CloseTransport();
+                        throw new ASCOM.NotConnectedException(
+                            "OnStepX is in Polar Alignment Wedge mode. " +
+                            "Disable Polar Alignment mode in the hub Advanced Settings to use the rotator.");
+                    }
+
                     // Surface a clear error if the mount has no rotator axis built.
                     bool hasRotator = false;
                     try { hasRotator = _protocol.HasRotator(); }

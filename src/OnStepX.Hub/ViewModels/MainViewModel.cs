@@ -8,6 +8,7 @@ using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.State;
+using ASCOM.OnStepX.Hardware.Tppa;
 using ASCOM.OnStepX.Hardware.Transport;
 using ASCOM.OnStepX.Services;
 
@@ -31,14 +32,23 @@ namespace ASCOM.OnStepX.ViewModels
         public VisualizerViewModel Visualizer { get; }
         public FocuserViewModel Focuser { get; }
         public RotatorViewModel Rotator { get; }
+        public PolarAlignmentViewModel PolarAlignment { get; }
 
         // Drives the third-column collapse when the firmware exposes neither
-        // focuser nor rotator. MainWindow listens to PropertyChanged on this
-        // to resize the window between 3-column and 2-column widths.
-        public bool Show3rdColumn => Focuser.IsAvailable || Rotator.IsAvailable;
+        // focuser nor rotator nor PA mode. MainWindow listens to PropertyChanged
+        // on this to resize the window between 3-column and 2-column widths.
+        public bool Show3rdColumn => Focuser.IsAvailable || Rotator.IsAvailable || PolarAlignment.IsAvailable;
+
+        // Hint card visibility — "no focuser / no rotator detected" hints.
+        // PA mode forces Focuser.IsAvailable / Rotator.IsAvailable false on
+        // purpose; without the PA gate, both hint cards would appear next to
+        // the polar alignment panel and confuse the user.
+        public bool ShowFocuserHint => !Focuser.IsAvailable && !PolarAlignment.IsAvailable;
+        public bool ShowRotatorHint => !Rotator.IsAvailable && !PolarAlignment.IsAvailable;
 
         private readonly MountSession _mount = MountSession.Instance;
         private readonly DispatcherTimer _pollTimer;
+        private readonly TppaSerialBridge _tppaBridge;
 
         public string AppTitle { get; }
         public string AppVersion { get; }
@@ -64,6 +74,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Console.OnConnStateChanged();
                 Focuser.OnConnStateChanged();
                 Rotator.OnConnStateChanged();
+                PolarAlignment.OnConnStateChanged();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -82,6 +93,9 @@ namespace ASCOM.OnStepX.ViewModels
 
         public MainViewModel()
         {
+            // Run before child VMs read DriverSettings.TppaBridgePort.
+            try { DriverSettings.EnsureTppaBridgePortDefaulted(); } catch { }
+
             Connection = new ConnectionViewModel(this);
             Site       = new SiteViewModel(this);
             DateTime   = new DateTimeViewModel(this);
@@ -94,17 +108,33 @@ namespace ASCOM.OnStepX.ViewModels
             Visualizer = new VisualizerViewModel();
             Focuser    = new FocuserViewModel(this);
             Rotator    = new RotatorViewModel(this);
+            PolarAlignment = new PolarAlignmentViewModel(this);
 
-            // Re-emit Show3rdColumn whenever either child availability flips.
+            // Re-emit Show3rdColumn + hint visibility whenever any child availability flips.
             Focuser.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(FocuserViewModel.IsAvailable))
+                {
                     OnPropertyChanged(nameof(Show3rdColumn));
+                    OnPropertyChanged(nameof(ShowFocuserHint));
+                }
             };
             Rotator.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(RotatorViewModel.IsAvailable))
+                {
                     OnPropertyChanged(nameof(Show3rdColumn));
+                    OnPropertyChanged(nameof(ShowRotatorHint));
+                }
+            };
+            PolarAlignment.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(PolarAlignmentViewModel.IsAvailable))
+                {
+                    OnPropertyChanged(nameof(Show3rdColumn));
+                    OnPropertyChanged(nameof(ShowFocuserHint));
+                    OnPropertyChanged(nameof(ShowRotatorHint));
+                }
             };
 
             AppTitle = "OnStepX ASCOM Driver";
@@ -123,6 +153,21 @@ namespace ASCOM.OnStepX.ViewModels
             _mount.LimitWarning += OnMountLimitWarning;
             ClientRegistry.Changed += OnClientRegistryChanged;
 
+            _tppaBridge = new TppaSerialBridge(_mount);
+            // PA toggle: refresh MountStateCache live (no reconnect) + rebind
+            // bridge. EnsureTppaBridgePortDefaulted() picks up freshly-installed
+            // com0com pairs on first toggle.
+            try
+            {
+                Advanced.SetPolarAlignmentChangeHandler(() =>
+                {
+                    try { DriverSettings.EnsureTppaBridgePortDefaulted(); } catch { }
+                    try { _mount.State?.RefreshPolarAlignmentMode(); } catch (Exception ex) { TransportLogger.Note("PA refresh failed: " + ex.Message); }
+                    ReconcileTppaBridge();
+                });
+            }
+            catch { }
+
             _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _pollTimer.Tick += (s, e) => OnTick();
             _pollTimer.Start();
@@ -136,7 +181,16 @@ namespace ASCOM.OnStepX.ViewModels
             _mount.ConnectionChanged -= OnMountConnectionChanged;
             _mount.LimitWarning -= OnMountLimitWarning;
             ClientRegistry.Changed -= OnClientRegistryChanged;
+            try { _tppaBridge?.Dispose(); } catch { }
             Console.Detach();
+        }
+
+        // Settings UI calls this after Apply so a port-name change or PA-mode
+        // toggle takes effect without waiting for the next connection event.
+        public void ReconcileTppaBridge()
+        {
+            try { _tppaBridge?.Reconcile(); }
+            catch (Exception ex) { TransportLogger.Note("TPPA bridge reconcile failed: " + ex.Message); }
         }
 
         public void TryAutoConnect()
@@ -165,6 +219,8 @@ namespace ASCOM.OnStepX.ViewModels
             catch (Exception ex) { TransportLogger.Note("Focuser OnConnected failed: " + ex.Message); }
             try { Rotator.OnConnected(); }
             catch (Exception ex) { TransportLogger.Note("Rotator OnConnected failed: " + ex.Message); }
+            try { PolarAlignment.OnConnected(); }
+            catch (Exception ex) { TransportLogger.Note("PolarAlignment OnConnected failed: " + ex.Message); }
         }
 
         public void SetState(ConnState s)
@@ -178,6 +234,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Visualizer.OnDisconnected();
                 Focuser.OnDisconnected();
                 Rotator.OnDisconnected();
+                PolarAlignment.OnDisconnected();
             }
         }
 
@@ -196,11 +253,13 @@ namespace ASCOM.OnStepX.ViewModels
                             _hubConnected = true;
                             State = ConnState.Connected;
                         }
+                        try { _tppaBridge?.Reconcile(); } catch { }
                         return;
                     }
-                    if (open == _hubConnected) return;
+                    if (open == _hubConnected) { try { _tppaBridge?.Reconcile(); } catch { } return; }
                     _hubConnected = open;
                     State = open ? ConnState.Connected : ConnState.Disconnected;
+                    try { _tppaBridge?.Reconcile(); } catch { }
                 }));
             }
             catch { }
@@ -247,6 +306,7 @@ namespace ASCOM.OnStepX.ViewModels
             Visualizer.OnPollSnapshot(st);
             Focuser.OnPollSnapshot(st);
             Rotator.OnPollSnapshot(st);
+            PolarAlignment.OnPollSnapshot(st);
         }
 
         // Compare hub-stored site with mount site after connect, prompt if differ.

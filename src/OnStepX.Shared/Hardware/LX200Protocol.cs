@@ -402,6 +402,47 @@ namespace ASCOM.OnStepX.Hardware
             preset >= 1 && preset <= 9 &&
             Bool(_transport.SendAndReceive(":F" + preset.ToString(CultureInfo.InvariantCulture) + "#"));
 
+        // Blind variants for PA mode. Some OnStepX firmware builds treat
+        // :F[1-9]# and :Fr<sn># as fire-and-forget — they write no reply
+        // terminator, so SendAndReceive eats the full ReadTimeout (~1500ms)
+        // per command. That stacks to a multi-second motor-start delay,
+        // which trips NINA TPPA's stuck detector before the wedge ever
+        // moves. Fire-and-forget here; the next SendAndReceive
+        // (DiscardInBuffer'd) cleans up any stale bytes if firmware does
+        // happen to reply.
+        public void SetFocuserRatePresetBlind(int preset)
+        {
+            if (preset < 1 || preset > 9) return;
+            _transport.SendBlind(":F" + preset.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+        public void SetFocuserPositionRelativeStepsBlind(int delta)
+        {
+            _transport.SendBlind(":Fr" + delta.ToString("+0;-0", CultureInfo.InvariantCulture) + "#");
+        }
+        public void SetFocuserPositionStepsBlind(int steps)
+        {
+            _transport.SendBlind(":Fs" + steps.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+
+        // OnStepX TMC driver per-axis tuning. axis is the physical AXIS
+        // number (4 or 5 in PA mode). Run current is in milliamperes,
+        // hold percent is 0..100 (mapped to IHOLD as % of IRUN by firmware).
+        // The :SXAn,IRUN= / :SXAn,IHOLD= form is the OnStepX extended-set
+        // syntax; sent blind because the firmware ack varies by build.
+        public void SetAxisRunCurrentMa(int axis, int milliamps)
+        {
+            if (axis < 1 || axis > 9) return;
+            _transport.SendBlind(":SXA" + axis.ToString(CultureInfo.InvariantCulture) +
+                                 ",IRUN=" + milliamps.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+        public void SetAxisHoldPercent(int axis, int percent)
+        {
+            if (axis < 1 || axis > 9) return;
+            int clamped = Math.Max(0, Math.Min(100, percent));
+            _transport.SendBlind(":SXA" + axis.ToString(CultureInfo.InvariantCulture) +
+                                 ",IHOLD=" + clamped.ToString(CultureInfo.InvariantCulture) + "#");
+        }
+
         public void FocuserZero()        => _transport.SendBlind(":FZ#");
         public void FocuserSetHomeHere() => _transport.SendBlind(":FH#");
         public void FocuserGoHome()      => _transport.SendBlind(":Fh#");

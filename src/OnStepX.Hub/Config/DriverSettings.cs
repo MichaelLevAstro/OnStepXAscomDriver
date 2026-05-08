@@ -41,7 +41,11 @@ namespace ASCOM.OnStepX.Config
         public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
 
         // Console pane shown/hidden state, persisted across sessions.
-        public static bool   ConsoleVisible { get => GetBool("ConsoleVisible", true); set => SetBool("ConsoleVisible", value); }
+        public static bool   ConsoleVisible { get => GetBool("ConsoleVisible", false); set => SetBool("ConsoleVisible", value); }
+
+        // Per-section expanded/collapsed state, keyed by Section.PersistKey.
+        public static bool   GetSectionExpanded(string key, bool defaultValue) => GetBool("Section." + key + ".Expanded", defaultValue);
+        public static void   SetSectionExpanded(string key, bool value) => SetBool("Section." + key + ".Expanded", value);
 
         // Persistent log file under %APPDATA%\OnStepX\logs. ON = every line
         // shown in the hub console is also written to disk.
@@ -72,6 +76,58 @@ namespace ASCOM.OnStepX.Config
         public static double RotatorLastAngleDeg { get => GetDouble("RotatorLastAngleDeg", double.NaN); set => SetDouble("RotatorLastAngleDeg", value); }
 
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
+
+        // PA wedge: AXIS4 = Alt, AXIS5 = Az.
+        public static bool   PolarAlignmentMode { get => GetBool("PolarAlignmentMode", false); set => SetBool("PolarAlignmentMode", value); }
+        public static int    PolarAlignAltStepSize { get => GetInt("PolarAlignAltStepSize", 100); set => SetInt("PolarAlignAltStepSize", value); }
+        public static int    PolarAlignAzStepSize  { get => GetInt("PolarAlignAzStepSize",  100); set => SetInt("PolarAlignAzStepSize",  value); }
+        public static int    PolarAlignAltRunCurrent  { get => GetInt("PolarAlignAltRunCurrent",  500); set => SetInt("PolarAlignAltRunCurrent",  value); }
+        public static int    PolarAlignAzRunCurrent   { get => GetInt("PolarAlignAzRunCurrent",   500); set => SetInt("PolarAlignAzRunCurrent",   value); }
+        public static int    PolarAlignAltHoldPercent { get => GetInt("PolarAlignAltHoldPercent", 50);  set => SetInt("PolarAlignAltHoldPercent", value); }
+        public static int    PolarAlignAzHoldPercent  { get => GetInt("PolarAlignAzHoldPercent",  50);  set => SetInt("PolarAlignAzHoldPercent",  value); }
+        public static string TppaBridgePort { get => Get("TppaBridgePort", ""); set => Set("TppaBridgePort", value); }
+        public static int    LastSeenManagedPairCount { get => GetInt("LastSeenManagedPairCount", 0); set => SetInt("LastSeenManagedPairCount", value); }
+
+        // Auto-routes TppaBridgePort to a Hub-managed com0com pair's A side.
+        // Resets stale references (port matches a PortB, or no longer in the
+        // managed list) so a fresh installer-created pair always wins.
+        public static bool EnsureTppaBridgePortDefaulted()
+        {
+            try
+            {
+                var pairs = Hardware.Tppa.Com0comManager.GetManagedPairsFromRegistry();
+                if (pairs == null || pairs.Count == 0)
+                {
+                    LastSeenManagedPairCount = 0;
+                    return false;
+                }
+                LastSeenManagedPairCount = pairs.Count;
+
+                string current = (TppaBridgePort ?? "").Trim();
+                string firstPortA = null;
+                bool currentMatchesPortA = false;
+                bool currentMatchesPortB = false;
+                foreach (var p in pairs)
+                {
+                    if (firstPortA == null && !string.IsNullOrEmpty(p.PortA)) firstPortA = p.PortA;
+                    if (!string.IsNullOrEmpty(current))
+                    {
+                        if (string.Equals(current, p.PortA, StringComparison.OrdinalIgnoreCase)) currentMatchesPortA = true;
+                        if (string.Equals(current, p.PortB, StringComparison.OrdinalIgnoreCase)) currentMatchesPortB = true;
+                    }
+                }
+                if (string.IsNullOrEmpty(firstPortA)) return false;
+                if (currentMatchesPortA) return false;
+                // Reset on: empty, matches B (user mistake), or stale-orphan.
+                if (string.IsNullOrEmpty(current) || currentMatchesPortB || !currentMatchesPortA)
+                {
+                    TppaBridgePort = firstPortA;
+                    return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
 
         // Longitude on-disk convention. Pre-1: west-positive (raw wire).
         // >=1: east-positive (ASCOM/civil); migration flips once.

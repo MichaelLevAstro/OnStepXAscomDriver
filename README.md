@@ -28,6 +28,13 @@ Currently there is no switch, auxillary functions or weather support.
 - 3D Visualizer
 - And more!
 
+# Auto Polar Alignment (Experimental)
+Drives a motorized polar alignment wedge through NINA's **Three Point Polar Alignment (TPPA)** plugin without any custom NINA add-on. Tick **Enable Automatic Polar Alignment** in the hub's ADVANCED card and TPPA's **OAPA System** profile finds the wedge automatically.
+
+Uses firmware **AXIS4** as the **Altitude** screw motor and **AXIS5** as the **Azimuth** screw motor. The hub bundles the virtual COM port driver, so installation is one click and the hub never needs admin to run.
+
+Full setup, jog controls, calibration and troubleshooting in [installer/POLAR_ALIGNMENT_README.md](installer/POLAR_ALIGNMENT_README.md).
+
 # Install
 Go to Install folder, and run installer, done :)
 

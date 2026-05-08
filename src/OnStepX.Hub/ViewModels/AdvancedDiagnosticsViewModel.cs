@@ -8,9 +8,8 @@ using ASCOM.OnStepX.Diagnostics;
 
 namespace ASCOM.OnStepX.ViewModels
 {
-    // The collapsed-by-default "Advanced Settings" card on the main window.
-    // (Distinct from AdvancedSettingsViewModel which backs the modal pier/flip
-    // dialog.) Mirrors HubForm.BuildAdvancedGroup.
+    // Inline ADVANCED card on the main window. Distinct from the modal
+    // AdvancedSettingsViewModel (pier/flip dialog).
     public sealed class AdvancedDiagnosticsViewModel : ViewModelBase
     {
         private bool _notificationsEnabled;
@@ -27,6 +26,20 @@ namespace ASCOM.OnStepX.ViewModels
             set { if (Set(ref _verboseLog, value)) { try { DriverSettings.VerboseFileLog = value; } catch { } } }
         }
 
+        private bool _polarAlignmentMode;
+        public bool PolarAlignmentMode
+        {
+            get => _polarAlignmentMode;
+            set
+            {
+                if (!Set(ref _polarAlignmentMode, value)) return;
+                try { DriverSettings.PolarAlignmentMode = value; } catch { }
+                try { _onPolarAlignmentChange?.Invoke(); } catch { }
+            }
+        }
+        private Action _onPolarAlignmentChange;
+        internal void SetPolarAlignmentChangeHandler(Action handler) { _onPolarAlignmentChange = handler; }
+
         public string LogPath => DebugLogger.LogDirectory;
 
         public ICommand OpenLogFolderCommand { get; }
@@ -35,6 +48,7 @@ namespace ASCOM.OnStepX.ViewModels
         {
             _notificationsEnabled = DriverSettings.NotificationsEnabled;
             _verboseLog = DriverSettings.VerboseFileLog;
+            _polarAlignmentMode = DriverSettings.PolarAlignmentMode;
             OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
         }
 

@@ -92,6 +92,17 @@ Source: "{#HubSrc}\*.dll";                  DestDir: "{app}"; Flags: ignoreversi
 Source: "{#DriverSrc}\*.pdb";               DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#HubSrc}\*.pdb";                  DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
+; com0com signed redistributable. Vendored under installer\com0com-bin\.
+; The Hub uses setupc.exe (post-install + on-demand) to create / delete
+; virtual COM pairs for the NINA TPPA OAPA bridge. Compile-time guard so
+; a developer can build the installer without the binaries on hand —
+; check installer\com0com-bin\BINARIES_README.md for what to drop in.
+#if FileExists(AddBackslash(SourcePath) + "com0com-bin\setupc.exe")
+Source: "com0com-bin\*"; DestDir: "{app}\com0com"; Flags: ignoreversion recursesubdirs createallsubdirs
+#else
+#pragma message "WARNING: com0com-bin\setupc.exe missing — installer will ship without bundled com0com. Hub UI degrades gracefully."
+#endif
+
 ; COM registration written directly — regasm is run post-install as belt-and-
 ; suspenders; these keys are the authoritative source so the install works
 ; without .NET Framework SDK tools on the target machine.
@@ -283,6 +294,35 @@ begin
   Exec(ExpandConstant('{cmd}'), '/c taskkill /f /im OnStepX.Hub.Wpf.exe         >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+// Pre-0.5 LocalServer-style driver shipped ASCOM.OnStepX.Telescope.exe (a
+// hosting EXE registered at the Telescope CLSID via LocalServer32). Newer
+// builds use the Inproc DLL only — leaving the legacy exe on disk lets the
+// stale Start Menu shortcut "OnStepX ASCOM Hub" still resolve and confuses
+// users into running prehistoric UI. Sweep the file + sidecars + shortcuts.
+procedure RemoveLegacyLocalServerExe();
+var
+  app: String;
+  startMenu: String;
+begin
+  app := ExpandConstant('{app}');
+  if FileExists(app + '\ASCOM.OnStepX.Telescope.exe') then
+    DeleteFile(app + '\ASCOM.OnStepX.Telescope.exe');
+  if FileExists(app + '\ASCOM.OnStepX.Telescope.exe.config') then
+    DeleteFile(app + '\ASCOM.OnStepX.Telescope.exe.config');
+  if FileExists(app + '\ASCOM.OnStepX.Telescope.pdb') then
+    DeleteFile(app + '\ASCOM.OnStepX.Telescope.pdb');
+
+  // Stale Start Menu shortcut from prior installer naming.
+  startMenu := ExpandConstant('{commonprograms}') + '\OnStepX';
+  if FileExists(startMenu + '\OnStepX ASCOM Hub.lnk') then
+    DeleteFile(startMenu + '\OnStepX ASCOM Hub.lnk');
+  if FileExists(startMenu + '\Uninstall OnStepX ASCOM.lnk') then
+    DeleteFile(startMenu + '\Uninstall OnStepX ASCOM.lnk');
+
+  // Stale LocalServer32 registry registration at the Telescope CLSID.
+  RegDeleteKeyIncludingSubkeys(HKCR, 'CLSID\{#TelescopeClsid}\LocalServer32');
+end;
+
 // Wipe leftover OnStepX.Hub.Wpf.exe binary from the prior beta installer so
 // %ProgramFiles%\OnStepX doesn't sit with two coexisting hub exes.
 procedure RemoveLegacyWpfBinary();
@@ -382,6 +422,255 @@ begin
   RegDeleteKeyIncludingSubkeys(HKCR, 'AppID\ASCOM.OnStepX.Telescope.exe');
 end;
 
+// =========================================================================
+// com0com bundled-driver provisioning.
+// The Hub's NINA TPPA OAPA bridge needs a paired virtual COM port. Rather
+// than asking users to install com0com manually, we ship setupc.exe under
+// {app}\com0com\ (see [Files]) and create one pair on first install.
+// The pair is recorded in HKLM\SOFTWARE\OnStepX\Hub\Com0comManagedPairs
+// (REG_SZ, semicolon-separated "<pairNum>|<portA>|<portB>" entries) so
+// Com0comManager.GetManagedPairsFromRegistry() can render the pair list
+// without elevation, and so uninstall removes only Hub-created pairs.
+// =========================================================================
+
+const
+  Com0comRegPath  = 'SOFTWARE\OnStepX\Hub';
+  Com0comRegValue = 'Com0comManagedPairs';
+
+var
+  // Cache of busy COM names from `setupc busynames COM*`. Stored as a
+  // comma-wrapped uppercase list ",COM1,COM10,COM11," so a contains-test
+  // is a single Pos() call without false-substring-matches (e.g. COM1
+  // matching COM10).
+  BusyComNamesCache: String;
+  BusyComNamesLoaded: Boolean;
+
+function Com0comSetupcPath(): String;
+begin
+  Result := ExpandConstant('{app}\com0com\setupc.exe');
+end;
+
+procedure LoadBusyComNames();
+var
+  setupc, tmpFile, cmdLine, body, name: String;
+  ansiBody: AnsiString;
+  resultCode, i, lineStart: Integer;
+begin
+  BusyComNamesLoaded := True;
+  BusyComNamesCache := ',';
+  setupc := Com0comSetupcPath;
+  if not FileExists(setupc) then Exit;
+  tmpFile := ExpandConstant('{tmp}\onstepx_com0com_busy.log');
+  // setupc busynames asks ComDB + DosDevice — covers both stale ComDB
+  // claims and live QueryDosDevice ports. Returns one name per line,
+  // already uppercased.
+  cmdLine := '/c ""' + setupc + '" busynames COM* > "' + tmpFile + '""';
+  if not Exec(ExpandConstant('{cmd}'), cmdLine,
+             ExpandConstant('{app}\com0com'), SW_HIDE, ewWaitUntilTerminated, resultCode) then Exit;
+  if not LoadStringFromFile(tmpFile, ansiBody) then ansiBody := '';
+  DeleteFile(tmpFile);
+  body := String(ansiBody);
+  lineStart := 1;
+  for i := 1 to Length(body) do
+  begin
+    if (body[i] = #10) or (body[i] = #13) then
+    begin
+      name := Trim(Copy(body, lineStart, i - lineStart));
+      lineStart := i + 1;
+      if (Length(name) > 0) and (Pos('COM', UpperCase(name)) = 1) then
+        BusyComNamesCache := BusyComNamesCache + UpperCase(name) + ',';
+    end;
+  end;
+  // Trailing line w/o newline.
+  if lineStart <= Length(body) then
+  begin
+    name := Trim(Copy(body, lineStart, Length(body) - lineStart + 1));
+    if (Length(name) > 0) and (Pos('COM', UpperCase(name)) = 1) then
+      BusyComNamesCache := BusyComNamesCache + UpperCase(name) + ',';
+  end;
+  Log('com0com busy names cache = ' + BusyComNamesCache);
+end;
+
+function ComPortInUse(comNum: Integer): Boolean;
+var
+  names: TArrayOfString;
+  i: Integer;
+  v: String;
+  target: String;
+begin
+  Result := False;
+  target := 'COM' + IntToStr(comNum);
+  if not BusyComNamesLoaded then LoadBusyComNames();
+  if Pos(',' + target + ',', BusyComNamesCache) > 0 then
+  begin
+    Result := True;
+    Exit;
+  end;
+  // Fallback in case setupc invocation failed for any reason.
+  if not RegGetValueNames(HKLM, 'HARDWARE\DEVICEMAP\SERIALCOMM', names) then Exit;
+  for i := 0 to GetArrayLength(names) - 1 do
+  begin
+    if RegQueryStringValue(HKLM, 'HARDWARE\DEVICEMAP\SERIALCOMM', names[i], v) then
+    begin
+      if CompareText(v, target) = 0 then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+  end;
+end;
+
+function FindFirstFreeComPair(startAt: Integer): Integer;
+var
+  n: Integer;
+begin
+  n := startAt;
+  while n < 999 do
+  begin
+    if (not ComPortInUse(n)) and (not ComPortInUse(n + 1)) then
+    begin
+      Result := n;
+      Exit;
+    end;
+    Inc(n);
+  end;
+  Result := startAt;
+end;
+
+// First "CNCA<n>" -> integer n, or -1 if not found.
+function ParsePairNumber(s: String): Integer;
+var
+  i, p: Integer;
+  digits: String;
+begin
+  Result := -1;
+  p := Pos('CNCA', UpperCase(s));
+  if p = 0 then Exit;
+  digits := '';
+  i := p + 4;
+  while (i <= Length(s)) and (s[i] >= '0') and (s[i] <= '9') do
+  begin
+    digits := digits + s[i];
+    Inc(i);
+  end;
+  if Length(digits) = 0 then Exit;
+  Result := StrToIntDef(digits, -1);
+end;
+
+procedure AppendManagedPair(pairNum: Integer; comA, comB: String);
+var
+  existing, entry: String;
+begin
+  entry := IntToStr(pairNum) + '|' + comA + '|' + comB;
+  if not RegQueryStringValue(HKLM, Com0comRegPath, Com0comRegValue, existing) then
+    existing := '';
+  if existing = '' then
+    RegWriteStringValue(HKLM, Com0comRegPath, Com0comRegValue, entry)
+  else
+    RegWriteStringValue(HKLM, Com0comRegPath, Com0comRegValue, existing + ';' + entry);
+end;
+
+function Com0comInstallPair(comA, comB: String): Boolean;
+var
+  setupc, tmpFile, cmdLine, logBody: String;
+  ansiBody: AnsiString;
+  resultCode, pairNum: Integer;
+begin
+  Result := False;
+  setupc := Com0comSetupcPath;
+  if not FileExists(setupc) then
+  begin
+    Log('com0com setupc.exe missing at ' + setupc + ', skipping pair create');
+    Exit;
+  end;
+  tmpFile := ExpandConstant('{tmp}\onstepx_com0com_install.log');
+  cmdLine := '/c ""' + setupc + '" install PortName=' + comA + ' PortName=' + comB + ' > "' + tmpFile + '""';
+  // setupc.exe locates com0com.inf / setup.dll relative to its working
+  // directory — set workdir to {app}\com0com\ or the install fails with
+  // "INF not found".
+  if not Exec(ExpandConstant('{cmd}'), cmdLine, ExpandConstant('{app}\com0com'), SW_HIDE, ewWaitUntilTerminated, resultCode) then
+  begin
+    Log('Exec setupc install failed (Exec returned false)');
+    Exit;
+  end;
+  if resultCode <> 0 then
+  begin
+    Log('setupc install returned exit code ' + IntToStr(resultCode));
+    Exit;
+  end;
+  // LoadStringFromFile takes AnsiString in Unicode Inno; setupc output is ASCII.
+  if not LoadStringFromFile(tmpFile, ansiBody) then ansiBody := '';
+  logBody := String(ansiBody);
+  DeleteFile(tmpFile);
+  pairNum := ParsePairNumber(logBody);
+  if pairNum < 0 then
+  begin
+    Log('Could not parse CNCA<n> from setupc output');
+    Exit;
+  end;
+  AppendManagedPair(pairNum, comA, comB);
+  Log('com0com pair ' + IntToStr(pairNum) + ' = ' + comA + ' <-> ' + comB);
+  Result := True;
+end;
+
+procedure InstallDefaultCom0comPair();
+var
+  startCom: Integer;
+  comA, comB: String;
+begin
+  if not FileExists(Com0comSetupcPath) then
+  begin
+    Log('com0com binaries not bundled; skipping default pair install');
+    Exit;
+  end;
+  if RegValueExists(HKLM, Com0comRegPath, Com0comRegValue) then
+  begin
+    Log('Com0comManagedPairs already populated; skipping default pair install');
+    Exit;
+  end;
+  startCom := FindFirstFreeComPair(10);
+  comA := 'COM' + IntToStr(startCom);
+  comB := 'COM' + IntToStr(startCom + 1);
+  Com0comInstallPair(comA, comB);
+end;
+
+procedure Com0comRemoveManagedPairs();
+var
+  raw, entry, sub: String;
+  pairNum, sepIndex, resultCode, idx: Integer;
+  setupc: String;
+begin
+  setupc := Com0comSetupcPath;
+  if not RegQueryStringValue(HKLM, Com0comRegPath, Com0comRegValue, raw) then
+    Exit;
+  // Manual split on ';' — Inno Pascal lacks a stock array splitter.
+  while Length(raw) > 0 do
+  begin
+    idx := Pos(';', raw);
+    if idx = 0 then
+    begin
+      entry := raw;
+      raw := '';
+    end
+    else
+    begin
+      entry := Copy(raw, 1, idx - 1);
+      raw := Copy(raw, idx + 1, Length(raw) - idx);
+    end;
+    if entry = '' then continue;
+    sepIndex := Pos('|', entry);
+    if sepIndex = 0 then continue;
+    sub := Copy(entry, 1, sepIndex - 1);
+    pairNum := StrToIntDef(sub, -1);
+    if pairNum < 0 then continue;
+    if not FileExists(setupc) then continue;
+    Exec(setupc, 'remove ' + IntToStr(pairNum), ExpandConstant('{app}\com0com'), SW_HIDE, ewWaitUntilTerminated, resultCode);
+    Log('com0com remove pair ' + IntToStr(pairNum) + ' rc=' + IntToStr(resultCode));
+  end;
+  RegDeleteValue(HKLM, Com0comRegPath, Com0comRegValue);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   case CurStep of
@@ -390,9 +679,11 @@ begin
       CleanLegacyComKeys();
       RemoveLegacyWpfBinary();
       RemoveLegacyTelescopeDll();
+      RemoveLegacyLocalServerExe();
     end;
     ssPostInstall: begin
       RegisterAscomProfile();
+      InstallDefaultCom0comPair();
     end;
   end;
 end;
@@ -400,5 +691,8 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
+  begin
     UnregisterAscomProfile();
+    Com0comRemoveManagedPairs();
+  end;
 end;

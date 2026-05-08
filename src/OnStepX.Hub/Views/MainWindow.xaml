@@ -53,7 +53,7 @@
         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
           <StackPanel>
             <!-- ───── Connection ───── -->
-            <c:Section Title="CONNECTION" IconGeometry="{StaticResource Geo.Connection}">
+            <c:Section Title="CONNECTION" IconGeometry="{StaticResource Geo.Connection}" PersistKey="Connection">
               <c:Section.HeaderRight>
                 <c:StatusBadge Status="{Binding Connection.StatusKind}"
                                Pulsing="{Binding Connection.StatusPulse}"
@@ -119,7 +119,7 @@
             </c:Section>
 
             <!-- ───── Site ───── -->
-            <c:Section Title="SITE" IconGeometry="{StaticResource Geo.Site}">
+            <c:Section Title="SITE" IconGeometry="{StaticResource Geo.Site}" IsExpanded="False" PersistKey="Site">
               <c:Section.Body>
                 <StackPanel>
                   <Grid Margin="0,0,0,6">
@@ -147,7 +147,7 @@
             </c:Section>
 
             <!-- ───── Date / Time ───── -->
-            <c:Section Title="DATE / TIME" IconGeometry="{StaticResource Geo.Clock}">
+            <c:Section Title="DATE / TIME" IconGeometry="{StaticResource Geo.Clock}" IsExpanded="False" PersistKey="DateTime">
               <c:Section.Body>
                 <StackPanel>
                   <Grid Margin="0,0,0,6">
@@ -182,7 +182,7 @@
             </c:Section>
 
             <!-- ───── Tracking / Slew ───── -->
-            <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}">
+            <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="TrackingSlew">
               <c:Section.Body>
                 <StackPanel>
                   <Grid Margin="0,0,0,8">
@@ -244,7 +244,7 @@
             </c:Section>
 
             <!-- ───── Limits ───── -->
-            <c:Section Title="LIMITS" IconGeometry="{StaticResource Geo.Limits}">
+            <c:Section Title="LIMITS" IconGeometry="{StaticResource Geo.Limits}" IsExpanded="False" PersistKey="Limits">
               <c:Section.HeaderRight>
                 <c:StatusBadge Status="{Binding Limits.StatusKind}"
                                Pulsing="{Binding Limits.StatusPulse}"
@@ -295,9 +295,11 @@
             </c:Section>
 
             <!-- ───── Advanced (collapsed by default) ───── -->
-            <c:Section Title="ADVANCED" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False">
+            <c:Section Title="ADVANCED" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False" PersistKey="Advanced">
               <c:Section.Body>
                 <StackPanel>
+                  <CheckBox Content="Enable Automatic Polar Alignment (Experimental)"
+                            IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,10"/>
                   <CheckBox Content="Notify on limits" IsChecked="{Binding Advanced.NotificationsEnabled}" Margin="0,0,0,6"/>
                   <CheckBox Content="Enable Verbose log file" IsChecked="{Binding Advanced.VerboseLog}" Margin="0,0,0,6"/>
                   <TextBlock Text="{Binding Advanced.LogPath}" Style="{StaticResource Text.Hint}"
@@ -320,7 +322,7 @@
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
             <StackPanel>
               <!-- ───── Current Position ───── -->
-              <c:Section Title="CURRENT POSITION" IconGeometry="{StaticResource Geo.Position}">
+              <c:Section Title="CURRENT POSITION" IconGeometry="{StaticResource Geo.Position}" IsExpanded="False" PersistKey="CurrentPosition">
                 <c:Section.Body>
                   <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -344,7 +346,7 @@
               </c:Section>
 
               <!-- ───── 3D Visualizer ───── -->
-              <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}">
+              <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}" IsExpanded="False" PersistKey="Visualizer">
                 <c:Section.Body>
                   <!-- Height binds to own ActualWidth so the viewport stays
                        square regardless of pane width. -->
@@ -354,7 +356,7 @@
               </c:Section>
 
               <!-- ───── Park / Home / Go To ───── -->
-              <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}">
+              <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}" PersistKey="ParkHomeGoto">
                 <c:Section.Body>
                   <StackPanel>
                     <UniformGrid Columns="2" Margin="0,0,0,6">
@@ -380,7 +382,7 @@
               </c:Section>
 
               <!-- ───── Manual Slew pad ───── -->
-              <c:Section Title="MANUAL SLEW" IconGeometry="{StaticResource Geo.Slew}">
+              <c:Section Title="MANUAL SLEW" IconGeometry="{StaticResource Geo.Slew}" PersistKey="ManualSlew">
                 <c:Section.Body>
                   <StackPanel>
                     <c:SlewPad PadVM="{Binding ParkHome}"
@@ -407,7 +409,8 @@
             <StackPanel>
               <!-- ───── Focuser ───── -->
               <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
-                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}}">
+                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}}"
+                         PersistKey="Focuser">
                 <c:Section.HeaderRight>
                   <c:StatusBadge Status="{Binding Focuser.StatusKind}"
                                  Pulsing="{Binding Focuser.StatusPulse}"
@@ -550,9 +553,12 @@
                 </c:Section.Body>
               </c:Section>
 
-              <!-- Hint card when no focuser is configured on the board. -->
+              <!-- Hint card when no focuser is configured on the board. Hidden
+                   in PA mode — Focuser.IsAvailable is forced false there but
+                   showing the hint alongside the polar alignment panel just
+                   confuses the user. -->
               <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
-                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                         Visibility="{Binding ShowFocuserHint, Converter={StaticResource BoolToVis}}">
                 <c:Section.Body>
                   <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
                              Text="No focuser detected on this OnStepX board. Enable AXIS4_DRIVER_MODEL (or higher) in the firmware Config.h and reflash to use a focuser here."/>
@@ -561,7 +567,8 @@
 
               <!-- ───── Rotator ───── -->
               <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
-                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}}">
+                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}}"
+                         PersistKey="Rotator">
                 <c:Section.HeaderRight>
                   <c:StatusBadge Status="{Binding Rotator.StatusKind}"
                                  Pulsing="{Binding Rotator.StatusPulse}"
@@ -752,12 +759,106 @@
                 </c:Section.Body>
               </c:Section>
 
-              <!-- Hint card when no rotator is configured on the board. -->
+              <!-- Hint card when no rotator is configured on the board. Hidden
+                   in PA mode for the same reason as the focuser hint. -->
               <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
-                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
+                         Visibility="{Binding ShowRotatorHint, Converter={StaticResource BoolToVis}}">
                 <c:Section.Body>
                   <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
                              Text="No rotator detected on this OnStepX board. Enable AXIS3_DRIVER_MODEL in the firmware Config.h and reflash to use a rotator here."/>
+                </c:Section.Body>
+              </c:Section>
+
+              <!-- ───── Polar Alignment Wedge ─────
+                   Replaces FOCUSER + ROTATOR sections when the hub is in
+                   PA mode (DriverSettings.PolarAlignmentMode + ≥2 focuser axes
+                   detected). Axis 4 = Alt, axis 5 = Az.
+                   Plus pad jogs by per-axis StepSize at the dropdown speed.
+                   Goto fields target absolute motor steps. Advanced opens the
+                   driver-current popup. -->
+              <c:Section Title="POLAR ALIGNMENT (Experimental)" IconGeometry="{StaticResource Geo.Position}" PersistKey="PolarAlignment"
+                         Visibility="{Binding PolarAlignment.IsAvailable, Converter={StaticResource BoolToVis}}">
+                <c:Section.HeaderRight>
+                  <Button Style="{StaticResource Btn.Sm}" Content="Advanced…"
+                          Command="{Binding PolarAlignment.OpenAdvancedCommand}"/>
+                </c:Section.HeaderRight>
+                <c:Section.Body>
+                  <StackPanel>
+                    <!-- Plus pad in the middle. -->
+                    <c:PolarAlignmentPad PadVM="{Binding PolarAlignment}"
+                                         IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"
+                                         Margin="0,0,0,10"/>
+
+                    <!-- Slew speed (shared by both axes). -->
+                    <Grid Margin="0,0,0,8">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <TextBlock Text="Slew speed" Style="{StaticResource Text.Label}"/>
+                      <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                                ItemsSource="{Binding PolarAlignment.SpeedOptions}"
+                                DisplayMemberPath="Label"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding PolarAlignment.SelectedSpeed}"
+                                IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                    </Grid>
+
+                    <!-- Alt section: position, step, goto. -->
+                    <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0" Margin="0,0,0,8">
+                      <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Alt position" Style="{StaticResource Text.Label}"/>
+                          <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AltPosition}" Style="{StaticResource Text.Mono}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Alt step" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AltStepSize}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,0">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Alt goto" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="0" Max="100000000" Step="100" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AltGotoTarget}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                          <Button Grid.Column="2" Style="{StaticResource Btn.SmPrimary}"
+                                  Content="Goto" Command="{Binding PolarAlignment.GotoAltCommand}" Margin="6,0,0,0"/>
+                        </Grid>
+                      </StackPanel>
+                    </Border>
+
+                    <!-- Az section: position, step, goto. -->
+                    <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+                      <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Az position" Style="{StaticResource Text.Label}"/>
+                          <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AzPosition}" Style="{StaticResource Text.Mono}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Az step" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="1" Max="100000" Step="10" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AzStepSize}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,0">
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                          <TextBlock Text="Az goto" Style="{StaticResource Text.Label}"/>
+                          <c:NumericBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                        Min="0" Max="100000000" Step="100" DecimalPlaces="0"
+                                        Value="{Binding PolarAlignment.AzGotoTarget}"
+                                        IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+                          <Button Grid.Column="2" Style="{StaticResource Btn.SmPrimary}"
+                                  Content="Goto" Command="{Binding PolarAlignment.GotoAzCommand}" Margin="6,0,0,0"/>
+                        </Grid>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
                 </c:Section.Body>
               </c:Section>
             </StackPanel>

@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Diagnostics;
 
 namespace ASCOM.OnStepX.Hardware.State
@@ -59,12 +60,38 @@ namespace ASCOM.OnStepX.Hardware.State
         public double RotatorStepSizeDeg;
         public int    RotatorBacklashSteps;
 
+        // Polar Alignment Wedge mode. Resolved during Start() after the
+        // focuser/rotator probes. When true, FocuserAvailable + RotatorAvailable
+        // are forced false so the existing VMs stay dormant; the polar
+        // alignment poll path takes over the focuser ride-along slot.
+        //
+        // Wire numbering: OnStepX ":FA[n]#" uses *focuser index* (1..count),
+        // not physical axis number. AXIS4 + AXIS5 enabled in Config.h →
+        // focuser 1 (Alt) + focuser 2 (Az). The fields below cache the
+        // per-focuser position — naming preserves the physical axis number
+        // for clarity at the readout site.
+        public bool PolarAlignmentMode;
+        public int  Axis4PositionSteps;   // focuser 1 = physical AXIS4 = Alt
+        public int  Axis5PositionSteps;   // focuser 2 = physical AXIS5 = Az
+        public bool Axis4Moving;
+        public bool Axis5Moving;
+
+        // Race lock for axis-switch sequences. The :FA[n]# selector is global —
+        // any thread that issues :FA[n]# followed by a command that depends on
+        // the active focuser (:Fg#, :Fr#, :F+#, etc.) must hold this lock for
+        // the entire pair. Otherwise the poll-loop's :FA4#/:FA5# sandwich can
+        // interleave with a user-click sequence and the click ends up acting
+        // on the wrong axis.
+        public readonly object PaAxisLock = new object();
+
         public event EventHandler Updated;
 
         private readonly LX200Protocol _p;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Task _pollTask;
+        private Task _paFastPollTask;
         private int _pollMs;
+        private const int PaFastPollMs = 200;  // 200ms PA-mode cadence — keeps NINA TPPA's 300ms `?` polls always seeing fresh position
         private int _focuserPollTick; // counter for slow-cadence focuser ride-along
 
         // Lazy re-probe budget. On a cold mount boot the focuser axis often
@@ -101,7 +128,34 @@ namespace ASCOM.OnStepX.Hardware.State
             if (_pollTask != null) return;
             RunInitialFocuserProbe();
             RunInitialRotatorProbe();
+            ResolvePolarAlignmentMode();
             _pollTask = Task.Run(() => PollLoop(_cts.Token));
+            // PA mode runs a separate fast cache-refresh task so position
+            // tracking doesn't have to share cadence with the heavy mount
+            // RA/Dec/Alt/Az poll. NINA TPPA polls `?` every 300ms — 200ms
+            // here guarantees fresh values without compounding lock time.
+            if (PolarAlignmentMode)
+                _paFastPollTask = Task.Run(() => PaFastPollLoop(_cts.Token));
+        }
+
+        // PA mode requires user toggle + firmware exposing ≥2 focuser axes.
+        // Forces Focuser/Rotator availability false so their VMs stay dormant
+        // while the wedge owns AXIS4/AXIS5.
+        private void ResolvePolarAlignmentMode()
+        {
+            bool requested = false;
+            try { requested = DriverSettings.PolarAlignmentMode; } catch { }
+            PolarAlignmentMode = requested && FocuserAvailable && FocuserCount >= 2;
+            if (PolarAlignmentMode)
+            {
+                DebugLogger.Log("PA",
+                    "Polar Alignment Wedge mode active — focuser/rotator panels disabled. " +
+                    "axis4+axis5 will drive Alt/Az.");
+                FocuserAvailable = false;
+                RotatorAvailable = false;
+                _focuserLateProbeAttempts = 0;
+                _rotatorLateProbeAttempts = 0;
+            }
         }
 
         // Probe how many focusers are configured by walking :FA[1..6]#. The
@@ -212,7 +266,40 @@ namespace ASCOM.OnStepX.Hardware.State
         {
             _cts.Cancel();
             try { _pollTask?.Wait(1000); } catch { }
+            try { _paFastPollTask?.Wait(1000); } catch { }
             _pollTask = null;
+            _paFastPollTask = null;
+        }
+
+        // Live PA-mode toggle without dropping the mount link.
+        // Re-probe focuser/rotator when leaving PA mode so their availability
+        // flags (forced false during PA mode) reflect the firmware again.
+        public void RefreshPolarAlignmentMode()
+        {
+            if (_pollTask == null) return;
+            bool wasInPaMode = PolarAlignmentMode;
+            bool requested = false;
+            try { requested = DriverSettings.PolarAlignmentMode; } catch { }
+
+            if (wasInPaMode && !requested)
+            {
+                try { TryProbeFocuser(); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                try { TryProbeRotator(); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+            }
+
+            ResolvePolarAlignmentMode();
+
+            if (PolarAlignmentMode && _paFastPollTask == null)
+            {
+                _paFastPollTask = Task.Run(() => PaFastPollLoop(_cts.Token));
+            }
+            else if (!PolarAlignmentMode && _paFastPollTask != null)
+            {
+                _paFastPollTask = null;
+            }
+            DebugLogger.Log("PA",
+                "live refresh: requested=" + requested +
+                " resolved=" + PolarAlignmentMode);
         }
 
         public void Dispose() { Stop(); _cts.Dispose(); }
@@ -336,6 +423,17 @@ namespace ASCOM.OnStepX.Hardware.State
                         }
                     }
 
+                    // Polar Alignment ride-along — same 4th-cycle cadence. Reads
+                    // axis 4 + axis 5 positions and moving flags by switching
+                    // :FA4#/:FA5# and querying :Fg#/:FT# on each. Restores the
+                    // active focuser to axis 4 at the end (arbitrary; nothing
+                    // else consumes it in PA mode). Each per-axis read is
+                    // independently guarded so a wire blip on one doesn't
+                    // blank the other.
+                    // PA mode position tracking runs in PaFastPollLoop at
+                    // 200ms — separate from this heavy 750ms RA/Dec poll so
+                    // NINA TPPA's `?` reads always hit fresh cache.
+
                     LastUpdateUtc = DateTime.UtcNow;
                     Updated?.Invoke(this, EventArgs.Empty);
                 }
@@ -346,6 +444,52 @@ namespace ASCOM.OnStepX.Hardware.State
 
                 try { Task.Delay(_pollMs, ct).Wait(ct); } catch { }
             }
+        }
+
+        // 200ms cadence so NINA TPPA's 300ms `?` reads always see fresh
+        // positions. Loop must exit when PolarAlignmentMode flips false so
+        // RefreshPolarAlignmentMode can spin a fresh task on toggle-on.
+        private void PaFastPollLoop(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                if (!PolarAlignmentMode) return;
+                try
+                {
+                    lock (PaAxisLock)
+                    {
+                        ReadPolarAlignmentAxis(1, ref Axis4PositionSteps, ref Axis4Moving);
+                        ReadPolarAlignmentAxis(2, ref Axis5PositionSteps, ref Axis5Moving);
+                    }
+                }
+                catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                try { Task.Delay(PaFastPollMs, ct).Wait(ct); } catch { }
+            }
+        }
+
+        // Read one polar-alignment focuser by INDEX (1..2 in PA mode):
+        // select via :FA[n]#, query :Fg# and :FT#. Used by both the panel
+        // poll and the TPPA bridge's GRBL `?` status reply. Caller's
+        // responsibility to guard the call site — each individual command is
+        // wrapped so a single failure is logged and the cached values are
+        // left at their prior value.
+        private void ReadPolarAlignmentAxis(int focuserIdx, ref int positionField, ref bool movingField)
+        {
+            // SetActiveFocuser returns false when firmware rejects the index.
+            // Bail out and leave the cached value untouched — without this
+            // check, both Alt and Az would read whatever focuser happened to
+            // already be active.
+            bool ok = false;
+            try { ok = _p.SetActiveFocuser(focuserIdx); } catch { return; }
+            if (!ok) return;
+            try { positionField = _p.GetFocuserPositionSteps(); } catch { }
+            try
+            {
+                var ft = _p.GetFocuserStatus();
+                ft = string.IsNullOrEmpty(ft) ? "" : ft.TrimEnd('#');
+                movingField = ft.Length > 0 && (ft[0] == 'M' || ft[0] == 'm');
+            }
+            catch { }
         }
 
         // OnStepX rates: Lunar 57.902 Hz, Solar 60.000, King 60.136, Sidereal 60.164.

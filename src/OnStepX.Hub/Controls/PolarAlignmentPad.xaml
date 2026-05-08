@@ -1,0 +1,77 @@
+<UserControl x:Class="ASCOM.OnStepX.Controls.PolarAlignmentPad"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False">
+  <UserControl.Resources>
+    <Style x:Key="PaJogBtn" TargetType="Button">
+      <Setter Property="Height" Value="56"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="{DynamicResource Brush.BtnBg}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="FontSize" Value="22"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{StaticResource Size.RadiusLg}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                TextElement.Foreground="{TemplateBinding Foreground}"
+                                TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                TextElement.FontSize="{TemplateBinding FontSize}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.BtnBgHover}"/>
+                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.InputBorderHover}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Bd" Property="RenderTransform">
+                  <Setter.Value><TranslateTransform Y="1"/></Setter.Value>
+                </Setter>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="PaStopBtn" TargetType="Button" BasedOn="{StaticResource PaJogBtn}">
+      <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Brush.AccentInk}"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+  </UserControl.Resources>
+
+  <!-- Plus shape, 5 buttons. Vertical = Alt (focuser 1, AXIS4), horizontal
+       = Az (focuser 2, AXIS5). STOP at center halts both axes. Step amount
+       per click and slew speed are configured in the parent section. -->
+  <UniformGrid Rows="3" Columns="3" HorizontalAlignment="Center" Width="200">
+    <Border/>
+    <Button Margin="3" Style="{StaticResource PaJogBtn}"
+            Content="↑" CommandParameter="1,1"  Click="OnJog"/>
+    <Border/>
+
+    <Button Margin="3" Style="{StaticResource PaJogBtn}"
+            Content="←" CommandParameter="2,-1" Click="OnJog"/>
+    <Button Margin="3" Style="{StaticResource PaStopBtn}"
+            Content="STOP" Click="OnStopAll"/>
+    <Button Margin="3" Style="{StaticResource PaJogBtn}"
+            Content="→" CommandParameter="2,1"  Click="OnJog"/>
+
+    <Border/>
+    <Button Margin="3" Style="{StaticResource PaJogBtn}"
+            Content="↓" CommandParameter="1,-1" Click="OnJog"/>
+    <Border/>
+  </UniformGrid>
+</UserControl>

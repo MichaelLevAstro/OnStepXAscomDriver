@@ -69,6 +69,22 @@ namespace ASCOM.OnStepX.Driver
                     _capsCached = false;
                     DebugLogger.Log("CONNECT", "Focuser connected; pipe up");
 
+                    // Refuse Connect when hub is in Polar Alignment Wedge mode —
+                    // axis 4/5 are repurposed as wedge motors and a focuser-aware
+                    // app driving Move()/Position would smash the wedge.
+                    bool paMode = false;
+                    try { paMode = t.IsPolarAlignmentMode(); }
+                    catch (Exception ex) { DebugLogger.LogException("FOCUSER", ex); }
+                    if (paMode)
+                    {
+                        DebugLogger.Log("FOCUSER", "hub reports Polar Alignment Wedge mode active — refusing Connect");
+                        _clientConnected = false;
+                        CloseTransport();
+                        throw new ASCOM.NotConnectedException(
+                            "OnStepX is in Polar Alignment Wedge mode — AXIS4 is a wedge motor, not a focuser. " +
+                            "Disable Polar Alignment mode in the hub Advanced Settings to use the focuser.");
+                    }
+
                     // Surface a clear error if the mount has no focuser axis built —
                     // ASCOM clients calling Move()/Position on a no-focuser board would
                     // otherwise get firmware "0" replies that look like real positions.

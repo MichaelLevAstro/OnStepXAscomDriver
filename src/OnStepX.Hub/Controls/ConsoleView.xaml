@@ -70,54 +70,92 @@
         </Grid>
       </Border>
 
-      <!-- Virtualized log list -->
+      <!-- Virtualized log list. ListBox (not ItemsControl) so users can
+           click to select rows, Shift/Ctrl-click for range/multi, then
+           Ctrl+C or context menu → "Copy selected" to grab those lines. -->
       <Border Background="{DynamicResource Brush.ConsoleBg}"
               Visibility="{Binding ConsoleVisible, Converter={StaticResource BoolToVis}}"
               BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0">
-        <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                      Height="220">
-          <ItemsControl ItemsSource="{Binding Entries}"
-                        VirtualizingPanel.IsVirtualizing="True"
-                        VirtualizingPanel.VirtualizationMode="Recycling"
-                        ScrollViewer.CanContentScroll="True">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <VirtualizingStackPanel/>
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate DataType="{x:Type vm:ConsoleEntry}">
-                <Grid Margin="14,2,14,2">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="100"/>
-                    <ColumnDefinition Width="80"/>
-                    <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="90"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Text="{Binding Timestamp}"
-                             FontFamily="{DynamicResource Font.Mono}" FontSize="12"
-                             Foreground="{DynamicResource Brush.ColTs}"/>
-                  <TextBlock Grid.Column="1" Text="{Binding Command}"
-                             FontFamily="{DynamicResource Font.Mono}" FontSize="12"
-                             Foreground="{DynamicResource Brush.ColCmd}"/>
-                  <TextBlock Grid.Column="2" Text="→"
-                             FontFamily="{DynamicResource Font.Mono}" FontSize="12"
-                             Foreground="{DynamicResource Brush.TextFaint}"
-                             Visibility="{Binding Command, Converter={StaticResource BoolToVis}}"/>
-                  <TextBlock Grid.Column="3" Text="{Binding Response}"
-                             FontFamily="{DynamicResource Font.Mono}" FontSize="12"
-                             Foreground="{Binding Kind, Converter={StaticResource RespBrush}}"
-                             TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Grid.Column="4" Text="{Binding Elapsed}"
-                             TextAlignment="Right"
-                             FontFamily="{DynamicResource Font.Mono}" FontSize="12"
-                             Foreground="{DynamicResource Brush.ColMeta}"/>
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+        <ListBox x:Name="LogList"
+                 ItemsSource="{Binding Entries}"
+                 SelectionMode="Extended"
+                 Background="Transparent" BorderThickness="0"
+                 Height="220"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 ScrollViewer.CanContentScroll="True"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling">
+          <ListBox.InputBindings>
+            <KeyBinding Modifiers="Control" Key="C" Command="{Binding CopySelectedCommand}"/>
+          </ListBox.InputBindings>
+          <ListBox.Resources>
+            <Style TargetType="ListBoxItem">
+              <Setter Property="Padding" Value="0"/>
+              <Setter Property="Margin" Value="0"/>
+              <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+              <Setter Property="Background" Value="Transparent"/>
+              <Setter Property="BorderThickness" Value="0"/>
+              <Setter Property="Template">
+                <Setter.Value>
+                  <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            Padding="0" SnapsToDevicePixels="True">
+                      <ContentPresenter HorizontalAlignment="Stretch"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Bd" Property="Background"
+                                Value="{DynamicResource Brush.BtnBgHover}"/>
+                      </Trigger>
+                      <Trigger Property="IsSelected" Value="True">
+                        <Setter TargetName="Bd" Property="Background"
+                                Value="{DynamicResource Brush.Accent}"/>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
+            </Style>
+          </ListBox.Resources>
+          <ListBox.ContextMenu>
+            <ContextMenu>
+              <MenuItem Header="Copy selected lines" Command="{Binding CopySelectedCommand}"/>
+              <MenuItem Header="Copy all visible"    Command="{Binding CopyCommand}"/>
+            </ContextMenu>
+          </ListBox.ContextMenu>
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:ConsoleEntry}">
+              <Grid Margin="14,2,14,2">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="100"/>
+                  <ColumnDefinition Width="80"/>
+                  <ColumnDefinition Width="30"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="90"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Timestamp}"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.ColTs}"/>
+                <TextBlock Grid.Column="1" Text="{Binding Command}"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.ColCmd}"/>
+                <TextBlock Grid.Column="2" Text="→"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.TextFaint}"
+                           Visibility="{Binding Command, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Grid.Column="3" Text="{Binding Response}"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{Binding Kind, Converter={StaticResource RespBrush}}"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="4" Text="{Binding Elapsed}"
+                           TextAlignment="Right"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.ColMeta}"/>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
       </Border>
     </DockPanel>
   </Border>

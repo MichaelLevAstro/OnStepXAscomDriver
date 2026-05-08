@@ -15,6 +15,7 @@ Client → Hub:
 | `CMD\t<lx200>`              | Send LX200 with reply                      |
 | `BLIND\t<lx200>`            | Send LX200 fire-and-forget                 |
 | `IPC:ISCONNECTED`           | Mount-link health probe                    |
+| `IPC:ISPAMODE`              | Polar Alignment Wedge mode probe           |
 | `IPC:SHOWHUB`               | Pop hub window to foreground               |
 | `IPC:VERSION\t<ver>`        | Optional version handshake                 |
 
@@ -27,6 +28,8 @@ Hub → Client:
 | `ERR\t<msg>`                | Any failure; msg is single-line, tabs/CR/LF stripped |
 | `IPC:ISCONNECTED:TRUE`      | Hub is connected to mount                  |
 | `IPC:ISCONNECTED:FALSE`     | Hub running but mount offline              |
+| `IPC:ISPAMODE:TRUE`         | Hub treats axis 4/5 as wedge motors — Focuser/Rotator drivers must refuse Connect |
+| `IPC:ISPAMODE:FALSE`        | Normal mode — Focuser/Rotator drivers operate normally |
 
 ## Handshake
 
