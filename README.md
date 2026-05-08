@@ -9,9 +9,9 @@ If it doesn't, but you like the driver and would like it to, open up an issue st
 ## Important note
 Currently there is no switch, auxillary functions or weather support.
 
-<img width="1226" height="1381" alt="image" src="https://github.com/user-attachments/assets/4226c6a1-b45b-4b3e-9d4e-f42e935a9360" />
+<img width="1648" height="1019" alt="image" src="https://github.com/user-attachments/assets/8434ea31-4ea7-40b0-9c33-673d8e67b8f4" />
 
-<img width="1225" height="1379" alt="image" src="https://github.com/user-attachments/assets/2b52c40b-ed8e-461e-a55c-26e7be4ff6a0" />
+<img width="1649" height="1019" alt="Screenshot 2026-05-08 192506" src="https://github.com/user-attachments/assets/7308fef6-9804-4b1a-a8c1-784649a62f5f" />
 
 <img width="965" height="745" alt="image" src="https://github.com/user-attachments/assets/bbfb1c6b-22d9-495d-9871-19682078094a" />
 
