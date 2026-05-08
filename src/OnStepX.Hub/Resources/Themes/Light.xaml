@@ -19,6 +19,7 @@
   <SolidColorBrush x:Key="Brush.Accent"           Color="#e5482d"/>
   <SolidColorBrush x:Key="Brush.AccentInk"        Color="#ffffff"/>
   <SolidColorBrush x:Key="Brush.AccentSoft"       Color="#1Fe5482d"/>
+  <SolidColorBrush x:Key="Brush.Selection"        Color="#66e5482d"/>
 
   <SolidColorBrush x:Key="Brush.Danger"           Color="#e5482d"/>
   <SolidColorBrush x:Key="Brush.Ok"               Color="#3aa26a"/>

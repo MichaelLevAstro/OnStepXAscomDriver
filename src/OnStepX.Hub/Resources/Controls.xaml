@@ -165,7 +165,7 @@
     <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
     <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.AccentSoft}"/>
+    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Selection}"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="TextBox">
