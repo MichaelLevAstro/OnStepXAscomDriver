@@ -4,7 +4,7 @@
         xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Polar Alignment — Driver Currents"
-        Width="500" Height="320"
+        Width="500" Height="340"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource Brush.Bg}"
         Foreground="{DynamicResource Brush.Text}"
@@ -47,6 +47,10 @@
       </Border>
 
       <Border Padding="14">
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,12"
+                     Text="Drives AXIS4 as Alt and AXIS5 as Az for a motorized polar alignment wedge. NINA TPPA OAPA bridge auto-binds to a Hub-managed virtual COM pair."/>
+
         <c:Section Title="TMC Driver Tuning" IconGeometry="{StaticResource Geo.Tracking}">
           <c:Section.Body>
             <StackPanel>
@@ -87,11 +91,10 @@
                               Value="{Binding AzHoldPct}"/>
               </Grid>
 
-              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,12,0,0"
-                         Text="Apply sends :SXAn,IRUN= and :SXAn,IHOLD= to firmware (n=4 for Alt, 5 for Az). Settings persist across reconnects."/>
             </StackPanel>
           </c:Section.Body>
         </c:Section>
+        </StackPanel>
       </Border>
     </DockPanel>
   </Border>

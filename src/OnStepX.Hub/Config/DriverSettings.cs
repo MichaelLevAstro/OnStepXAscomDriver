@@ -41,7 +41,11 @@ namespace ASCOM.OnStepX.Config
         public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
 
         // Console pane shown/hidden state, persisted across sessions.
-        public static bool   ConsoleVisible { get => GetBool("ConsoleVisible", true); set => SetBool("ConsoleVisible", value); }
+        public static bool   ConsoleVisible { get => GetBool("ConsoleVisible", false); set => SetBool("ConsoleVisible", value); }
+
+        // Per-section expanded/collapsed state, keyed by Section.PersistKey.
+        public static bool   GetSectionExpanded(string key, bool defaultValue) => GetBool("Section." + key + ".Expanded", defaultValue);
+        public static void   SetSectionExpanded(string key, bool value) => SetBool("Section." + key + ".Expanded", value);
 
         // Persistent log file under %APPDATA%\OnStepX\logs. ON = every line
         // shown in the hub console is also written to disk.
@@ -73,53 +77,20 @@ namespace ASCOM.OnStepX.Config
 
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
 
-        // Polar Alignment Wedge mode. When true AND firmware exposes ≥2 focuser
-        // axes (axis 4 + axis 5), the hub treats those axes as Alt + Az wedge
-        // motors. Focuser + Rotator panels collapse, Polar Alignment panel
-        // appears, and ASCOM Focuser/Rotator drivers refuse Connect so a
-        // focuser-aware app can't accidentally drive the wedge.
+        // PA wedge: AXIS4 = Alt, AXIS5 = Az.
         public static bool   PolarAlignmentMode { get => GetBool("PolarAlignmentMode", false); set => SetBool("PolarAlignmentMode", value); }
-        // Per-axis step amount used by the click-to-step buttons in the Polar
-        // Alignment panel. One click moves StepSize motor steps via :Fr[±N]#.
         public static int    PolarAlignAltStepSize { get => GetInt("PolarAlignAltStepSize", 100); set => SetInt("PolarAlignAltStepSize", value); }
         public static int    PolarAlignAzStepSize  { get => GetInt("PolarAlignAzStepSize",  100); set => SetInt("PolarAlignAzStepSize",  value); }
-        // PA-mode TMC driver tuning. Run current in mA (full goto-rate move
-        // current), hold percent (0..100, % of run for standstill). Persisted
-        // here + sent to firmware on every change so reconnect restores them.
         public static int    PolarAlignAltRunCurrent  { get => GetInt("PolarAlignAltRunCurrent",  500); set => SetInt("PolarAlignAltRunCurrent",  value); }
         public static int    PolarAlignAzRunCurrent   { get => GetInt("PolarAlignAzRunCurrent",   500); set => SetInt("PolarAlignAzRunCurrent",   value); }
         public static int    PolarAlignAltHoldPercent { get => GetInt("PolarAlignAltHoldPercent", 50);  set => SetInt("PolarAlignAltHoldPercent", value); }
         public static int    PolarAlignAzHoldPercent  { get => GetInt("PolarAlignAzHoldPercent",  50);  set => SetInt("PolarAlignAzHoldPercent",  value); }
-        // Local serial port the hub opens for the NINA TPPA UPAS bridge. User
-        // pairs this with a com0com partner port and points NINA TPPA at the
-        // partner. Empty = bridge disabled.
         public static string TppaBridgePort { get => Get("TppaBridgePort", ""); set => Set("TppaBridgePort", value); }
-        // Tracks how many com0com pairs we'd seen the last time the auto-default
-        // routine ran. Hub auto-fills TppaBridgePort the first time it sees a
-        // pair appear (typically the one the installer just created), then
-        // leaves the field alone — a user who deliberately blanks it stays
-        // blanked until a new pair shows up.
         public static int    LastSeenManagedPairCount { get => GetInt("LastSeenManagedPairCount", 0); set => SetInt("LastSeenManagedPairCount", value); }
 
-        // Auto-default TppaBridgePort to the A-side of the first Hub-managed
-        // com0com pair. Runs on every Hub launch. Reads the registry mirror
-        // written by the installer + pair UI — never invokes setupc, so no
-        // UAC is triggered at startup. Idempotent.
-        //
-        // Policy:
-        //   - 0 managed pairs -> leave TppaBridgePort alone (user may have
-        //     pointed at an external manually-installed com0com pair).
-        //   - >=1 managed pair AND TppaBridgePort empty -> set to first
-        //     pair's A side.
-        //   - >=1 managed pair AND TppaBridgePort matches some PortA in
-        //     the list -> already correct, leave alone.
-        //   - >=1 managed pair AND TppaBridgePort matches a PortB -> user
-        //     configured the NINA-facing side by mistake; reset to PortA.
-        //   - >=1 managed pair AND TppaBridgePort points elsewhere -> stale
-        //     reference (e.g. previous install's pair that got removed and
-        //     replaced). Reset to first pair's PortA.
-        //
-        // Returns true if a value was written.
+        // Auto-routes TppaBridgePort to a Hub-managed com0com pair's A side.
+        // Resets stale references (port matches a PortB, or no longer in the
+        // managed list) so a fresh installer-created pair always wins.
         public static bool EnsureTppaBridgePortDefaulted()
         {
             try

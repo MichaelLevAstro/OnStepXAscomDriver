@@ -8,10 +8,8 @@ using ASCOM.OnStepX.Diagnostics;
 
 namespace ASCOM.OnStepX.ViewModels
 {
-    // The collapsed-by-default "Advanced Settings" card on the main window.
-    // (Distinct from AdvancedSettingsViewModel which backs the modal pier/flip
-    // dialog.) Mirrors HubForm.BuildAdvancedGroup. Also surfaces the Polar
-    // Alignment Wedge mode toggle so users don't have to dig into the modal.
+    // Inline ADVANCED card on the main window. Distinct from the modal
+    // AdvancedSettingsViewModel (pier/flip dialog).
     public sealed class AdvancedDiagnosticsViewModel : ViewModelBase
     {
         private bool _notificationsEnabled;
@@ -28,10 +26,6 @@ namespace ASCOM.OnStepX.ViewModels
             set { if (Set(ref _verboseLog, value)) { try { DriverSettings.VerboseFileLog = value; } catch { } } }
         }
 
-        // Polar Alignment Wedge mode. Persisted on toggle. MainViewModel wires
-        // SetPolarAlignmentChangeHandler to refresh MountStateCache live + kick
-        // the TPPA bridge to reconcile, so toggling no longer requires a
-        // disconnect/reconnect.
         private bool _polarAlignmentMode;
         public bool PolarAlignmentMode
         {

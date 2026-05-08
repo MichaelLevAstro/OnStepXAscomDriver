@@ -11,29 +11,8 @@ using ASCOM.OnStepX.Hardware.State;
 
 namespace ASCOM.OnStepX.Hardware.Tppa
 {
-    // Serial bridge that lets NINA's TPPA OAPA plugin auto-discover the hub as
-    // a GRBL-speaking polar alignment wedge. Translates the OAPA subset of
-    // GRBL into OnStepX focuser-1 / focuser-2 commands (= AXIS4 / AXIS5).
-    //
-    // Wire protocol (OAPA, 115200 8N1, NewLine = "\n"):
-    //   ? \n                                -> <Idle|MPos:x,y,0.000|>\nok\n
-    //   $J=G91G21X<val>F<speed>\n           -> ok\n     (relative focuser 1 = Alt)
-    //   $J=G91G21Y<val>F<speed>\n           -> ok\n     (relative focuser 2 = Az)
-    //   $J=G53X<val>F<speed>\n              -> ok\n     (absolute focuser 1)
-    //   $J=G53Y<val>F<speed>\n              -> ok\n     (absolute focuser 2)
-    //   XC<mA>\n                            -> ok\n     (Alt run current)
-    //   YC<mA>\n                            -> ok\n     (Az run current)
-    //   XH<percent>\n                       -> ok\n     (Alt hold percent)
-    //   YH<percent>\n                       -> ok\n     (Az hold percent)
-    //   ! or 0x18                           -> ok\n     (halt)
-    //   anything else                       -> ok\n
-    //
-    // Position units: raw OnStepX motor steps. User calibrates
-    // XGearRatio/YGearRatio in NINA TPPA settings as steps-per-arcminute.
-    // Speed F<value>: opaque pass-through, mapped linearly into the OnStepX
-    // goto-rate band 5..9. Currents are forwarded to firmware via the
-    // hub's per-axis :SXAn,IRUN= / :SXAn,IHOLD= settings, persisted in
-    // DriverSettings so they reapply on reconnect.
+    // OAPA-flavored GRBL serial bridge for NINA TPPA.
+    // Maps GRBL X/Y to OnStepX focuser 1/2 (AXIS4/AXIS5).
     internal sealed class TppaSerialBridge : IDisposable
     {
         private readonly MountSession _mount;
@@ -43,39 +22,23 @@ namespace ASCOM.OnStepX.Hardware.Tppa
         private Task _readLoop;
         private string _portName = "";
         private bool _running;
-
-        // Tracks "is a jog currently in progress" — used to populate the
-        // GRBL Idle/Run status word. Set briefly while the synchronous move
-        // command is being issued; NINA's poll loop then takes over progress
-        // tracking via :Fg# reads in BuildStatusReply.
         private volatile bool _moving;
 
-        // Per-axis last-commanded target as the EXACT FLOAT value NINA
-        // sent on the wire (e.g. 2.2 for a 0.1-unit nudge × gearRatio=22).
-        // BuildStatusReply snaps reported position to this fractional
-        // target when the actual integer motor position is within
-        // tolerance. Three reasons for fractional precision:
-        //   1. Firmware rounds command to integer steps, so motor lands
-        //      at floor() of commanded — never matches NINA's float target.
-        //   2. NINA's exit tolerance is 0.01 in scaled units; with small
-        //      gear ratios any fractional remainder breaks tolerance.
-        //   3. OnStepX tends to overshoot :Fr<delta># by 1-3 steps due to
-        //      decel ramp + backlash. Across many small nudges this drift
-        //      accumulates — tolerance must be wide enough to absorb it.
-        // double.NaN = no active target.
-        private const int TargetSnapTolerance = 20; // motor steps
+        // Snap reported position to last commanded float target when within
+        // tolerance — firmware lands on integer steps so it never matches
+        // NINA's fractional target exactly, and decel overshoots by 1-3 steps
+        // per nudge. Tolerance must absorb cumulative drift across many
+        // small nudges so NINA's 0.01-unit exit check still passes.
+        private const int TargetSnapTolerance = 20;
         private double _targetX = double.NaN;
         private double _targetY = double.NaN;
 
-        // GRBL motion regex (OAPA subset). G91G21 = relative metric, G53 =
-        // absolute. Letter X|Y selects focuser 1|2 (= AXIS4|AXIS5).
         private static readonly Regex JogRelative = new Regex(
             @"^\$J=G91G21\s*(?<ax>[XY])\s*(?<val>-?\d+(\.\d+)?)\s*F\s*(?<spd>\d+(\.\d+)?)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex JogAbsolute = new Regex(
             @"^\$J=G53\s*(?<ax>[XY])\s*(?<val>-?\d+(\.\d+)?)\s*F\s*(?<spd>\d+(\.\d+)?)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        // OAPA TMC driver tuning. Run current in mA, hold percent in 0..100.
         private static readonly Regex CurrentCmd = new Regex(
             @"^(?<ax>[XY])(?<kind>[CH])\s*(?<val>\d+(\.\d+)?)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -85,11 +48,6 @@ namespace ASCOM.OnStepX.Hardware.Tppa
         public bool IsRunning { get { lock (_gate) return _running; } }
         public string PortName { get { lock (_gate) return _portName; } }
 
-        // Idempotent. Reconciles bridge state to settings + mount-link state:
-        //   want = (mount open) && (PA mode) && (port configured)
-        //   if want and !running -> start
-        //   if !want and running -> stop
-        //   if want and running but port changed -> stop+start
         public void Reconcile()
         {
             string desiredPort = "";
@@ -178,8 +136,7 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                     for (int i = 0; i < n; i++)
                     {
                         byte b = tmp[i];
-                        // GRBL real-time status / halt are single bytes; do
-                        // not require a newline.
+                        // '?' / 0x18 / '!' are GRBL real-time bytes — no newline.
                         if (b == (byte)'?')
                         {
                             WriteResponse(BuildStatusReply());
@@ -199,7 +156,7 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                             continue;
                         }
                         buf.Append((char)b);
-                        if (buf.Length > 256) buf.Clear(); // bail on runaway input
+                        if (buf.Length > 256) buf.Clear();
                     }
                 }
                 catch (Exception ex) { DebugLogger.LogException("PABRIDGE", ex); break; }
@@ -208,11 +165,8 @@ namespace ASCOM.OnStepX.Hardware.Tppa
 
         private void HandleLine(string line)
         {
-            // GRBL status query also tolerated as a full line.
             if (line == "?") { WriteResponse(BuildStatusReply()); return; }
 
-            // GRBL X axis → focuser 1 (Alt = physical AXIS4),
-            // GRBL Y axis → focuser 2 (Az  = physical AXIS5).
             var m = JogRelative.Match(line);
             if (m.Success)
             {
@@ -233,8 +187,6 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                 WriteResponse("ok\n");
                 return;
             }
-            // OAPA TMC tuning: XC<mA> / YC<mA> = run current; XH<%> / YH<%>
-            // = hold percent. Persist + forward to firmware.
             m = CurrentCmd.Match(line);
             if (m.Success)
             {
@@ -245,14 +197,10 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                 WriteResponse("ok\n");
                 return;
             }
-            // Unknown but harmless — OAPA doesn't expect strict rejection.
+            // OAPA tolerates unknown commands — always ack.
             WriteResponse("ok\n");
         }
 
-        // OAPA current/hold settings. Persisted in DriverSettings for replay
-        // on reconnect, then forwarded to firmware via OnStepX axis-setting
-        // commands. focuser ∈ {1, 2}, isHold = false for run-current (mA),
-        // true for hold-percent (0..100).
         private void IssueCurrentSetting(int focuser, bool isHold, int val)
         {
             int physicalAxis = focuser == 1 ? 4 : 5;
@@ -271,7 +219,6 @@ namespace ASCOM.OnStepX.Hardware.Tppa
             }
             catch (Exception ex) { DebugLogger.LogException("PABRIDGE", ex); }
 
-            // Hand off to the LX200 facade which knows the OnStepX wire format.
             try
             {
                 if (isHold) _mount.Protocol.SetAxisHoldPercent(physicalAxis, val);
@@ -282,11 +229,6 @@ namespace ASCOM.OnStepX.Hardware.Tppa
             catch (Exception ex) { DebugLogger.LogException("PABRIDGE", ex); }
         }
 
-        // Synchronous: select axis, set rate, issue move. Returns once the
-        // command is on the wire — NINA owns progress tracking via `?` polls.
-        // No queue, no MoveWorker — eliminates the 200ms+ latency between
-        // command receipt and motor start that was tripping NINA's stuck
-        // detector on short moves.
         private void IssueMove(int focuser, bool isAbsolute, double value, double speed)
         {
             var st = _mount.State;
@@ -294,14 +236,10 @@ namespace ASCOM.OnStepX.Hardware.Tppa
             int rate = MapSpeedToGotoPreset(speed);
             int steps = (int)Math.Round(value);
 
-            // Compute final target for the snap logic in BuildStatusReply.
-            // For RELATIVE moves the baseline is the PREVIOUS reported
-            // target, not the actual motor position. Firmware tends to
-            // overshoot by 1-3 steps; if we used the actual pos, our
-            // tracked target would drift from NINA's expected target by
-            // that overshoot every nudge. NINA's view stays anchored to
-            // the snapped value we last reported, so we anchor to the
-            // same value here.
+            // Anchor relative-move baseline to the PREVIOUS reported target
+            // rather than current motor position — firmware overshoots by
+            // 1-3 steps per nudge and the drift would compound vs NINA's
+            // view if we re-baselined to the actual position each time.
             int currentPos = focuser == 1 ? st.Axis4PositionSteps : st.Axis5PositionSteps;
             double prevTarget = focuser == 1 ? _targetX : _targetY;
             double baseline = double.IsNaN(prevTarget) ? currentPos : prevTarget;
@@ -316,9 +254,9 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                     bool ok = false;
                     try { ok = _mount.Protocol.SetActiveFocuser(focuser); } catch { return; }
                     if (!ok) { DebugLogger.Log("PABRIDGE", ":FA" + focuser + "# rejected"); return; }
-                    // Blind variants — see LX200Protocol comment.
-                    // SendAndReceive would block 1.5s per command on
-                    // firmware that treats these as fire-and-forget.
+                    // Blind variants — :F[n]# / :Fr<sn># are fire-and-forget on
+                    // OnStepX, SendAndReceive eats full timeout waiting for a
+                    // reply that never comes.
                     try { _mount.Protocol.SetFocuserRatePresetBlind(rate); } catch { }
                     if (isAbsolute)
                     {
@@ -356,45 +294,25 @@ namespace ASCOM.OnStepX.Hardware.Tppa
             catch (Exception ex) { DebugLogger.LogException("PABRIDGE", ex); }
         }
 
-        // Linear mapping into goto-rate preset 5..9 with a generous saturation
-        // band — TPPA's default F values cluster around 100–500. The user can
-        // calibrate the per-iteration step in TPPA settings; choosing F mostly
-        // affects observed travel time, not accuracy.
         private static int MapSpeedToGotoPreset(double f)
         {
-            if (f <= 50)   return 5; // 0.5×
-            if (f <= 200)  return 6; // 0.66×
-            if (f <= 500)  return 7; // 1×
-            if (f <= 1000) return 8; // 1.5×
-            return 9;                 // 2×
+            if (f <= 50)   return 5;
+            if (f <= 200)  return 6;
+            if (f <= 500)  return 7;
+            if (f <= 1000) return 8;
+            return 9;
         }
 
         private string BuildStatusReply()
         {
-            // Read from cache only. The MountStateCache PA fast poll
-            // (200ms cycle when PA mode is active) keeps Axis4/5 position
-            // fresh enough for NINA's 300ms motion polling — well inside
-            // NINA's 1.5s (5-sample × 300ms) stuck threshold.
-            //
-            // Live mount reads inside this method had been the culprit:
-            // BuildStatusReply ran under PaAxisLock, the hub's PA poll
-            // also held the same lock for ~100ms per cycle, so a `?`
-            // arriving mid-cycle waited 100-300ms before responding. That
-            // variance let NINA's serial input buffer drift out of sync
-            // when reply timing crossed its read-timeout boundary, and
-            // the next $J would read a stale `<status>` line as the
-            // command ack.
+            // Cache-only read. Live :Fg# under PaAxisLock would race the hub
+            // PA fast poll and the resulting reply-timing variance drifts
+            // NINA's input buffer out of sync.
             var st = _mount.State;
             double x = st?.Axis4PositionSteps ?? 0;
             double y = st?.Axis5PositionSteps ?? 0;
             bool moving = _moving || (st?.Axis4Moving ?? false) || (st?.Axis5Moving ?? false);
 
-            // Snap to last-commanded target when actual is within tolerance.
-            // Firmware rounds the integer step count and may overshoot by
-            // 1-2 steps; NINA's exit tolerance is 0.01 in scaled units, so
-            // even a single-step delta trips stuck detection. Reporting the
-            // exact float target NINA sent makes the wire look like the
-            // motor landed precisely.
             if (!moving)
             {
                 if (!double.IsNaN(_targetX) && Math.Abs(x - _targetX) <= TargetSnapTolerance) x = _targetX;
@@ -403,15 +321,9 @@ namespace ASCOM.OnStepX.Hardware.Tppa
 
             string status = moving ? "Run" : "Idle";
             int running = moving ? 1 : 0;
-            // OAPA UpdateStatus issues `?` then calls ReadLine TWICE — first
-            // reads the status line, second discards a GRBL "ok" ack.
-            // Skipping the "ok\n" line makes the second ReadLine block to
-            // the 1s scan timeout, breaking port discovery.
-            //
-            // Format must satisfy OAPA regex:
-            //   <(?<status>\w+)\|MPos:x,y,z(?:\|T:t,R:r,E:e,S:s)?\|>
-            // Per-axis target/running/endstop/speed group is optional but
-            // sending it gives the plugin extra signal during MoveCloser.
+            // Trailing "ok\n" is required — OAPA UpdateStatus issues `?` then
+            // ReadLine TWICE; without the ack the second read times out and
+            // port discovery aborts.
             return "<" + status + "|MPos:" +
                    x.ToString("0.000", CultureInfo.InvariantCulture) + "," +
                    y.ToString("0.000", CultureInfo.InvariantCulture) + "," +

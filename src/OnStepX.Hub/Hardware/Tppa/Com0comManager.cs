@@ -6,16 +6,11 @@ using Microsoft.Win32;
 
 namespace ASCOM.OnStepX.Hardware.Tppa
 {
-    // Read-only view of the com0com pair ledger that the OnStepX installer
-    // writes at install time. The Hub itself never invokes setupc.exe at
-    // runtime — that would require admin every call and break the
-    // "Hub runs as normal user" contract. Pair creation/deletion is
-    // installer-time only; if the user wants to manage pairs at runtime
-    // they use the com0com Start menu shortcut directly.
-    //
-    // Registry layout (written by Inno Pascal CurStepChanged):
-    //   HKLM\SOFTWARE\OnStepX\Hub  Com0comManagedPairs (REG_SZ)
-    //   "<pairNum>|<PortA>|<PortB>[;<pairNum>|<PortA>|<PortB>...]"
+    // Read-only view of the com0com pair ledger written by the installer.
+    // Hub never invokes setupc.exe at runtime — that would prompt UAC every
+    // call and break the "Hub runs as normal user" contract.
+    // Registry: HKLM\SOFTWARE\OnStepX\Hub\Com0comManagedPairs (REG_SZ)
+    //           "<pairNum>|<PortA>|<PortB>[;<pairNum>|<PortA>|<PortB>...]"
     internal static class Com0comManager
     {
         public sealed class PairInfo
@@ -37,8 +32,8 @@ namespace ASCOM.OnStepX.Hardware.Tppa
                     if (k == null) return Array.Empty<PairInfo>();
                     var raw = k.GetValue(ManagedPairsValueName);
                     string[] entries;
-                    if (raw is string[] arr) entries = arr;            // REG_MULTI_SZ
-                    else if (raw is string s) entries = s.Split(';');  // REG_SZ semicolon list (Inno path)
+                    if (raw is string[] arr) entries = arr;
+                    else if (raw is string s) entries = s.Split(';');
                     else return Array.Empty<PairInfo>();
 
                     var list = new List<PairInfo>();

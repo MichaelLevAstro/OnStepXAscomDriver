@@ -138,11 +138,9 @@ namespace ASCOM.OnStepX.Hardware.State
                 _paFastPollTask = Task.Run(() => PaFastPollLoop(_cts.Token));
         }
 
-        // PA mode is true when:
-        //   1) user has flipped DriverSettings.PolarAlignmentMode in Advanced Settings, AND
-        //   2) firmware exposes ≥2 focuser axes (axis 4 + axis 5 enabled in Config.h).
-        // Forces FocuserAvailable + RotatorAvailable false so existing VMs stay
-        // dormant — single source of truth for "is this a wedge or a focuser".
+        // PA mode requires user toggle + firmware exposing ≥2 focuser axes.
+        // Forces Focuser/Rotator availability false so their VMs stay dormant
+        // while the wedge owns AXIS4/AXIS5.
         private void ResolvePolarAlignmentMode()
         {
             bool requested = false;
@@ -273,33 +271,20 @@ namespace ASCOM.OnStepX.Hardware.State
             _paFastPollTask = null;
         }
 
-        // Live re-resolve of PA mode without dropping the mount link. Called
-        // when the user flips the Advanced "Enable Automatic Polar Alignment"
-        // toggle. Three transitions to handle:
-        //   1) PA off -> PA on  : resolve again (uses existing focuser probe
-        //                         results), spin up the fast poll task,
-        //                         FocuserAvailable + RotatorAvailable get
-        //                         forced false inside ResolvePolarAlignmentMode.
-        //   2) PA on  -> PA off : re-probe focuser + rotator so their VMs
-        //                         come back online, then resolve again.
-        //                         Stop the fast poll task.
-        //   3) Setting unchanged: no-op.
-        // Bridge reconcile is the caller's responsibility (MainViewModel
-        // chains it after this call).
+        // Live PA-mode toggle without dropping the mount link.
+        // Re-probe focuser/rotator when leaving PA mode so their availability
+        // flags (forced false during PA mode) reflect the firmware again.
         public void RefreshPolarAlignmentMode()
         {
-            if (_pollTask == null) return; // not connected; Start() will pick it up
+            if (_pollTask == null) return;
             bool wasInPaMode = PolarAlignmentMode;
             bool requested = false;
             try { requested = DriverSettings.PolarAlignmentMode; } catch { }
 
             if (wasInPaMode && !requested)
             {
-                // Restore focuser + rotator availability from firmware before
-                // re-resolving — otherwise FocuserAvailable stays false and
-                // those VMs would still report unavailable.
-                try { TryProbeFocuser(); }  catch (Exception ex) { DebugLogger.LogException("PA", ex); }
-                try { TryProbeRotator(); }  catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                try { TryProbeFocuser(); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
+                try { TryProbeRotator(); } catch (Exception ex) { DebugLogger.LogException("PA", ex); }
             }
 
             ResolvePolarAlignmentMode();
@@ -307,21 +292,14 @@ namespace ASCOM.OnStepX.Hardware.State
             if (PolarAlignmentMode && _paFastPollTask == null)
             {
                 _paFastPollTask = Task.Run(() => PaFastPollLoop(_cts.Token));
-                DebugLogger.Log("PA", "live refresh: fast poll task started");
             }
             else if (!PolarAlignmentMode && _paFastPollTask != null)
             {
-                // Fast poll task exits naturally when PolarAlignmentMode flips
-                // false (it checks the flag each tick). Drop the handle so a
-                // future toggle-on starts a fresh task.
                 _paFastPollTask = null;
-                DebugLogger.Log("PA", "live refresh: fast poll task release");
             }
             DebugLogger.Log("PA",
                 "live refresh: requested=" + requested +
-                " resolved=" + PolarAlignmentMode +
-                " focuserAvail=" + FocuserAvailable +
-                " rotatorAvail=" + RotatorAvailable);
+                " resolved=" + PolarAlignmentMode);
         }
 
         public void Dispose() { Stop(); _cts.Dispose(); }
@@ -468,24 +446,14 @@ namespace ASCOM.OnStepX.Hardware.State
             }
         }
 
-        // Dedicated PA fast poll. Refreshes axis 1 + 2 position cache every
-        // 200ms (vs. 750ms main poll). NINA TPPA polls `?` every 300ms; with
-        // this cadence the cache is always ≤ 200ms stale → motion is visible
-        // every NINA poll, stuck-detector never trips. Each cycle is 4 wire
-        // commands (~100ms) under PaAxisLock — held briefly so user jog clicks
-        // and the TPPA bridge can interleave on the 100ms idle gap.
+        // 200ms cadence so NINA TPPA's 300ms `?` reads always see fresh
+        // positions. Loop must exit when PolarAlignmentMode flips false so
+        // RefreshPolarAlignmentMode can spin a fresh task on toggle-on.
         private void PaFastPollLoop(CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
             {
-                if (!PolarAlignmentMode)
-                {
-                    // PA mode toggled off live — exit so RefreshPolarAlignmentMode
-                    // can spin a fresh task on the next toggle-on without two
-                    // concurrent loops fighting for the wire.
-                    DebugLogger.Log("PA", "fast poll exit (PolarAlignmentMode=false)");
-                    return;
-                }
+                if (!PolarAlignmentMode) return;
                 try
                 {
                     lock (PaAxisLock)

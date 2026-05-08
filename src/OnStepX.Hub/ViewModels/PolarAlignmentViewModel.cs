@@ -8,30 +8,17 @@ using ASCOM.OnStepX.Hardware.State;
 
 namespace ASCOM.OnStepX.ViewModels
 {
-    // Polar Alignment Wedge section. Drives the two-row jog pad in
-    // MainWindow.xaml when MountStateCache.PolarAlignmentMode is true.
-    //
-    // Wire model: focuser 1 = Alt screw, focuser 2 = Az screw. The OnStepX
-    // ":FA[n]#" command uses *focuser index* (1..FocuserCount), NOT physical
-    // axis number — when AXIS4 + AXIS5 are enabled in Config.h they become
-    // focuser 1 + focuser 2 on the wire. Each click sequence is:
-    //   :FA[1|2]#  -> select focuser
-    //   :F[5..9]#  -> set goto-rate band (since :Fr# runs on goto rate)
-    //   :Fr[±N]#   -> relative move N steps; firmware halts on its own
-    // The user-tunable StepSize per axis caps how far one click can move so a
-    // mistaken VF tap can't drive the wedge into a hard stop. Stop button
-    // sends :FQ# regardless of which focuser is currently selected.
+    // PA wedge jog VM. ":FA[n]#" uses focuser-INDEX (1..count), not the
+    // physical axis number — AXIS4 → focuser 1, AXIS5 → focuser 2.
     public sealed class PolarAlignmentViewModel : ViewModelBase
     {
         private readonly MainViewModel _main;
         private readonly MountSession _mount = MountSession.Instance;
 
-        // Map button-speed code (1=Slow, 2=Fast, 3=VeryFast) to OnStepX goto-rate
-        // preset. :Fr# runs on the goto-rate register so we use the 5..9 band
-        // (matches FocuserViewModel's GotoRateOptions semantics).
-        private const int GotoRateSlow     = 5; // 0.5×
-        private const int GotoRateFast     = 7; // 1×
-        private const int GotoRateVeryFast = 9; // 2×
+        // :Fr# runs on the goto-rate register, so map button speeds into 5..9.
+        private const int GotoRateSlow     = 5;
+        private const int GotoRateFast     = 7;
+        private const int GotoRateVeryFast = 9;
 
         public bool MountActionsEnabled => _main.State == ConnState.Connected && IsAvailable;
 
@@ -147,9 +134,6 @@ namespace ASCOM.OnStepX.ViewModels
             AzMoving    = st.Axis5Moving;
         }
 
-        // Called by PolarAlignmentPad on click. focuserIdx ∈ {1, 2} where 1=Alt
-        // (axis 4 physical) and 2=Az (axis 5 physical). dirSign ∈ {-1, +1},
-        // speedCode ∈ {1, 2, 3} (Slow / Fast / VeryFast).
         public void Jog(int focuserIdx, int dirSign, int speedCode)
         {
             if (!MountActionsEnabled) return;
@@ -164,8 +148,8 @@ namespace ASCOM.OnStepX.ViewModels
             {
                 var st = _mount.State;
                 if (st == null) return;
-                // Hold PaAxisLock so the poll loop's :FA1#/:FA2# sandwich
-                // can't interleave between our select and our move.
+                // PaAxisLock blocks the poll loop's :FA1#/:FA2# sandwich
+                // from interleaving between our select and our move.
                 lock (st.PaAxisLock)
                 {
                     bool ok = false;
@@ -176,10 +160,9 @@ namespace ASCOM.OnStepX.ViewModels
                         DebugLogger.Log("PA", ":FA" + focuserIdx + "# rejected — focuser " + focuserIdx + " not present? Check that AXIS4_DRIVER_MODEL and AXIS5_DRIVER_MODEL are both enabled in firmware Config.h.");
                         return;
                     }
-                    // Blind variants — :F[n]# and :Fr<sn># are fire-and-forget
-                    // on this firmware; SendAndReceive would block ~1.5s
-                    // per command waiting for a reply that never comes,
-                    // delaying motor start past NINA's stuck threshold.
+                    // Blind variants — :F[n]# / :Fr<sn># are fire-and-forget
+                    // on this firmware; SendAndReceive eats the full timeout
+                    // waiting for a reply that never comes.
                     try { _mount.Protocol.SetFocuserRatePresetBlind(rate); }
                     catch (Exception ex) { DebugLogger.LogException("PA", ex); }
                     try { _mount.Protocol.SetFocuserPositionRelativeStepsBlind(delta); }
@@ -191,8 +174,6 @@ namespace ASCOM.OnStepX.ViewModels
             });
         }
 
-        // Absolute goto for one axis. Issues :FA[n]# + :F<rate># + :Fs<steps>#
-        // under PaAxisLock to avoid colliding with the cache poll.
         private void DoGoto(int focuserIdx, int targetSteps)
         {
             if (!MountActionsEnabled) return;
@@ -238,16 +219,12 @@ namespace ASCOM.OnStepX.ViewModels
             catch (Exception ex) { DebugLogger.LogException("PA", ex); }
         }
 
-        // Bubble TPPA bridge reconcile up to MainViewModel so the advanced
-        // popup can trigger a rebind after editing the active pair.
         public void RequestTppaBridgeReconcile()
         {
             try { _main.ReconcileTppaBridge(); }
             catch (Exception ex) { DebugLogger.LogException("PA", ex); }
         }
 
-        // Apply current/hold settings to firmware. Called from the advanced
-        // dialog's Apply button. Persists to DriverSettings + sends to mount.
         public void ApplyDriverCurrents(int altRunMa, int altHoldPct, int azRunMa, int azHoldPct)
         {
             DriverSettings.PolarAlignAltRunCurrent  = altRunMa;

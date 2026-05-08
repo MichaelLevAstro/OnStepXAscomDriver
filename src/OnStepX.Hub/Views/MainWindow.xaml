@@ -53,7 +53,7 @@
         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
           <StackPanel>
             <!-- ───── Connection ───── -->
-            <c:Section Title="CONNECTION" IconGeometry="{StaticResource Geo.Connection}">
+            <c:Section Title="CONNECTION" IconGeometry="{StaticResource Geo.Connection}" PersistKey="Connection">
               <c:Section.HeaderRight>
                 <c:StatusBadge Status="{Binding Connection.StatusKind}"
                                Pulsing="{Binding Connection.StatusPulse}"
@@ -119,7 +119,7 @@
             </c:Section>
 
             <!-- ───── Site ───── -->
-            <c:Section Title="SITE" IconGeometry="{StaticResource Geo.Site}">
+            <c:Section Title="SITE" IconGeometry="{StaticResource Geo.Site}" IsExpanded="False" PersistKey="Site">
               <c:Section.Body>
                 <StackPanel>
                   <Grid Margin="0,0,0,6">
@@ -147,7 +147,7 @@
             </c:Section>
 
             <!-- ───── Date / Time ───── -->
-            <c:Section Title="DATE / TIME" IconGeometry="{StaticResource Geo.Clock}">
+            <c:Section Title="DATE / TIME" IconGeometry="{StaticResource Geo.Clock}" IsExpanded="False" PersistKey="DateTime">
               <c:Section.Body>
                 <StackPanel>
                   <Grid Margin="0,0,0,6">
@@ -182,7 +182,7 @@
             </c:Section>
 
             <!-- ───── Tracking / Slew ───── -->
-            <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}">
+            <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="TrackingSlew">
               <c:Section.Body>
                 <StackPanel>
                   <Grid Margin="0,0,0,8">
@@ -244,7 +244,7 @@
             </c:Section>
 
             <!-- ───── Limits ───── -->
-            <c:Section Title="LIMITS" IconGeometry="{StaticResource Geo.Limits}">
+            <c:Section Title="LIMITS" IconGeometry="{StaticResource Geo.Limits}" IsExpanded="False" PersistKey="Limits">
               <c:Section.HeaderRight>
                 <c:StatusBadge Status="{Binding Limits.StatusKind}"
                                Pulsing="{Binding Limits.StatusPulse}"
@@ -295,13 +295,11 @@
             </c:Section>
 
             <!-- ───── Advanced (collapsed by default) ───── -->
-            <c:Section Title="ADVANCED" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False">
+            <c:Section Title="ADVANCED" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False" PersistKey="Advanced">
               <c:Section.Body>
                 <StackPanel>
-                  <CheckBox Content="Enable Automatic Polar Alignment"
-                            IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,6"/>
-                  <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,10"
-                             Text="Replaces Focuser + Rotator panels with the wedge jog pad and auto-binds the NINA TPPA OAPA bridge to a Hub-managed virtual port. Requires firmware AXIS4_DRIVER_MODEL + AXIS5_DRIVER_MODEL."/>
+                  <CheckBox Content="Enable Automatic Polar Alignment (Experimental)"
+                            IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,10"/>
                   <CheckBox Content="Notify on limits" IsChecked="{Binding Advanced.NotificationsEnabled}" Margin="0,0,0,6"/>
                   <CheckBox Content="Enable Verbose log file" IsChecked="{Binding Advanced.VerboseLog}" Margin="0,0,0,6"/>
                   <TextBlock Text="{Binding Advanced.LogPath}" Style="{StaticResource Text.Hint}"
@@ -324,7 +322,7 @@
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
             <StackPanel>
               <!-- ───── Current Position ───── -->
-              <c:Section Title="CURRENT POSITION" IconGeometry="{StaticResource Geo.Position}">
+              <c:Section Title="CURRENT POSITION" IconGeometry="{StaticResource Geo.Position}" IsExpanded="False" PersistKey="CurrentPosition">
                 <c:Section.Body>
                   <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -348,7 +346,7 @@
               </c:Section>
 
               <!-- ───── 3D Visualizer ───── -->
-              <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}">
+              <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}" IsExpanded="False" PersistKey="Visualizer">
                 <c:Section.Body>
                   <!-- Height binds to own ActualWidth so the viewport stays
                        square regardless of pane width. -->
@@ -358,7 +356,7 @@
               </c:Section>
 
               <!-- ───── Park / Home / Go To ───── -->
-              <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}">
+              <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}" PersistKey="ParkHomeGoto">
                 <c:Section.Body>
                   <StackPanel>
                     <UniformGrid Columns="2" Margin="0,0,0,6">
@@ -384,7 +382,7 @@
               </c:Section>
 
               <!-- ───── Manual Slew pad ───── -->
-              <c:Section Title="MANUAL SLEW" IconGeometry="{StaticResource Geo.Slew}">
+              <c:Section Title="MANUAL SLEW" IconGeometry="{StaticResource Geo.Slew}" PersistKey="ManualSlew">
                 <c:Section.Body>
                   <StackPanel>
                     <c:SlewPad PadVM="{Binding ParkHome}"
@@ -411,7 +409,8 @@
             <StackPanel>
               <!-- ───── Focuser ───── -->
               <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
-                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}}">
+                         Visibility="{Binding Focuser.IsAvailable, Converter={StaticResource BoolToVis}}"
+                         PersistKey="Focuser">
                 <c:Section.HeaderRight>
                   <c:StatusBadge Status="{Binding Focuser.StatusKind}"
                                  Pulsing="{Binding Focuser.StatusPulse}"
@@ -568,7 +567,8 @@
 
               <!-- ───── Rotator ───── -->
               <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
-                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}}">
+                         Visibility="{Binding Rotator.IsAvailable, Converter={StaticResource BoolToVis}}"
+                         PersistKey="Rotator">
                 <c:Section.HeaderRight>
                   <c:StatusBadge Status="{Binding Rotator.StatusKind}"
                                  Pulsing="{Binding Rotator.StatusPulse}"
@@ -776,7 +776,7 @@
                    Plus pad jogs by per-axis StepSize at the dropdown speed.
                    Goto fields target absolute motor steps. Advanced opens the
                    driver-current popup. -->
-              <c:Section Title="POLAR ALIGNMENT" IconGeometry="{StaticResource Geo.Position}"
+              <c:Section Title="POLAR ALIGNMENT (Experimental)" IconGeometry="{StaticResource Geo.Position}" PersistKey="PolarAlignment"
                          Visibility="{Binding PolarAlignment.IsAvailable, Converter={StaticResource BoolToVis}}">
                 <c:Section.HeaderRight>
                   <Button Style="{StaticResource Btn.Sm}" Content="Advanced…"

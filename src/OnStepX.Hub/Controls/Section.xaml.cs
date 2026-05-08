@@ -3,16 +3,21 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using ASCOM.OnStepX.Config;
 
 namespace ASCOM.OnStepX.Controls
 {
-    // Collapsible section card. Replaces SectionPanel + section-header from
-    // the design HTML. Default state is expanded; clicking the header (icon
-    // + title row) toggles. Chevron rotates -90deg when collapsed.
     [ContentProperty(nameof(Body))]
     public partial class Section : UserControl
     {
-        public Section() { InitializeComponent(); UpdateVisuals(); }
+        private bool _loaded;
+
+        public Section()
+        {
+            InitializeComponent();
+            UpdateVisuals();
+            Loaded += OnLoaded;
+        }
 
         public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
             nameof(Title), typeof(string), typeof(Section), new PropertyMetadata(""));
@@ -32,8 +37,34 @@ namespace ASCOM.OnStepX.Controls
 
         public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.Register(
             nameof(IsExpanded), typeof(bool), typeof(Section),
-            new PropertyMetadata(true, (d, e) => ((Section)d).UpdateVisuals()));
+            new PropertyMetadata(true, OnIsExpandedChanged));
         public bool IsExpanded { get => (bool)GetValue(IsExpandedProperty); set => SetValue(IsExpandedProperty, value); }
+
+        // Optional registry key used to persist expanded/collapsed state across
+        // sessions. XAML IsExpanded acts as the first-run default.
+        public static readonly DependencyProperty PersistKeyProperty = DependencyProperty.Register(
+            nameof(PersistKey), typeof(string), typeof(Section), new PropertyMetadata(null));
+        public string PersistKey { get => (string)GetValue(PersistKeyProperty); set => SetValue(PersistKeyProperty, value); }
+
+        private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var s = (Section)d;
+            s.UpdateVisuals();
+            if (!s._loaded) return;
+            if (string.IsNullOrEmpty(s.PersistKey)) return;
+            try { DriverSettings.SetSectionExpanded(s.PersistKey, (bool)e.NewValue); } catch { }
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(PersistKey))
+            {
+                bool restored = IsExpanded;
+                try { restored = DriverSettings.GetSectionExpanded(PersistKey, IsExpanded); } catch { }
+                if (restored != IsExpanded) IsExpanded = restored;
+            }
+            _loaded = true;
+        }
 
         private void UpdateVisuals()
         {

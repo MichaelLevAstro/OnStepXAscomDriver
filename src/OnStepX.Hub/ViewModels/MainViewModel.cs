@@ -93,9 +93,7 @@ namespace ASCOM.OnStepX.ViewModels
 
         public MainViewModel()
         {
-            // Auto-default the TPPA bridge port from the installer-written
-            // com0com pair list before any VM reads DriverSettings.TppaBridgePort.
-            // No UAC prompt — registry mirror only.
+            // Run before child VMs read DriverSettings.TppaBridgePort.
             try { DriverSettings.EnsureTppaBridgePortDefaulted(); } catch { }
 
             Connection = new ConnectionViewModel(this);
@@ -155,13 +153,10 @@ namespace ASCOM.OnStepX.ViewModels
             _mount.LimitWarning += OnMountLimitWarning;
             ClientRegistry.Changed += OnClientRegistryChanged;
 
-            // TPPA bridge: lazily started/stopped based on (mount open, PA mode,
-            // bridge port configured). Reconciled on every connection event +
-            // any time the user flips the PA toggle.
             _tppaBridge = new TppaSerialBridge(_mount);
-            // PA toggle: refresh MountStateCache live (no reconnect) + kick
-            // the bridge to bind/unbind. Re-runs the auto-default lookup so a
-            // first-time toggle picks up a freshly-installed com0com pair.
+            // PA toggle: refresh MountStateCache live (no reconnect) + rebind
+            // bridge. EnsureTppaBridgePortDefaulted() picks up freshly-installed
+            // com0com pairs on first toggle.
             try
             {
                 Advanced.SetPolarAlignmentChangeHandler(() =>
