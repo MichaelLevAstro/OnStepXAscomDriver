@@ -120,6 +120,12 @@
                 <Button Content="Go Home"  Command="{Binding ParkHome.SearchHomeCommand}" Margin="3,3,0,0"/>
               </UniformGrid>
               <Button Content="Set Park Here" Command="{Binding ParkHome.SetParkHereCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,6"/>
+              <UniformGrid Columns="2" Margin="0,0,0,6">
+                <Button Content="Save PA Position"     Command="{Binding ParkHome.SavePaPositionCommand}"   Margin="0,0,3,0"
+                        ToolTip="Capture the current physical mount position so it can be slewed to later. Stores HA+Dec (or Alt+Az on Alt-Az mounts) so the same physical orientation is restored year-round."/>
+                <Button Content="Slew to PA Position"  Command="{Binding ParkHome.SlewToPaPositionCommand}" Margin="3,0,0,0"
+                        ToolTip="Slew back to the saved physical position."/>
+              </UniformGrid>
               <Button Style="{StaticResource Btn.Primary}"
                       Command="{Binding ParkHome.SlewToTargetCommand}"
                       HorizontalAlignment="Stretch" Margin="0,0,0,6">

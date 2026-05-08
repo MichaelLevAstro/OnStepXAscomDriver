@@ -254,6 +254,31 @@ namespace ASCOM.OnStepX.Hardware
         public void ResetNvMemory() => _transport.SendBlind(":ENVRESET#");
         public void RebootMount()   => _transport.SendBlind(":ERESET#");
 
+        // ---------- Mount type ----------
+        // OnStepX :GXEM# returns one of "0".."3":
+        //   0 = uninitialized, 1 = German Equatorial, 2 = Equatorial Fork,
+        //   3 = Alt-Az fork. Older OnStep builds without the extended set
+        //   reply empty — caller treats <=0 as "unknown / unsupported".
+        // :SXEM,n# writes the persisted NV value. Takes effect after reboot
+        // on most OnStepX builds. Returns '1' on accept, '0' on reject.
+        public int GetMountType()
+        {
+            try
+            {
+                var s = Strip(_transport.SendAndReceive(":GXEM#"));
+                if (string.IsNullOrEmpty(s)) return -1;
+                if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
+                    return v;
+            }
+            catch { }
+            return -1;
+        }
+        public bool SetMountType(int n)
+        {
+            if (n < 1 || n > 3) return false;
+            return Bool(_transport.SendAndReceive(":SXEM," + n.ToString(CultureInfo.InvariantCulture) + "#"));
+        }
+
         // ---------- Meridian limits (minutes of RA past meridian) ----------
         // 1 min RA = 0.25°. Negative = stop tracking before meridian.
         public int GetMeridianLimitEastMinutes()
