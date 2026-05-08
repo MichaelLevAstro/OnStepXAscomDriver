@@ -1,8 +1,10 @@
 using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
+using ASCOM.OnStepX.Controls;
 using ASCOM.OnStepX.Hardware.State;
 using ASCOM.OnStepX.ViewModels;
 
@@ -17,13 +19,11 @@ namespace ASCOM.OnStepX.Views
         // looping until tray Exit is invoked.
         private bool _exiting;
 
-        // Window-width presets — keep in sync with MainWindow.xaml's Width and
-        // MinWidth. The 2-column variant is 2/3 of the original 1280 minus a
-        // touch of slack so the console toolbar still fits.
-        private const double Width3Col = 1280;
-        private const double Width2Col = 880;
-        private const double MinWidth3Col = 1100;
-        private const double MinWidth2Col = 760;
+        // Live tab descriptor list bound to the TabBar control. The PA entry's
+        // IsVisible flips with PolarAlignment.IsAvailable so the bar can
+        // fade the pill in/out without rebuilding the whole list.
+        private readonly ObservableCollection<TabItemDef> _tabs = new ObservableCollection<TabItemDef>();
+        private TabItemDef _polarTab;
 
         public MainWindow()
         {
@@ -31,30 +31,50 @@ namespace ASCOM.OnStepX.Views
             VM = new MainViewModel();
             DataContext = VM;
             try { Icon = WindowIconLoader.LoadImageSource(); } catch { }
-            Loaded += (s, e) => { VM.TryAutoConnect(); ApplyColumnLayout(); };
-            VM.PropertyChanged += (s, e) =>
+
+            BuildTabs();
+
+            Loaded += (s, e) =>
             {
-                if (e.PropertyName == nameof(MainViewModel.Show3rdColumn))
-                    Dispatcher.BeginInvoke(new Action(ApplyColumnLayout));
+                VM.TryAutoConnect();
+                // Restored ActiveTab might point to a tab that's currently
+                // hidden (e.g. PA tab while disconnected). Fall back to Main.
+                if (!IsTabVisible(VM.ActiveTab)) VM.ActiveTab = "main";
             };
+            VM.PropertyChanged += OnVmPropertyChanged;
             Closed += MainWindow_Closed;
             Closing += MainWindow_Closing;
         }
 
-        // Resize the window to match the current column count. Skipped while
-        // the user has maximized the window (state is preserved on restore)
-        // or has manually resized to a much wider value.
-        private void ApplyColumnLayout()
+        private void BuildTabs()
         {
-            if (WindowState == WindowState.Maximized) return;
-            bool show3 = VM?.Show3rdColumn ?? true;
-            double targetW = show3 ? Width3Col : Width2Col;
-            double minW    = show3 ? MinWidth3Col : MinWidth2Col;
-            MinWidth = minW;
-            // Only auto-shrink if the user hasn't widened the window past our
-            // 2-col preset. Auto-grow back up when the 3rd column re-appears.
-            if (!show3 && Width > targetW) Width = targetW;
-            if (show3 && Width < targetW) Width = targetW;
+            _tabs.Add(new TabItemDef("setup", "Setup",  (System.Windows.Media.Geometry)FindResource("Geo.Connection")));
+            _tabs.Add(new TabItemDef("main",  "Main",   (System.Windows.Media.Geometry)FindResource("Geo.Position")));
+            _tabs.Add(new TabItemDef("extra", "Extra",  (System.Windows.Media.Geometry)FindResource("Geo.Focuser")));
+            _polarTab = new TabItemDef("polar", "Polar Alignment", (System.Windows.Media.Geometry)FindResource("Geo.Polar"))
+            { IsVisible = VM.IsPolarTabVisible };
+            _tabs.Add(_polarTab);
+            _tabs.Add(new TabItemDef("adv", "Advanced", (System.Windows.Media.Geometry)FindResource("Geo.Advanced")));
+
+            TabBarCtrl.ItemsSource = _tabs;
+        }
+
+        private bool IsTabVisible(string id)
+        {
+            foreach (var t in _tabs)
+                if (t.Id == id) return t.IsVisible;
+            return false;
+        }
+
+        private void OnVmPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsPolarTabVisible))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_polarTab != null) _polarTab.IsVisible = VM.IsPolarTabVisible;
+                }));
+            }
         }
 
         // X button policy:
@@ -89,9 +109,6 @@ namespace ASCOM.OnStepX.Views
 
             _exiting = true;
             try { VM?.Connection?.DoDisconnect(); } catch { }
-            // e.Cancel stays false — Window proceeds to close, Closed fires,
-            // Application.Current.Shutdown() drops the dispatcher and
-            // Program.MainImpl returns from app.Run().
         }
 
         private void MainWindow_Closed(object sender, EventArgs e)
@@ -128,14 +145,6 @@ namespace ASCOM.OnStepX.Views
             _exiting = true;
             try { VM?.Connection?.DoDisconnect(); } catch { }
             try { Close(); } catch { }
-        }
-
-        // COM port dropdown opened — refresh the list. SerialPort.GetPortNames
-        // is cheap; doing it on demand keeps the list fresh when adapters are
-        // hot-plugged after the hub started.
-        private void ComPortDropDownOpened(object sender, EventArgs e)
-        {
-            VM?.Connection?.RefreshSerialPorts();
         }
 
         [DllImport("user32.dll")]

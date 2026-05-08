@@ -22,6 +22,12 @@
        Same 24x24 stroke aesthetic as Geo.Focuser / Geo.Tracking. -->
   <Geometry x:Key="Geo.Rotator">M19 12 A7 7 0 1 1 12 5 M19 12 L21 9 M19 12 L16 13 M12 5 L9 3 M12 5 L11 8</Geometry>
 
+  <!-- Polar Alignment: ringed crosshair (matches the design's IC.pa glyph). -->
+  <Geometry x:Key="Geo.Polar">M12 21 A9 9 0 1 1 12 3 A9 9 0 1 1 12 21 Z M12 3 V7 M12 17 V21 M3 12 H7 M17 12 H21 M13.5 12 A1.5 1.5 0 1 1 10.5 12 A1.5 1.5 0 1 1 13.5 12 Z</Geometry>
+
+  <!-- Settings/cog glyph for the Advanced tab. Simple gear silhouette. -->
+  <Geometry x:Key="Geo.Advanced">M12 15 A3 3 0 1 1 12 9 A3 3 0 1 1 12 15 Z M12 2 V5 M12 19 V22 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M2 12 H5 M19 12 H22 M4.9 19.1 L7 17 M17 7 L19.1 4.9</Geometry>
+
   <!-- Window chrome glyphs -->
   <Geometry x:Key="Geo.WinMin">M1 5 H9</Geometry>
   <Geometry x:Key="Geo.WinMax">M1.5 1.5 H8.5 V8.5 H1.5 Z</Geometry>

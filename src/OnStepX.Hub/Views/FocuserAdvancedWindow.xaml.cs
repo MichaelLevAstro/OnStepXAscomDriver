@@ -3,14 +3,14 @@ using ASCOM.OnStepX.ViewModels;
 
 namespace ASCOM.OnStepX.Views
 {
-    public partial class AdvancedSettingsWindow : Window
+    public partial class FocuserAdvancedWindow : Window
     {
-        public AdvancedSettingsViewModel VM { get; }
+        public FocuserAdvancedViewModel VM { get; }
 
-        public AdvancedSettingsWindow(MainViewModel main)
+        public FocuserAdvancedWindow(FocuserViewModel focuser)
         {
             InitializeComponent();
-            VM = new AdvancedSettingsViewModel(main);
+            VM = new FocuserAdvancedViewModel(focuser);
             DataContext = VM;
             try { Icon = WindowIconLoader.LoadImageSource(); } catch { }
         }

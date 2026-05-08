@@ -250,6 +250,7 @@ namespace ASCOM.OnStepX.ViewModels
         public ICommand ParallacticCommand        { get; }
         public ICommand RestoreLastAngleCommand   { get; }
         public ICommand DismissRestoreCommand     { get; }
+        public ICommand OpenAdvancedCommand       { get; }
 
         public RotatorViewModel(MainViewModel main)
         {
@@ -275,6 +276,16 @@ namespace ASCOM.OnStepX.ViewModels
                 DriverSettings.RotatorLastAngleDeg = double.NaN;
                 OnPropertyChanged(nameof(RestoreVisible));
             });
+            OpenAdvancedCommand       = new RelayCommand(OpenAdvanced);
+        }
+
+        private void OpenAdvanced()
+        {
+            var dlg = new Views.RotatorAdvancedWindow(this)
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            dlg.ShowDialog();
         }
 
         internal void OnConnStateChanged()

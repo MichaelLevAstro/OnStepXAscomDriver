@@ -33,6 +33,7 @@ namespace ASCOM.OnStepX.ViewModels
         public FocuserViewModel Focuser { get; }
         public RotatorViewModel Rotator { get; }
         public PolarAlignmentViewModel PolarAlignment { get; }
+        public PierMeridianViewModel PierMeridian { get; }
 
         // Drives the third-column collapse when the firmware exposes neither
         // focuser nor rotator nor PA mode. MainWindow listens to PropertyChanged
@@ -45,6 +46,33 @@ namespace ASCOM.OnStepX.ViewModels
         // the polar alignment panel and confuse the user.
         public bool ShowFocuserHint => !Focuser.IsAvailable && !PolarAlignment.IsAvailable;
         public bool ShowRotatorHint => !Rotator.IsAvailable && !PolarAlignment.IsAvailable;
+
+        // Extra tab has nothing useful to show: no focuser, no rotator, and PA
+        // mode either off (so neither hint card has a special reason to show)
+        // or on (which suppresses both Focuser and Rotator regardless). In
+        // either case the ExtraTab renders a single centered placeholder.
+        public bool IsExtraTabEmpty => !Focuser.IsAvailable && !Rotator.IsAvailable;
+
+        // Active tab id (one of: setup, main, extra, polar, adv). Persisted via
+        // DriverSettings.ActiveTab; restored on launch. PA tab visibility is
+        // governed by PolarAlignment.IsAvailable; if the active tab disappears,
+        // we fall back to "main".
+        private string _activeTab = DriverSettings.ActiveTab;
+        public string ActiveTab
+        {
+            get => _activeTab;
+            set
+            {
+                if (string.IsNullOrEmpty(value)) value = "main";
+                if (!Set(ref _activeTab, value)) return;
+                try { DriverSettings.ActiveTab = value; } catch { }
+            }
+        }
+        public ICommand SetActiveTabCommand { get; }
+
+        // PA tab presence in the tab bar. Mirrors PolarAlignment.IsAvailable so
+        // the bar can re-raise on the right thread.
+        public bool IsPolarTabVisible => PolarAlignment.IsAvailable;
 
         private readonly MountSession _mount = MountSession.Instance;
         private readonly DispatcherTimer _pollTimer;
@@ -109,6 +137,7 @@ namespace ASCOM.OnStepX.ViewModels
             Focuser    = new FocuserViewModel(this);
             Rotator    = new RotatorViewModel(this);
             PolarAlignment = new PolarAlignmentViewModel(this);
+            PierMeridian   = new PierMeridianViewModel(this);
 
             // Re-emit Show3rdColumn + hint visibility whenever any child availability flips.
             Focuser.PropertyChanged += (s, e) =>
@@ -117,6 +146,7 @@ namespace ASCOM.OnStepX.ViewModels
                 {
                     OnPropertyChanged(nameof(Show3rdColumn));
                     OnPropertyChanged(nameof(ShowFocuserHint));
+                    OnPropertyChanged(nameof(IsExtraTabEmpty));
                 }
             };
             Rotator.PropertyChanged += (s, e) =>
@@ -125,6 +155,7 @@ namespace ASCOM.OnStepX.ViewModels
                 {
                     OnPropertyChanged(nameof(Show3rdColumn));
                     OnPropertyChanged(nameof(ShowRotatorHint));
+                    OnPropertyChanged(nameof(IsExtraTabEmpty));
                 }
             };
             PolarAlignment.PropertyChanged += (s, e) =>
@@ -134,6 +165,9 @@ namespace ASCOM.OnStepX.ViewModels
                     OnPropertyChanged(nameof(Show3rdColumn));
                     OnPropertyChanged(nameof(ShowFocuserHint));
                     OnPropertyChanged(nameof(ShowRotatorHint));
+                    OnPropertyChanged(nameof(IsPolarTabVisible));
+                    // PA tab disappeared while the user was on it → fall back to Main.
+                    if (!PolarAlignment.IsAvailable && _activeTab == "polar") ActiveTab = "main";
                 }
             };
 
@@ -148,6 +182,7 @@ namespace ASCOM.OnStepX.ViewModels
                 w.WindowState = w.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
             });
             CloseCommand       = new RelayCommand(() => Application.Current.MainWindow?.Close());
+            SetActiveTabCommand = new RelayCommand(p => { if (p is string id && !string.IsNullOrEmpty(id)) ActiveTab = id; });
 
             _mount.ConnectionChanged += OnMountConnectionChanged;
             _mount.LimitWarning += OnMountLimitWarning;
