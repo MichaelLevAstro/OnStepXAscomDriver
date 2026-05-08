@@ -1,0 +1,156 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.MainTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+             xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters">
+  <UserControl.Resources>
+    <cv:BoolToVisibilityConverter x:Key="BoolToVis"/>
+    <cv:InverseBoolConverter x:Key="Invert"/>
+  </UserControl.Resources>
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="14"/>
+        <ColumnDefinition Width="1.05*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- LEFT: Position + Tracking + Manual Slew + Park/Home/GoTo -->
+      <StackPanel Grid.Column="0">
+        <c:Section Title="CURRENT POSITION" IconGeometry="{StaticResource Geo.Position}" PersistKey="CurrentPosition">
+          <c:Section.Body>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0" Text="RA"          Style="{StaticResource Text.Label}"/>
+              <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Position.RightAscension}" Style="{StaticResource Text.Mono}"/>
+              <TextBlock Grid.Row="1" Text="Dec"         Style="{StaticResource Text.Label}"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Position.Declination}"   Style="{StaticResource Text.Mono}"/>
+              <TextBlock Grid.Row="2" Text="Altitude"    Style="{StaticResource Text.Label}"/>
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Position.Altitude}"      Style="{StaticResource Text.Mono}"/>
+              <TextBlock Grid.Row="3" Text="Azimuth"     Style="{StaticResource Text.Label}"/>
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Position.Azimuth}"       Style="{StaticResource Text.Mono}"/>
+              <TextBlock Grid.Row="4" Text="Pier side"   Style="{StaticResource Text.Label}"/>
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Position.PierSide}"      Style="{StaticResource Text.Mono}"/>
+              <TextBlock Grid.Row="5" Text="LST / mount" Style="{StaticResource Text.Label}"/>
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Position.Lst}"           Style="{StaticResource Text.Mono}"/>
+            </Grid>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="TrackingSlew">
+          <c:Section.HeaderRight>
+            <Grid>
+              <c:StatusBadge Status="{Binding Tracking.StateKind}"
+                             Pulsing="{Binding Tracking.StatePulse}"
+                             Text="{Binding Tracking.StateText}"
+                             Visibility="{Binding Tracking.IsSlewing, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"/>
+              <c:SlewingBadge Coord="{Binding Tracking.SlewCoord}"
+                              Visibility="{Binding Tracking.IsSlewing, Converter={StaticResource BoolToVis}}"/>
+            </Grid>
+          </c:Section.HeaderRight>
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Tracking enabled" IsChecked="{Binding Tracking.TrackingEnabled}"
+                        IsEnabled="{Binding Tracking.MountActionsEnabled}"
+                        VerticalAlignment="Center" Margin="0,0,0,8"/>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Tracking rate" Style="{StaticResource Text.Label}"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding Tracking.TrackingModes}"
+                          SelectedItem="{Binding Tracking.TrackingMode}"
+                          IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Slew (°/s)" Style="{StaticResource Text.Label}"/>
+                <c:NumericBox Grid.Column="1" Width="72"
+                              Min="{Binding Tracking.SlewRateMin}" Max="{Binding Tracking.SlewRateMax}"
+                              Step="0.25" DecimalPlaces="2"
+                              Value="{Binding Tracking.SlewRate}"/>
+                <TextBlock Grid.Column="2" Text="×" Margin="6,0" Style="{StaticResource Text.Hint}"/>
+                <Slider Grid.Column="3"
+                        Minimum="{Binding Tracking.SlewRateMin}" Maximum="{Binding Tracking.SlewRateMax}"
+                        Value="{Binding Tracking.SlewRate}"
+                        VerticalAlignment="Center"
+                        IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Guide rate (×)" Style="{StaticResource Text.Label}"/>
+                <c:NumericBox Grid.Column="1" Width="72" HorizontalAlignment="Left"
+                              Min="0.01" Max="1.0" Step="0.05" DecimalPlaces="2"
+                              Value="{Binding Tracking.GuideRate}"
+                              IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+              </Grid>
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="At meridian" Style="{StaticResource Text.Label}"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding Tracking.MeridianActions}"
+                          SelectedItem="{Binding Tracking.MeridianAction}"
+                          IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+              </Grid>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="MANUAL SLEW" IconGeometry="{StaticResource Geo.Slew}" PersistKey="ManualSlew">
+          <c:Section.Body>
+            <StackPanel>
+              <c:SlewPad PadVM="{Binding ParkHome}"
+                         IsArmed="{Binding ParkHome.MountActionsEnabled}"
+                         Height="220" Margin="0,0,0,6"/>
+              <Button Content="Slew Rate Info…" Command="{Binding ParkHome.SlewRateInfoCommand}"
+                      HorizontalAlignment="Stretch"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}" PersistKey="ParkHomeGoto">
+          <c:Section.Body>
+            <StackPanel>
+              <UniformGrid Columns="2" Margin="0,0,0,6">
+                <Button Content="Park"     Command="{Binding ParkHome.ParkCommand}"     Margin="0,0,3,3"/>
+                <Button Content="Unpark"   Command="{Binding ParkHome.UnparkCommand}"   Margin="3,0,0,3"/>
+                <Button Content="Set Home" Command="{Binding ParkHome.SetHomeCommand}"  Margin="0,3,3,0"/>
+                <Button Content="Go Home"  Command="{Binding ParkHome.SearchHomeCommand}" Margin="3,3,0,0"/>
+              </UniformGrid>
+              <Button Content="Set Park Here" Command="{Binding ParkHome.SetParkHereCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,6"/>
+              <Button Style="{StaticResource Btn.Primary}"
+                      Command="{Binding ParkHome.SlewToTargetCommand}"
+                      HorizontalAlignment="Stretch" Margin="0,0,0,6">
+                <StackPanel Orientation="Horizontal">
+                  <Path Width="12" Height="12" Margin="0,0,8,0" Stretch="Uniform"
+                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        StrokeThickness="1.6" Fill="Transparent"
+                        Data="{StaticResource Geo.Target}"/>
+                  <TextBlock Text="Slew to Target…" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+
+      <!-- RIGHT: Visualizer + client count pill -->
+      <StackPanel Grid.Column="2">
+        <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}" PersistKey="Visualizer">
+          <c:Section.Body>
+            <c:MountVisualizer DataContext="{Binding Visualizer}"
+                               Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}"/>
+          </c:Section.Body>
+        </c:Section>
+
+        <StackPanel HorizontalAlignment="Right" Margin="0,4,0,0">
+          <c:StatusBadge Status="{Binding ClientCountKind}"
+                         Pulsing="{Binding ClientCountPulse}"
+                         Text="{Binding ClientCountText}"/>
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

@@ -43,6 +43,9 @@ namespace ASCOM.OnStepX.Config
         // Console pane shown/hidden state, persisted across sessions.
         public static bool   ConsoleVisible { get => GetBool("ConsoleVisible", false); set => SetBool("ConsoleVisible", value); }
 
+        // Last selected tab id ("setup"/"main"/"extra"/"polar"/"adv"). Restored on launch.
+        public static string ActiveTab { get => Get("ActiveTab", "main"); set => Set("ActiveTab", value ?? "main"); }
+
         // Per-section expanded/collapsed state, keyed by Section.PersistKey.
         public static bool   GetSectionExpanded(string key, bool defaultValue) => GetBool("Section." + key + ".Expanded", defaultValue);
         public static void   SetSectionExpanded(string key, bool value) => SetBool("Section." + key + ".Expanded", value);

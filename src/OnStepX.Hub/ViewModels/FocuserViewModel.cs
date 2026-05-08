@@ -183,6 +183,7 @@ namespace ASCOM.OnStepX.ViewModels
         public ICommand ZeroCommand    { get; }
         public ICommand ApplyBacklashCommand { get; }
         public ICommand ApplyTcfCommand      { get; }
+        public ICommand OpenAdvancedCommand  { get; }
 
         public FocuserViewModel(MainViewModel main)
         {
@@ -199,6 +200,16 @@ namespace ASCOM.OnStepX.ViewModels
             ZeroCommand          = new RelayCommand(() => GuardBg(() => _mount.Protocol.FocuserZero()),       () => MountActionsEnabled);
             ApplyBacklashCommand = new RelayCommand(DoApplyBacklash, () => MountActionsEnabled);
             ApplyTcfCommand      = new RelayCommand(DoApplyTcf,      () => MountActionsEnabled && TempCompAvailable);
+            OpenAdvancedCommand  = new RelayCommand(OpenAdvanced);
+        }
+
+        private void OpenAdvanced()
+        {
+            var dlg = new Views.FocuserAdvancedWindow(this)
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            dlg.ShowDialog();
         }
 
         internal void OnConnStateChanged()

@@ -121,14 +121,10 @@ namespace ASCOM.OnStepX.ViewModels
         public string SlewCoord { get => _slewCoord; private set => Set(ref _slewCoord, value); }
 
         public bool MountActionsEnabled => _main.State == ConnState.Connected;
-        public bool AdvancedButtonEnabled => true; // dialog opens offline (HubForm comment)
-
-        public ICommand AdvancedCommand { get; }
 
         public TrackingViewModel(MainViewModel main)
         {
             _main = main;
-            AdvancedCommand = new RelayCommand(OpenAdvancedSettings);
             LoadFromSettings();
         }
 
@@ -293,15 +289,6 @@ namespace ASCOM.OnStepX.ViewModels
             StateKind = StatusKind.Neutral;
             StatePulse = false;
             IsSlewing = false;
-        }
-
-        private void OpenAdvancedSettings()
-        {
-            var dlg = new Views.AdvancedSettingsWindow(_main)
-            {
-                Owner = Application.Current?.MainWindow
-            };
-            dlg.ShowDialog();
         }
     }
 }

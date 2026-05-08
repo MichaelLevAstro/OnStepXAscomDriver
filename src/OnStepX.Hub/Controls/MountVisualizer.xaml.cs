@@ -83,7 +83,20 @@ namespace ASCOM.OnStepX.Controls
             InitializeComponent();
             BuildScene();
             DataContextChanged += OnDataContextChanged;
-            Loaded += (_, __) => ApplyVmSnapshot();
+            // Loaded re-checks DataContext: when the control is hosted inside a
+            // tab UserControl, its DataContext may resolve before our
+            // DataContextChanged handler is subscribed (parent finishes XAML
+            // parse, propagates DataContext, then we subscribe). Without this
+            // fallback, _vm stays null and the 3D model never animates.
+            Loaded += (_, __) =>
+            {
+                if (_vm == null && DataContext is VisualizerViewModel late)
+                {
+                    _vm = late;
+                    _vm.PropertyChanged += OnVmPropertyChanged;
+                }
+                ApplyVmSnapshot();
+            };
             Unloaded += (_, __) => DetachVm();
             Viewport.MouseDoubleClick += OnViewportDoubleClick;
         }

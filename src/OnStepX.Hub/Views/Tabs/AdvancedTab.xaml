@@ -1,0 +1,79 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.AdvancedTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="14"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- LEFT col: Experimental + Diagnostics -->
+      <StackPanel Grid.Column="0">
+        <c:Section Title="EXPERIMENTAL" IconGeometry="{StaticResource Geo.Advanced}" PersistKey="AdvancedExperimental">
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Enable Automatic Polar Alignment (Experimental)"
+                        IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,6"/>
+              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                         Text="Adds a Polar Alignment tab when ≥ 2 focuser axes are reported by the firmware."/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="DIAGNOSTICS &amp; LOGGING" IconGeometry="{StaticResource Geo.Console}" PersistKey="AdvancedDiagnostics">
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Notify on limits" IsChecked="{Binding Advanced.NotificationsEnabled}" Margin="0,0,0,6"/>
+              <CheckBox Content="Enable Verbose log file" IsChecked="{Binding Advanced.VerboseLog}" Margin="0,0,0,6"/>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Log path" Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="1" Text="{Binding Advanced.LogPath, Mode=OneWay}"
+                           Style="{StaticResource Text.Hint}"
+                           TextTrimming="CharacterEllipsis"/>
+              </Grid>
+              <Button Content="Open Log Folder" Command="{Binding Advanced.OpenLogFolderCommand}"
+                      HorizontalAlignment="Left" MinWidth="140"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+
+      <!-- RIGHT col: Pier / Meridian + Danger Zone -->
+      <StackPanel Grid.Column="2">
+        <c:Section Title="PIER / MERIDIAN POLICY" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="AdvancedPierMeridian">
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Preferred pier side" Style="{StaticResource Text.Label}"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding PierMeridian.PierOptions}"
+                          SelectedIndex="{Binding PierMeridian.PreferredPierIndex}"/>
+              </Grid>
+              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="Recommended: Best. Prevents spurious flips from plate-solve corrections near the meridian."/>
+              <CheckBox Content="Pause at home on meridian flip"
+                        IsChecked="{Binding PierMeridian.PauseAtHome}"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="DANGER ZONE" IconGeometry="{StaticResource Geo.Advanced}" IsExpanded="False" PersistKey="AdvancedDanger">
+          <c:Section.Body>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="Wipes mount non-volatile memory. Site, model, park position, and limits will be lost."/>
+              <Button Content="NV Reset…" Style="{StaticResource Btn.Danger}"
+                      Command="{Binding ParkHome.NvResetCommand}"
+                      HorizontalAlignment="Stretch"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

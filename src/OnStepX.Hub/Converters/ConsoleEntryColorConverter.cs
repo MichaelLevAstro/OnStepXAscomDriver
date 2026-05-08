@@ -62,4 +62,17 @@ namespace ASCOM.OnStepX.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
             => throw new NotSupportedException();
     }
+
+    // Drives tab-stage panel visibility. ActiveTab string compared against the
+    // ConverterParameter (the tab id). Equal → Visible, otherwise → Collapsed.
+    // Tab content stays alive (Collapsed, not torn down) so polling VMs keep
+    // updating while the tab is hidden.
+    public sealed class StringEqualsToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+            => string.Equals(value as string, parameter as string, StringComparison.Ordinal)
+                ? Visibility.Visible : Visibility.Collapsed;
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotSupportedException();
+    }
 }

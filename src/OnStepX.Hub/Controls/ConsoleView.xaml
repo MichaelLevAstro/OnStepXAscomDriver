@@ -11,34 +11,15 @@
   <Border Background="{DynamicResource Brush.Panel}"
           BorderBrush="{DynamicResource Brush.Border}"
           BorderThickness="0,1,0,0">
-    <DockPanel LastChildFill="True">
-      <!-- Toolbar / cmd input -->
+    <DockPanel LastChildFill="True"
+               Visibility="{Binding ConsoleVisible, Converter={StaticResource BoolToVis}}">
+      <!-- Console toolbar: Enable/Auto-scroll/Copy/Clear + manual cmd input + filter.
+           "Show console" toggle now lives on the global status strip; this
+           drawer only renders when ConsoleVisible=true. -->
       <Border DockPanel.Dock="Top"
-              Background="{DynamicResource Brush.Panel}"
-              Padding="14,10,14,10">
-        <DockPanel LastChildFill="True">
-          <CheckBox DockPanel.Dock="Left" Content="Show console"
-                    IsChecked="{Binding ConsoleVisible}"
-                    VerticalAlignment="Center" Margin="0,0,16,0"/>
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
-            <Button Style="{StaticResource Btn.SmPrimary}" Content="Send"
-                    Command="{Binding SendCommand}" Margin="0,0,8,0"/>
-          </StackPanel>
-          <TextBox Text="{Binding CommandInput, UpdateSourceTrigger=PropertyChanged}"
-                   IsEnabled="{Binding MountActionsEnabled}"
-                   FontFamily="{DynamicResource Font.Mono}"
-                   FontSize="{DynamicResource Font.Size.Mono}"
-                   Tag=":GVP#   — leading ':' and trailing '#' auto-added"
-                   KeyDown="OnCmdInputKeyDown"/>
-        </DockPanel>
-      </Border>
-
-      <!-- Section-style header for the console body (with controls on right) -->
-      <Border DockPanel.Dock="Top"
-              Visibility="{Binding ConsoleVisible, Converter={StaticResource BoolToVis}}"
               Background="{DynamicResource Brush.Panel2}"
               BorderBrush="{DynamicResource Brush.Border}"
-              BorderThickness="0,1,0,0"
+              BorderThickness="0,0,0,1"
               Padding="14,8">
         <Grid>
           <Grid.ColumnDefinitions>
@@ -51,21 +32,29 @@
                   Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.6"
                   StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
                   Data="{StaticResource Geo.Console}"/>
-            <TextBlock Style="{StaticResource Text.SectionTitle}"
-                       Text="CONSOLE"/>
-          </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+            <TextBlock Style="{StaticResource Text.SectionTitle}" Text="CONSOLE" Margin="0,0,12,0"/>
             <CheckBox Content="Enabled"     IsChecked="{Binding IoEnabled}"   Margin="0,0,12,0"/>
             <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}"  Margin="0,0,12,0"/>
-            <TextBox Width="180" Height="24" FontSize="11.5"
+            <Button Style="{StaticResource Btn.Sm}" Content="Copy"  Command="{Binding CopyCommand}"  Margin="0,0,6,0"/>
+            <Button Style="{StaticResource Btn.Sm}" Content="Clear" Command="{Binding ClearCommand}"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+            <TextBox Text="{Binding CommandInput, UpdateSourceTrigger=PropertyChanged}"
+                     IsEnabled="{Binding MountActionsEnabled}"
+                     FontFamily="{DynamicResource Font.Mono}"
+                     FontSize="{DynamicResource Font.Size.Mono}"
+                     Tag=":GVP#   — leading ':' and trailing '#' auto-added"
+                     KeyDown="OnCmdInputKeyDown"
+                     Width="280" Margin="0,0,6,0"/>
+            <Button Style="{StaticResource Btn.SmPrimary}" Content="Send"
+                    Command="{Binding SendCommand}"/>
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBox Width="160" Height="24" FontSize="11.5"
                      Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
                      ToolTip="Filter (case-sensitive)"
                      Margin="0,0,6,0"/>
-            <Button Style="{StaticResource Btn.Sm}" Content="Clear filter" Command="{Binding ClearFilterCommand}" Margin="0,0,12,0"/>
-          </StackPanel>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button Style="{StaticResource Btn.Sm}" Content="Copy"  Command="{Binding CopyCommand}"  Margin="0,0,6,0"/>
-            <Button Style="{StaticResource Btn.Sm}" Content="Clear" Command="{Binding ClearCommand}"/>
+            <Button Style="{StaticResource Btn.Sm}" Content="Clear filter" Command="{Binding ClearFilterCommand}"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -74,7 +63,6 @@
            click to select rows, Shift/Ctrl-click for range/multi, then
            Ctrl+C or context menu → "Copy selected" to grab those lines. -->
       <Border Background="{DynamicResource Brush.ConsoleBg}"
-              Visibility="{Binding ConsoleVisible, Converter={StaticResource BoolToVis}}"
               BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0">
         <ListBox x:Name="LogList"
                  ItemsSource="{Binding Entries}"
