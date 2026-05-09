@@ -49,6 +49,10 @@ namespace ASCOM.OnStepX.Config
         // Last selected tab id ("setup"/"main"/"extra"/"polar"/"adv"). Restored on launch.
         public static string ActiveTab { get => Get("ActiveTab", "main"); set => Set("ActiveTab", value ?? "main"); }
 
+        // Slew-to-Target window state. Catalog dropdown is ignored when filter has non-whitespace text.
+        public static string SlewTargetCatalog { get => Get("SlewTargetCatalog", "Planets"); set => Set("SlewTargetCatalog", value ?? "Planets"); }
+        public static string SlewTargetFilter  { get => Get("SlewTargetFilter",  "");        set => Set("SlewTargetFilter",  value ?? ""); }
+
         // Per-section expanded/collapsed state, keyed by Section.PersistKey.
         public static bool   GetSectionExpanded(string key, bool defaultValue) => GetBool("Section." + key + ".Expanded", defaultValue);
         public static void   SetSectionExpanded(string key, bool value) => SetBool("Section." + key + ".Expanded", value);

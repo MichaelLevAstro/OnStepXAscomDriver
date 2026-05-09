@@ -15,13 +15,15 @@ using ASCOM.OnStepX.Hardware;
 namespace ASCOM.OnStepX.ViewModels
 {
     // Mirrors SlewTargetForm. Catalog combo + filter + virtualized row list +
-    // 2 s solar-system live refresh. Slew confirmation auto-switches tracking
-    // rate for Sun/Moon/planets when DriverSettings.AutoSwitchPlanetTrackingRate.
+    // 2 s solar-system live refresh. With non-whitespace filter text we search
+    // across all catalogs and ignore the dropdown; an empty filter lets the
+    // dropdown drive the list. Last catalog + filter persist across sessions
+    // via DriverSettings. Slew confirmation auto-switches tracking rate for
+    // Sun/Moon/planets when DriverSettings.AutoSwitchPlanetTrackingRate.
     public sealed class SlewTargetViewModel : ViewModelBase
     {
         private readonly MainViewModel _main;
         private readonly MountSession _mount = MountSession.Instance;
-        private IReadOnlyList<CelestialTarget> _currentCatalog = new CelestialTarget[0];
         private DispatcherTimer _liveTimer;
         private const int LiveTickMs = 2000;
         private const int MaxDisplayRows = 3000;
@@ -36,14 +38,28 @@ namespace ASCOM.OnStepX.ViewModels
         public string SelectedCatalog
         {
             get => _selectedCatalog;
-            set { if (Set(ref _selectedCatalog, value)) RefreshList(); }
+            set
+            {
+                if (Set(ref _selectedCatalog, value))
+                {
+                    DriverSettings.SlewTargetCatalog = _selectedCatalog;
+                    RebuildRows();
+                }
+            }
         }
 
         private string _filter = "";
         public string Filter
         {
             get => _filter;
-            set { if (Set(ref _filter, value ?? "")) RowsView.Refresh(); }
+            set
+            {
+                if (Set(ref _filter, value ?? ""))
+                {
+                    DriverSettings.SlewTargetFilter = _filter;
+                    RebuildRows();
+                }
+            }
         }
 
         private TargetRow _selectedRow;
@@ -74,16 +90,22 @@ namespace ASCOM.OnStepX.ViewModels
         {
             _main = main;
             RowsView = CollectionViewSource.GetDefaultView(Rows);
-            RowsView.Filter = MatchesFilter;
 
-            RefreshCommand = new RelayCommand(RefreshList);
+            // Restore last state into backing fields so we don't write through
+            // to the registry on restore and don't trigger two rebuilds.
+            string savedCatalog = DriverSettings.SlewTargetCatalog;
+            if (!string.IsNullOrEmpty(savedCatalog) && Catalogs.Contains(savedCatalog))
+                _selectedCatalog = savedCatalog;
+            _filter = DriverSettings.SlewTargetFilter ?? "";
+
+            RefreshCommand = new RelayCommand(RebuildRows);
             SlewCommand    = new RelayCommand(DoSlew, () => SlewEnabled);
             CloseCommand   = new RelayCommand(() => CloseAction?.Invoke());
 
             _liveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(LiveTickMs) };
             _liveTimer.Tick += (s, e) => OnLiveTick();
 
-            RefreshList();
+            RebuildRows();
         }
 
         public void Detach()
@@ -91,58 +113,108 @@ namespace ASCOM.OnStepX.ViewModels
             try { _liveTimer?.Stop(); } catch { }
         }
 
-        private bool MatchesFilter(object o)
+        private static bool MatchesTarget(CelestialTarget t, string f)
         {
-            if (string.IsNullOrEmpty(_filter)) return true;
-            var r = (TargetRow)o;
-            string f = _filter;
-            return r.Id.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0
-                || r.Name.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0
-                || (r.Type ?? "").IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0;
+            if (string.IsNullOrEmpty(f)) return true;
+            string id = t.Id ?? "";
+            string name = t.Name ?? "";
+            string kind = t.Kind ?? "";
+            string constellation = t.Constellation ?? "";
+            return id.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0
+                || kind.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0
+                || constellation.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private void RefreshList()
+        private static IReadOnlyList<CelestialTarget> LoadCatalog(string name)
         {
+            switch (name)
+            {
+                case "Planets": return PlanetCatalog.All;
+                case "Messier": return MessierCatalog.All;
+                case "NGC":     return DeepSkyCatalog.Load("ngc.txt");
+                case "IC":      return DeepSkyCatalog.Load("ic.txt");
+                case "SH2":     return DeepSkyCatalog.Load("sh2.txt");
+                case "LDN":     return DeepSkyCatalog.Load("ldn.txt");
+                default:        return new CelestialTarget[0];
+            }
+        }
+
+        private static IEnumerable<CelestialTarget> EnumerateAllCatalogs()
+        {
+            foreach (var t in PlanetCatalog.All) yield return t;
+            foreach (var t in MessierCatalog.All) yield return t;
+            foreach (var t in DeepSkyCatalog.Load("ngc.txt")) yield return t;
+            foreach (var t in DeepSkyCatalog.Load("ic.txt"))  yield return t;
+            foreach (var t in DeepSkyCatalog.Load("sh2.txt")) yield return t;
+            foreach (var t in DeepSkyCatalog.Load("ldn.txt")) yield return t;
+        }
+
+        private void RebuildRows()
+        {
+            bool allMode = !string.IsNullOrWhiteSpace(_filter);
+            string filter = _filter ?? "";
+
+            IEnumerable<CelestialTarget> source;
+            int sourceCount = 0;
             try
             {
-                switch (_selectedCatalog)
+                if (allMode)
                 {
-                    case "Planets": _currentCatalog = PlanetCatalog.All; break;
-                    case "Messier": _currentCatalog = MessierCatalog.All; break;
-                    case "NGC":     _currentCatalog = DeepSkyCatalog.Load("ngc.txt"); break;
-                    case "IC":      _currentCatalog = DeepSkyCatalog.Load("ic.txt"); break;
-                    case "SH2":     _currentCatalog = DeepSkyCatalog.Load("sh2.txt"); break;
-                    case "LDN":     _currentCatalog = DeepSkyCatalog.Load("ldn.txt"); break;
-                    default:        _currentCatalog = new CelestialTarget[0]; break;
+                    source = EnumerateAllCatalogs();
+                }
+                else
+                {
+                    var loaded = LoadCatalog(_selectedCatalog);
+                    sourceCount = loaded.Count;
+                    source = loaded;
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Catalog load failed: " + ex.Message, "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
-                _currentCatalog = new CelestialTarget[0];
+                source = new CelestialTarget[0];
+                sourceCount = 0;
             }
 
             var utc = MountTime.NowUtc(_mount);
             Rows.Clear();
-            int shown = 0;
-            foreach (var t in _currentCatalog)
+            int matched = 0;
+            foreach (var t in source)
             {
-                if (shown >= MaxDisplayRows) break;
+                if (allMode && !MatchesTarget(t, filter)) continue;
+                matched++;
+                if (Rows.Count >= MaxDisplayRows) continue; // keep counting past cap for accurate total
                 var (ra, dec) = t.Coords(utc);
                 Rows.Add(new TargetRow(t)
                 {
                     RA = FormatRaShort(ra),
                     Dec = FormatDecShort(dec),
                 });
-                shown++;
             }
-            StatusText = _currentCatalog.Count > shown
-                ? string.Format("Showing {0} of {1} entries — refine filter to narrow.", shown, _currentCatalog.Count)
-                : string.Format("{0} entries", _currentCatalog.Count);
 
-            bool hasPlanets = _currentCatalog.Any(t => t.SolarSystemBody.HasValue);
+            if (allMode)
+            {
+                StatusText = matched > Rows.Count
+                    ? string.Format(CultureInfo.InvariantCulture,
+                        "Showing {0} of {1} matches across all catalogs — refine filter.", Rows.Count, matched)
+                    : string.Format(CultureInfo.InvariantCulture,
+                        matched == 1 ? "{0} match across all catalogs" : "{0} matches across all catalogs", matched);
+            }
+            else
+            {
+                StatusText = sourceCount > Rows.Count
+                    ? string.Format(CultureInfo.InvariantCulture,
+                        "Showing {0} of {1} entries — refine filter to narrow.", Rows.Count, sourceCount)
+                    : string.Format(CultureInfo.InvariantCulture, "{0} entries", sourceCount);
+            }
+
+            bool hasPlanets = false;
+            foreach (var r in Rows)
+                if (r.Target?.SolarSystemBody.HasValue == true) { hasPlanets = true; break; }
             if (hasPlanets) _liveTimer?.Start(); else _liveTimer?.Stop();
+
             UpdateSelection();
         }
 
@@ -238,7 +310,7 @@ namespace ASCOM.OnStepX.ViewModels
 
         private void OnLiveTick()
         {
-            if (_currentCatalog == null || Rows.Count == 0) return;
+            if (Rows.Count == 0) return;
             var utc = MountTime.NowUtc(_mount);
             foreach (var row in Rows)
             {
