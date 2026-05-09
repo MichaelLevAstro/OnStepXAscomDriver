@@ -35,6 +35,7 @@ namespace ASCOM.OnStepX.ViewModels
         public PolarAlignmentViewModel PolarAlignment { get; }
         public PierMeridianViewModel PierMeridian { get; }
         public MountSettingsViewModel MountSettings { get; }
+        public UpdateViewModel Update { get; }
 
         // Drives the third-column collapse when the firmware exposes neither
         // focuser nor rotator nor PA mode. MainWindow listens to PropertyChanged
@@ -141,6 +142,7 @@ namespace ASCOM.OnStepX.ViewModels
             PolarAlignment = new PolarAlignmentViewModel(this);
             PierMeridian   = new PierMeridianViewModel(this);
             MountSettings  = new MountSettingsViewModel(this);
+            Update         = new UpdateViewModel();
 
             // Re-emit Show3rdColumn + hint visibility whenever any child availability flips.
             Focuser.PropertyChanged += (s, e) =>
@@ -211,6 +213,11 @@ namespace ASCOM.OnStepX.ViewModels
             _pollTimer.Start();
 
             UpdateClientLabel();
+
+            if (DriverSettings.CheckUpdatesOnStartup)
+            {
+                try { Update.StartStartupCheck(); } catch { }
+            }
         }
 
         public void Detach()

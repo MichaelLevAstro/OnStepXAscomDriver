@@ -37,6 +37,9 @@ namespace ASCOM.OnStepX.Config
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
+        // Hit GitHub releases on every launch when enabled. Disabled = manual checks only via Advanced tab.
+        public static bool   CheckUpdatesOnStartup { get => GetBool("CheckUpdatesOnStartup", true); set => SetBool("CheckUpdatesOnStartup", value); }
+
         // Hub toast notifications (limit reached, etc).
         public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
 
