@@ -5,10 +5,9 @@ using ASCOM.OnStepX.Hardware.State;
 namespace ASCOM.OnStepX.ViewModels
 {
     // Drives the 3D mount visualizer. Reads from the existing 250 ms poll
-    // snapshot — never issues serial commands of its own. Prefers the raw
-    // mechanical axis angles from MountStateCache.Axis1Deg/Axis2Deg (from
-    // :GX42#/:GX43#) when available; falls back to LST−RA and Dec when the
-    // firmware doesn't expose those readouts.
+    // snapshot — never issues serial commands of its own. Maps HA, Dec, and
+    // pier-side to the visualizer's geometric rotation angles; see
+    // OnPollSnapshot for the geometry rationale.
     public sealed class VisualizerViewModel : ViewModelBase
     {
         private double _raAxisAngleDeg;
@@ -30,21 +29,36 @@ namespace ASCOM.OnStepX.ViewModels
 
         internal void OnPollSnapshot(MountStateCache st)
         {
-            // Prefer mechanical axis angles when the firmware provides them —
-            // they already encode pier-side and need no LST math.
-            if (!double.IsNaN(st.Axis1Deg))
+            // Feed raw mechanical axis angles (:GX42#/:GX43#) straight to the
+            // 3D model. OnStepX reports these continuously through park and
+            // pier-flip, so the visualizer rotates smoothly with the physical
+            // axes — no branching on pier-side, no snap on unpark.
+            //
+            // Constant 180° offset: OnStepX's instrument convention puts
+            // axis1=axis2=0 at the pier-E meridian-equator pose (OTA east of
+            // pier, tube south-up). The visualizer geometry's natural
+            // raAngle=decAngle=0 pose has the saddle on polar +X (world-west)
+            // with the tube along polar -Z. The two conventions differ by a
+            // 180° rotation on each axis; the subtraction absorbs that.
+            //
+            // Older firmware (no :GX42#/:GX43#) leaves Axis1Deg/Axis2Deg as
+            // NaN — fall back to mount→instrument transform from HA/Dec/pier.
+            if (!double.IsNaN(st.Axis1Deg) && !double.IsNaN(st.Axis2Deg))
             {
-                RaAxisAngleDeg = st.Axis1Deg;
+                RaAxisAngleDeg  = 180.0 - st.Axis1Deg;
+                DecAxisAngleDeg = 180.0 - st.Axis2Deg;
             }
             else
             {
                 double ha = st.SiderealTime - st.RightAscension;
                 while (ha >  12.0) ha -= 24.0;
                 while (ha < -12.0) ha += 24.0;
-                RaAxisAngleDeg = ha * 15.0;
+                bool pierW = string.Equals(st.SideOfPier, "W", StringComparison.OrdinalIgnoreCase);
+                double a1 = ha * 15.0 + (pierW ? 180.0 : 0.0);
+                double a2 = pierW ? (180.0 - st.Declination) : st.Declination;
+                RaAxisAngleDeg  = 180.0 - a1;
+                DecAxisAngleDeg = 180.0 - a2;
             }
-
-            DecAxisAngleDeg = !double.IsNaN(st.Axis2Deg) ? st.Axis2Deg : st.Declination;
 
             PierSide = st.SideOfPier;
             SiteLatitudeDeg = DriverSettings.SiteLatitude;

@@ -41,16 +41,6 @@
         </c:Section>
 
         <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="TrackingSlew">
-          <c:Section.HeaderRight>
-            <Grid>
-              <c:StatusBadge Status="{Binding Tracking.StateKind}"
-                             Pulsing="{Binding Tracking.StatePulse}"
-                             Text="{Binding Tracking.StateText}"
-                             Visibility="{Binding Tracking.IsSlewing, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}"/>
-              <c:SlewingBadge Coord="{Binding Tracking.SlewCoord}"
-                              Visibility="{Binding Tracking.IsSlewing, Converter={StaticResource BoolToVis}}"/>
-            </Grid>
-          </c:Section.HeaderRight>
           <c:Section.Body>
             <StackPanel>
               <CheckBox Content="Tracking enabled" IsChecked="{Binding Tracking.TrackingEnabled}"
