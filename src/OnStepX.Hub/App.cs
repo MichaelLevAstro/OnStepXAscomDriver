@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Windows;
 using ASCOM.OnStepX.Config;
 using ASCOM.OnStepX.Services;
@@ -13,6 +14,9 @@ namespace ASCOM.OnStepX
         public App()
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            // GitHub API (and most modern endpoints) refuse anything below TLS 1.2.
+            // net48's default ServicePointManager protocol is too narrow on some boxes.
+            try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
             LoadGlobalResources();
             ThemeService.Initialise(this);
         }

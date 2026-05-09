@@ -37,6 +37,9 @@ namespace ASCOM.OnStepX.Config
         public static bool   AutoConnect { get => GetBool("AutoConnect", true); set => SetBool("AutoConnect", value); }
         public static bool   AutoSyncTimeOnConnect { get => GetBool("AutoSyncTimeOnConnect", true); set => SetBool("AutoSyncTimeOnConnect", value); }
 
+        // Hit GitHub releases on every launch when enabled. Disabled = manual checks only via Advanced tab.
+        public static bool   CheckUpdatesOnStartup { get => GetBool("CheckUpdatesOnStartup", true); set => SetBool("CheckUpdatesOnStartup", value); }
+
         // Hub toast notifications (limit reached, etc).
         public static bool   NotificationsEnabled { get => GetBool("NotificationsEnabled", true); set => SetBool("NotificationsEnabled", value); }
 
@@ -79,6 +82,23 @@ namespace ASCOM.OnStepX.Config
         public static double RotatorLastAngleDeg { get => GetDouble("RotatorLastAngleDeg", double.NaN); set => SetDouble("RotatorLastAngleDeg", value); }
 
         public static string Theme { get => Get("Theme", "dark"); set => Set("Theme", value); }
+
+        // Saved Polar Alignment physical position. Captured at user request and
+        // re-played verbatim — the goal is to put the OTA back at the same
+        // mechanical orientation year-round so a polar reticle / drift target
+        // lines up the same way every time.
+        //
+        // Storage shape depends on mount mode at save time:
+        //   "EQ" → HA + Dec + pier (HA stays invariant for a static mount;
+        //          RA at slew time = current_LST - HA).
+        //   "AZ" → Alt + Az (already mount-frame in Alt-Az mode).
+        // Empty Mode means no position saved. Fields default to NaN.
+        public static string PaPositionMode { get => Get("PaPositionMode", ""); set => Set("PaPositionMode", value ?? ""); }
+        public static double PaPositionHa  { get => GetDouble("PaPositionHa",  double.NaN); set => SetDouble("PaPositionHa",  value); }
+        public static double PaPositionDec { get => GetDouble("PaPositionDec", double.NaN); set => SetDouble("PaPositionDec", value); }
+        public static double PaPositionAlt { get => GetDouble("PaPositionAlt", double.NaN); set => SetDouble("PaPositionAlt", value); }
+        public static double PaPositionAz  { get => GetDouble("PaPositionAz",  double.NaN); set => SetDouble("PaPositionAz",  value); }
+        public static string PaPositionPier { get => Get("PaPositionPier", ""); set => Set("PaPositionPier", value ?? ""); }
 
         // PA wedge: AXIS4 = Alt, AXIS5 = Az.
         public static bool   PolarAlignmentMode { get => GetBool("PolarAlignmentMode", false); set => SetBool("PolarAlignmentMode", value); }

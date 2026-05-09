@@ -34,6 +34,8 @@ namespace ASCOM.OnStepX.ViewModels
         public RotatorViewModel Rotator { get; }
         public PolarAlignmentViewModel PolarAlignment { get; }
         public PierMeridianViewModel PierMeridian { get; }
+        public MountSettingsViewModel MountSettings { get; }
+        public UpdateViewModel Update { get; }
 
         // Drives the third-column collapse when the firmware exposes neither
         // focuser nor rotator nor PA mode. MainWindow listens to PropertyChanged
@@ -103,6 +105,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Focuser.OnConnStateChanged();
                 Rotator.OnConnStateChanged();
                 PolarAlignment.OnConnStateChanged();
+                MountSettings.OnConnStateChanged();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -138,6 +141,8 @@ namespace ASCOM.OnStepX.ViewModels
             Rotator    = new RotatorViewModel(this);
             PolarAlignment = new PolarAlignmentViewModel(this);
             PierMeridian   = new PierMeridianViewModel(this);
+            MountSettings  = new MountSettingsViewModel(this);
+            Update         = new UpdateViewModel();
 
             // Re-emit Show3rdColumn + hint visibility whenever any child availability flips.
             Focuser.PropertyChanged += (s, e) =>
@@ -208,6 +213,11 @@ namespace ASCOM.OnStepX.ViewModels
             _pollTimer.Start();
 
             UpdateClientLabel();
+
+            if (DriverSettings.CheckUpdatesOnStartup)
+            {
+                try { Update.StartStartupCheck(); } catch { }
+            }
         }
 
         public void Detach()
@@ -256,6 +266,8 @@ namespace ASCOM.OnStepX.ViewModels
             catch (Exception ex) { TransportLogger.Note("Rotator OnConnected failed: " + ex.Message); }
             try { PolarAlignment.OnConnected(); }
             catch (Exception ex) { TransportLogger.Note("PolarAlignment OnConnected failed: " + ex.Message); }
+            try { MountSettings.OnConnected(); }
+            catch (Exception ex) { TransportLogger.Note("MountSettings OnConnected failed: " + ex.Message); }
         }
 
         public void SetState(ConnState s)

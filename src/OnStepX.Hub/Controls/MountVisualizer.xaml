@@ -13,18 +13,12 @@
                            ShowCoordinateSystem="False"
                            ShowFrameRate="False"
                            ShowViewCube="False"
-                           ZoomExtentsWhenLoaded="True"
+                           ZoomExtentsWhenLoaded="False"
                            IsHeadLightEnabled="False"
-                           CameraRotationMode="Trackball"
-                           RotateAroundMouseDownPoint="True"
+                           IsRotationEnabled="False"
+                           IsPanEnabled="False"
                            ZoomAroundMouseDownPoint="True"
                            Background="Transparent">
-      <helix:HelixViewport3D.RotateGesture>
-        <MouseGesture MouseAction="LeftClick"/>
-      </helix:HelixViewport3D.RotateGesture>
-      <helix:HelixViewport3D.PanGesture>
-        <MouseGesture MouseAction="RightClick"/>
-      </helix:HelixViewport3D.PanGesture>
       <helix:DefaultLights/>
     </helix:HelixViewport3D>
 

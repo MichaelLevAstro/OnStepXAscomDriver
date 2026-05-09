@@ -75,6 +75,33 @@
           </c:Section.Body>
         </c:Section>
 
+        <c:Section Title="MOUNT SETTINGS" IconGeometry="{StaticResource Geo.Telescope}" IsExpanded="False" PersistKey="MountSettings">
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Current mode" Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="1" Text="{Binding MountSettings.CurrentModeText}" Style="{StaticResource Text.Mono}"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Mount mode" Style="{StaticResource Text.Label}"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding MountSettings.Modes}"
+                          SelectedItem="{Binding MountSettings.SelectedMode}"
+                          IsEnabled="{Binding MountSettings.MountActionsEnabled}"/>
+              </Grid>
+              <TextBlock TextWrapping="Wrap" Style="{StaticResource Text.Hint}" Margin="0,0,0,8"
+                         Text="Switching the mount mode writes the new type to NV memory and reboots the mount. The hub will disconnect — wait ~10 s and reconnect."/>
+              <UniformGrid Columns="2" HorizontalAlignment="Stretch">
+                <Button Content="Refresh" Command="{Binding MountSettings.RefreshCommand}" Margin="0,0,3,0"/>
+                <Button Style="{StaticResource Btn.SmPrimary}" Content="Apply"
+                        Command="{Binding MountSettings.ApplyCommand}" Margin="3,0,0,0"/>
+              </UniformGrid>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
         <c:Section Title="SITE" IconGeometry="{StaticResource Geo.Site}" IsExpanded="False" PersistKey="Site">
           <c:Section.Body>
             <StackPanel>

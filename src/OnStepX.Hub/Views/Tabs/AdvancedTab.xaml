@@ -10,8 +10,27 @@
         <ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
 
-      <!-- LEFT col: Experimental + Diagnostics -->
+      <!-- LEFT col: Software Updates + Experimental + Diagnostics -->
       <StackPanel Grid.Column="0">
+        <c:Section Title="SOFTWARE UPDATES" IconGeometry="{StaticResource Geo.Advanced}" PersistKey="AdvancedSoftwareUpdates">
+          <c:Section.Body>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Text.Hint}" Margin="0,0,0,6">
+                <Run Text="Current version: "/>
+                <Run Text="{Binding Update.CurrentVersionText, Mode=OneWay}"/>
+              </TextBlock>
+              <CheckBox Content="Check for updates on startup"
+                        IsChecked="{Binding Update.CheckOnStartup}" Margin="0,0,0,8"/>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <Button Content="Check for Updates" Style="{StaticResource Btn.Primary}"
+                        Command="{Binding Update.CheckCommand}" MinWidth="160"/>
+              </StackPanel>
+              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                         Text="{Binding Update.StatusText}"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
         <c:Section Title="EXPERIMENTAL" IconGeometry="{StaticResource Geo.Advanced}" PersistKey="AdvancedExperimental">
           <c:Section.Body>
             <StackPanel>

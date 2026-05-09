@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Media3D;
@@ -51,8 +52,8 @@ namespace ASCOM.OnStepX.Controls
         // Reference mount height for zoom clamps — pier + half the RA shaft
         // covers everything that's normally on screen.
         private const double MountRefHeight  = PierHeight + RaShaftLength * 0.5;
-        private const double MaxCamDistance  = MountRefHeight * 6.0;
-        private const double MinCamDistance  = MountRefHeight * 1.5;
+        private const double MaxCamDistance  = MountRefHeight * 4.0;
+        private const double MinCamDistance  = MountRefHeight * 2.0;
 
         // --- Animation
         private static readonly Duration EaseDuration = new Duration(TimeSpan.FromMilliseconds(750));
@@ -74,6 +75,19 @@ namespace ASCOM.OnStepX.Controls
 
         // --- Zoom clamp re-entry guard.
         private bool _clampingCamera;
+
+        // --- Mouse-driven camera control. Left-drag orbits the camera around
+        //     the mount with the horizon locked; right-drag turns the camera
+        //     in place (FPS-style look). Both clamp pitch to keep horizon
+        //     sane and the camera above the floor.
+        private bool _orbiting;
+        private bool _looking;
+        private Point _lastMousePos;
+        private static readonly Point3D OrbitTarget = new Point3D(0, 0.8, 0);
+        private const double FloorY = 0.05;
+        private const double OrbitPitchLimitDeg = 85.0;
+        private const double LookPitchLimitDeg  = 85.0;
+        private const double MouseSensitivityDegPerPx = 0.4;
 
         // --- VM subscription
         private VisualizerViewModel _vm;
@@ -99,9 +113,12 @@ namespace ASCOM.OnStepX.Controls
             };
             Unloaded += (_, __) => DetachVm();
             Viewport.MouseDoubleClick += OnViewportDoubleClick;
+            Viewport.MouseDown        += OnViewportMouseDown;
+            Viewport.MouseMove        += OnViewportMouseMove;
+            Viewport.MouseUp          += OnViewportMouseUp;
         }
 
-        private void OnViewportDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void OnViewportDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (Viewport.Camera is PerspectiveCamera cam)
             {
@@ -110,8 +127,121 @@ namespace ASCOM.OnStepX.Controls
                 cam.UpDirection   = _initialCameraUp;
                 cam.FieldOfView   = _initialCameraFov;
             }
+            _orbiting = false;
+            _looking  = false;
+            if (Viewport.IsMouseCaptured) Viewport.ReleaseMouseCapture();
             e.Handled = true;
         }
+
+        private void OnViewportMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                _orbiting = true;
+                _lastMousePos = e.GetPosition(Viewport);
+                Viewport.CaptureMouse();
+                e.Handled = true;
+            }
+            else if (e.ChangedButton == MouseButton.Right)
+            {
+                _looking = true;
+                _lastMousePos = e.GetPosition(Viewport);
+                Viewport.CaptureMouse();
+                e.Handled = true;
+            }
+        }
+
+        private void OnViewportMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_orbiting && !_looking) return;
+            if (!(Viewport.Camera is PerspectiveCamera cam)) return;
+
+            var pos = e.GetPosition(Viewport);
+            double dx = pos.X - _lastMousePos.X;
+            double dy = pos.Y - _lastMousePos.Y;
+            _lastMousePos = pos;
+
+            // Drag pulls the scene with the cursor (camera moves opposite):
+            // drag right and the mount swings right under the cursor; drag
+            // down and the mount tips down under the cursor.
+            double yawDeltaDeg   = -dx * MouseSensitivityDegPerPx;
+            double pitchDeltaDeg = +dy * MouseSensitivityDegPerPx;
+
+            if (_orbiting) OrbitCamera(cam, yawDeltaDeg, pitchDeltaDeg);
+            else           LookCamera (cam, yawDeltaDeg, pitchDeltaDeg);
+        }
+
+        private void OnViewportMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            bool releasing = (e.ChangedButton == MouseButton.Left  && _orbiting) ||
+                             (e.ChangedButton == MouseButton.Right && _looking);
+            if (!releasing) return;
+            _orbiting = false;
+            _looking  = false;
+            if (Viewport.IsMouseCaptured) Viewport.ReleaseMouseCapture();
+            e.Handled = true;
+        }
+
+        // Orbit the camera around the mount on a sphere centered at OrbitTarget.
+        // Distance preserved; horizon stays world-Y; pitch clamped so the camera
+        // never dips below the floor and never flips over the top.
+        private void OrbitCamera(PerspectiveCamera cam, double yawDeg, double pitchDeg)
+        {
+            var offset = cam.Position - OrbitTarget;
+            double dist = offset.Length;
+            if (dist < 1e-6) return;
+
+            double yaw   = Math.Atan2(offset.X, offset.Z);
+            double pitch = Math.Asin(Clamp(offset.Y / dist, -1.0, 1.0));
+
+            yaw   += yawDeg   * Math.PI / 180.0;
+            pitch += pitchDeg * Math.PI / 180.0;
+
+            // Floor constraint: camera Y = OrbitTarget.Y + dist*sin(pitch) ≥ FloorY.
+            double minByFloor = Math.Asin(Clamp((FloorY - OrbitTarget.Y) / dist, -1.0, 1.0));
+            double minHard    = -OrbitPitchLimitDeg * Math.PI / 180.0;
+            double maxHard    =  OrbitPitchLimitDeg * Math.PI / 180.0;
+            pitch = Clamp(pitch, Math.Max(minHard, minByFloor), maxHard);
+
+            double cosP = Math.Cos(pitch);
+            var newPos = OrbitTarget + new Vector3D(
+                dist * cosP * Math.Sin(yaw),
+                dist * Math.Sin(pitch),
+                dist * cosP * Math.Cos(yaw));
+
+            cam.Position = newPos;
+            // Re-read in case the zoom clamp adjusted Position, so LookDirection
+            // still points at the orbit target.
+            cam.LookDirection = OrbitTarget - cam.Position;
+            cam.UpDirection   = new Vector3D(0, 1, 0);
+        }
+
+        // FPS-style look: rotate cam.LookDirection in place. Position unchanged.
+        private void LookCamera(PerspectiveCamera cam, double yawDeg, double pitchDeg)
+        {
+            var look = cam.LookDirection;
+            double L = look.Length;
+            if (L < 1e-6) return;
+
+            double yaw   = Math.Atan2(look.X, look.Z);
+            double pitch = Math.Asin(Clamp(look.Y / L, -1.0, 1.0));
+
+            yaw   += yawDeg   * Math.PI / 180.0;
+            pitch += pitchDeg * Math.PI / 180.0;
+
+            double lim = LookPitchLimitDeg * Math.PI / 180.0;
+            pitch = Clamp(pitch, -lim, lim);
+
+            double cosP = Math.Cos(pitch);
+            cam.LookDirection = new Vector3D(
+                L * cosP * Math.Sin(yaw),
+                L * Math.Sin(pitch),
+                L * cosP * Math.Cos(yaw));
+            cam.UpDirection = new Vector3D(0, 1, 0);
+        }
+
+        private static double Clamp(double v, double lo, double hi) =>
+            Math.Max(lo, Math.Min(hi, v));
 
         // ── Proxy DPs animated by DoubleAnimation; their callbacks
         //    rebuild the AxisAngleRotation3D since Rotation3D.Angle isn't
@@ -273,6 +403,22 @@ namespace ASCOM.OnStepX.Controls
                 Fill = new SolidColorBrush(Color.FromArgb(140, gridColor.R, gridColor.G, gridColor.B))
             });
 
+            // ── Compass: cardinal-direction labels on the ground disc.
+            // Camera default sits north-of-mount looking south, so from the
+            // viewer's perspective east is on the LEFT and west on the RIGHT.
+            // World axes: +Z = north, -Z = south, -X = east, +X = west.
+            // BillboardTextVisual3D keeps the labels readable from any camera
+            // angle.
+            var compassFg  = ResolveColor("Brush.Text",      Color.FromRgb(0xe6, 0xea, 0xf0));
+            var northColor = ResolveColor("Brush.Accent",    Color.FromRgb(0xe5, 0x48, 0x2d));
+            double compassR  = GroundRadius * 0.85;
+            double compassY  = 0.04;
+            double compassPx = 18.0;
+            AddCompassLabel("N", new Point3D(0,           compassY,  compassR), northColor, compassPx + 4);
+            AddCompassLabel("S", new Point3D(0,           compassY, -compassR), compassFg,  compassPx);
+            AddCompassLabel("E", new Point3D(-compassR,   compassY,  0),        compassFg,  compassPx);
+            AddCompassLabel("W", new Point3D( compassR,   compassY,  0),        compassFg,  compassPx);
+
             // ── Pier: base flange + cylindrical shaft + top flange.
             var pierMb = new MeshBuilder();
             pierMb.AddCylinder(new Point3D(0, 0,             0), new Point3D(0, PierBaseHeight,             0), PierBaseRadius, 36);
@@ -395,11 +541,24 @@ namespace ASCOM.OnStepX.Controls
             };
             decFrame.Children.Add(pointingLine);
 
-            // ── Camera — front-south, slightly elevated. Saved for double-click reset.
+            // ── Camera — start centered on the orbit target, then apply a
+            //    small yaw+pitch as if the user nudged the mount with the
+            //    mouse. Gives a 3/4 view that shows the pier, OTA, and
+            //    counterweight all at once. Saved for double-click reset.
+            const double startDist     = 5.5;
+            const double startYawDeg   = 25.0;
+            const double startPitchDeg = 20.0;
+            double yaw   = startYawDeg   * Math.PI / 180.0;
+            double pitch = startPitchDeg * Math.PI / 180.0;
+            double cosP  = Math.Cos(pitch);
+            var camPos = OrbitTarget + new Vector3D(
+                startDist * cosP * Math.Sin(yaw),
+                startDist * Math.Sin(pitch),
+                startDist * cosP * Math.Cos(yaw));
             var camera = new PerspectiveCamera
             {
-                Position      = new Point3D(2.6, 2.1, 3.8),
-                LookDirection = new Vector3D(-2.6, -1.2, -3.8),
+                Position      = camPos,
+                LookDirection = OrbitTarget - camPos,
                 UpDirection   = new Vector3D(0, 1, 0),
                 FieldOfView   = 45
             };
@@ -476,6 +635,19 @@ namespace ASCOM.OnStepX.Controls
             }
             catch { }
             return fallback;
+        }
+
+        private void AddCompassLabel(string text, Point3D position, Color color, double fontSize)
+        {
+            Viewport.Children.Add(new BillboardTextVisual3D
+            {
+                Text = text,
+                Position = position,
+                Foreground = new SolidColorBrush(color),
+                Background = Brushes.Transparent,
+                FontSize = fontSize,
+                FontWeight = FontWeights.Bold,
+            });
         }
     }
 }
