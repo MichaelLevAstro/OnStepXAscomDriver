@@ -1,0 +1,64 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.SkyModelTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid HorizontalAlignment="Center" MaxWidth="920">
+      <c:Section Title="SKY MODEL" IconGeometry="{StaticResource Geo.SkyModel}" PersistKey="SkyModel">
+        <c:Section.HeaderRight>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding SkyModel.PointCount}" Style="{StaticResource Text.Mono}"
+                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+            <TextBlock Text="pts" Style="{StaticResource Text.Label}"
+                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Button Style="{StaticResource Btn.Sm}" Content="Refresh"
+                    Command="{Binding SkyModel.RefreshCommand}"/>
+          </StackPanel>
+        </c:Section.HeaderRight>
+        <c:Section.Body>
+          <StackPanel>
+            <c:SkyDome SkyVM="{Binding SkyModel}" Width="460" Height="460" HorizontalAlignment="Center"/>
+
+            <TextBlock Text="{Binding SkyModel.SelectedInfoText}" Style="{StaticResource Text.Mono}"
+                       HorizontalAlignment="Center" Margin="0,8,0,8"/>
+
+            <!-- Point controls -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
+              <Button Style="{StaticResource Btn.Sm}" Content="Delete selected"
+                      Command="{Binding SkyModel.DeleteSelectedCommand}" Margin="0,0,8,0"/>
+              <Button Style="{StaticResource Btn.Sm}" Content="Clear all"
+                      Command="{Binding SkyModel.ClearAllCommand}"/>
+            </StackPanel>
+
+            <!-- Model-build helpers -->
+            <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+              <StackPanel>
+                <TextBlock Text="Build a model" Style="{StaticResource Text.Label}"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                  <TextBlock Text="Stars" Style="{StaticResource Text.Label}"
+                             VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <c:NumericBox Width="64" Min="1" Max="9" Step="1" DecimalPlaces="0"
+                                Value="{Binding SkyModel.BuildStarCount}" Margin="0,0,10,0"/>
+                  <Button Style="{StaticResource Btn.SmPrimary}" Content="Start"
+                          Command="{Binding SkyModel.StartBuildCommand}" Margin="0,0,8,0"/>
+                  <Button Style="{StaticResource Btn.Sm}" Content="Accept point"
+                          Command="{Binding SkyModel.AcceptPointCommand}" Margin="0,0,8,0"/>
+                  <Button Style="{StaticResource Btn.SmPrimary}" Content="Finish"
+                          Command="{Binding SkyModel.FinishBuildCommand}"/>
+                </StackPanel>
+                <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="640"
+                           Text="Home the mount, press Start, then run a NINA 'Solve &amp; Sync' grid (each sync adds a point) or centre a star and press Accept. Press Finish to save."/>
+              </StackPanel>
+            </Border>
+
+            <TextBlock Text="{Binding SkyModel.StatusText}" Style="{StaticResource Text.Hint}"
+                       TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
+                       MaxWidth="640" Margin="0,10,0,0"/>
+          </StackPanel>
+        </c:Section.Body>
+      </c:Section>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

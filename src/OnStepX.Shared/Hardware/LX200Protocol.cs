@@ -395,6 +395,79 @@ namespace ASCOM.OnStepX.Hardware
             return v;
         }
 
+        // ---------- Alignment / sky model ----------
+        // OnStepX pointing-model command set: src/telescope/mount/goto/Goto.command.cpp.
+        // The model stores up to ALIGN_MAX_NUM_STARS (<= 9) align stars, each holding
+        // the actual (true sky) and mount (measured) HA/Dec plus pier side; the firmware
+        // fits 12 geometric correction terms from these points.
+        //
+        // There is NO per-point delete command. Removing one star means: read every
+        // star, reset the upload buffer (:SX09,0#), re-upload the survivors, rebuild
+        // (:SX09,1#) and persist (:AW#).
+        //
+        // IMPORTANT: the read (:GX0x#) and write (:SX0x#) paths share a single static
+        // star index in firmware. :GX09# resets it; :GX0E#/:SX0E# advance it. A full
+        // read or full rewrite must be treated as one ATOMIC sequence — never interleave
+        // two of them. SkyModelViewModel serialises every sequence under its own lock.
+
+        // :A?# -> "mno": m = max stars, n = current star (0 when no align is in
+        // progress), o = last required star. Empty on firmware built without
+        // ALIGN_MAX_NUM_STARS > 1.
+        public AlignStatus GetAlignStatus() => AlignStatus.Parse(_transport.SendAndReceive(":A?#"));
+
+        // :GX09# -> star count in the active model, AND resets the firmware read index
+        // to the first star. Returns 0 when no model is built or the extended command
+        // set is absent. Always call immediately before a read loop.
+        public int GetModelStarCount() => ParseInt(_transport.SendAndReceive(":GX09#"));
+
+        // Per-star reads at the current firmware index. Call in this order and read the
+        // pier side LAST — :GX0E# advances the index to the next star.
+        public double GetModelActualHa()  => ParseHoursSafe(_transport.SendAndReceive(":GX0A#"));
+        public double GetModelActualDec() => ParseDegreesSafe(_transport.SendAndReceive(":GX0B#"));
+        public double GetModelMountHa()   => ParseHoursSafe(_transport.SendAndReceive(":GX0C#"));
+        public double GetModelMountDec()  => ParseDegreesSafe(_transport.SendAndReceive(":GX0D#"));
+        // :GX0E# -> pier side (1 = East, -1 = West) for the current star, then advances.
+        public int GetModelStarPierSideAdvance() => ParseInt(_transport.SendAndReceive(":GX0E#"));
+
+        // :SX09,0# clears the upload buffer + model and resets the star index to 0.
+        public bool ResetAlignUpload() => Bool(_transport.SendAndReceive(":SX09,0#"));
+
+        // Per-star upload at the current index. High-precision HMS/DMS so a
+        // read-modify-rewrite cycle doesn't quantise the stored coordinates (firmware
+        // parses these fields in PM_HIGH). Align HA is always 0..24h on the wire, so the
+        // wrapping FormatHoursHighPrec is correct here. Upload the pier side LAST;
+        // :SX0E# advances the index to the next star.
+        public bool UploadActualHa(double hours) => Bool(_transport.SendAndReceive(":SX0A," + CoordFormat.FormatHoursHighPrec(hours) + "#"));
+        public bool UploadActualDec(double deg)  => Bool(_transport.SendAndReceive(":SX0B," + CoordFormat.FormatDegreesHighPrec(deg) + "#"));
+        public bool UploadMountHa(double hours)  => Bool(_transport.SendAndReceive(":SX0C," + CoordFormat.FormatHoursHighPrec(hours) + "#"));
+        public bool UploadMountDec(double deg)   => Bool(_transport.SendAndReceive(":SX0D," + CoordFormat.FormatDegreesHighPrec(deg) + "#"));
+        public bool UploadStarPierSideAdvance(int side) =>
+            Bool(_transport.SendAndReceive(":SX0E," + side.ToString(CultureInfo.InvariantCulture) + "#"));
+
+        // :SX09,1# computes the model from the uploaded stars; :AW# persists it to NV.
+        public bool BuildModel()         => Bool(_transport.SendAndReceive(":SX09,1#"));
+        public bool WriteModelToEeprom() => Bool(_transport.SendAndReceive(":AW#"));
+
+        // Manual multi-star build helpers. :A[n]# starts an n-star align (firmware
+        // resets home and enables tracking, so the mount must be at home first);
+        // :A+# accepts the current centred position as the next star. With an align
+        // active, a plate-solve sync (:CM#/:CS#) is also rerouted by firmware to add a
+        // star — which is how a NINA "Solve & Sync" grid populates the model.
+        public bool StartAlign(int nStars)
+        {
+            if (nStars < 1) nStars = 1;
+            if (nStars > 9) nStars = 9;
+            return Bool(_transport.SendAndReceive(":A" + nStars.ToString(CultureInfo.InvariantCulture) + "#"));
+        }
+        public bool AcceptAlignStar() => Bool(_transport.SendAndReceive(":A+#"));
+
+        private static double ParseHoursSafe(string s)
+        {
+            try { return CoordFormat.ParseHours(s); } catch { return double.NaN; }
+        }
+        private static double ParseDegreesSafe(string s) =>
+            CoordFormat.TryParseDegrees(s, out var v) ? v : double.NaN;
+
         // ---------- Focuser ----------
         // OnStepX command set: src/telescope/focuser/local/Focuser.command.cpp
         // All ":F…#" commands address the firmware-active focuser. ":FA[n]#"
@@ -626,6 +699,32 @@ namespace ASCOM.OnStepX.Hardware
         AtHome          = 1 << 5,
         WaitingAtHome   = 1 << 6,
         PauseAtHome     = 1 << 7,
+    }
+
+    // Parsed view of the :A?# align-status reply "mno": max stars, current star
+    // (0 when no align in progress; ':' = 10), last required star. Active means a
+    // manual multi-star build is underway (current within 1..last); once the model
+    // is built the firmware sets current = last + 1, so Active goes false.
+    internal struct AlignStatus
+    {
+        public int MaxStars;
+        public int CurrentStar;
+        public int LastStar;
+        public bool Supported;
+        public bool Active => Supported && CurrentStar >= 1 && CurrentStar <= LastStar;
+
+        public static AlignStatus Parse(string raw)
+        {
+            var s = new AlignStatus();
+            if (string.IsNullOrEmpty(raw)) return s;
+            var t = raw.Trim().TrimEnd('#');
+            if (t.Length < 3) return s;
+            s.MaxStars = t[0] - '0';
+            s.CurrentStar = t[1] - '0';
+            s.LastStar = t[2] - '0';
+            s.Supported = s.MaxStars >= 1 && s.MaxStars <= 10;
+            return s;
+        }
     }
 
     // Parsed view of the :rT# rotator status reply. Wire format: a single

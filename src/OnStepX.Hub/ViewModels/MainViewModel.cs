@@ -35,6 +35,7 @@ namespace ASCOM.OnStepX.ViewModels
         public PolarAlignmentViewModel PolarAlignment { get; }
         public PierMeridianViewModel PierMeridian { get; }
         public MountSettingsViewModel MountSettings { get; }
+        public SkyModelViewModel SkyModel { get; }
         public UpdateViewModel Update { get; }
 
         // Drives the third-column collapse when the firmware exposes neither
@@ -106,6 +107,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Rotator.OnConnStateChanged();
                 PolarAlignment.OnConnStateChanged();
                 MountSettings.OnConnStateChanged();
+                SkyModel.OnConnStateChanged();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -142,6 +144,7 @@ namespace ASCOM.OnStepX.ViewModels
             PolarAlignment = new PolarAlignmentViewModel(this);
             PierMeridian   = new PierMeridianViewModel(this);
             MountSettings  = new MountSettingsViewModel(this);
+            SkyModel       = new SkyModelViewModel(this);
             Update         = new UpdateViewModel();
 
             // Re-emit Show3rdColumn + hint visibility whenever any child availability flips.
@@ -268,6 +271,8 @@ namespace ASCOM.OnStepX.ViewModels
             catch (Exception ex) { TransportLogger.Note("PolarAlignment OnConnected failed: " + ex.Message); }
             try { MountSettings.OnConnected(); }
             catch (Exception ex) { TransportLogger.Note("MountSettings OnConnected failed: " + ex.Message); }
+            try { SkyModel.OnConnected(); }
+            catch (Exception ex) { TransportLogger.Note("SkyModel OnConnected failed: " + ex.Message); }
         }
 
         public void SetState(ConnState s)
@@ -282,6 +287,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Focuser.OnDisconnected();
                 Rotator.OnDisconnected();
                 PolarAlignment.OnDisconnected();
+                SkyModel.OnDisconnected();
             }
         }
 

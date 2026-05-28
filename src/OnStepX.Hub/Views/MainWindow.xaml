@@ -58,6 +58,7 @@
         <t:MainTab     Visibility="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
         <t:ExtraTab    Visibility="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}"/>
         <t:PolarTab    Visibility="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}"/>
+        <t:SkyModelTab Visibility="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=skymodel}"/>
         <t:AdvancedTab Visibility="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}"/>
       </Grid>
     </DockPanel>

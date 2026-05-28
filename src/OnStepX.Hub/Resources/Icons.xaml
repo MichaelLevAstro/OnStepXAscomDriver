@@ -28,6 +28,9 @@
   <!-- Settings/cog glyph for the Advanced tab. Simple gear silhouette. -->
   <Geometry x:Key="Geo.Advanced">M12 15 A3 3 0 1 1 12 9 A3 3 0 1 1 12 15 Z M12 2 V5 M12 19 V22 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M2 12 H5 M19 12 H22 M4.9 19.1 L7 17 M17 7 L19.1 4.9</Geometry>
 
+  <!-- Sky Model: a horizon dome with scattered star points. -->
+  <Geometry x:Key="Geo.SkyModel">M3 18 A9 9 0 0 1 21 18 M3 18 H21 M8 13.5 L8.6 13.5 M12.7 10 L13.3 10 M16.4 13.8 L17 13.8</Geometry>
+
   <!-- Window chrome glyphs -->
   <Geometry x:Key="Geo.WinMin">M1 5 H9</Geometry>
   <Geometry x:Key="Geo.WinMax">M1.5 1.5 H8.5 V8.5 H1.5 Z</Geometry>

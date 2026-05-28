@@ -54,6 +54,7 @@ namespace ASCOM.OnStepX.Views
             _polarTab = new TabItemDef("polar", "Polar Alignment", (System.Windows.Media.Geometry)FindResource("Geo.Polar"))
             { IsVisible = VM.IsPolarTabVisible };
             _tabs.Add(_polarTab);
+            _tabs.Add(new TabItemDef("skymodel", "Sky Model", (System.Windows.Media.Geometry)FindResource("Geo.SkyModel")));
             _tabs.Add(new TabItemDef("adv", "Advanced", (System.Windows.Media.Geometry)FindResource("Geo.Advanced")));
 
             TabBarCtrl.ItemsSource = _tabs;
