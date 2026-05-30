@@ -53,10 +53,12 @@ namespace ASCOM.OnStepX.ViewModels
 
         public ICommand AutoDetectCommand { get; }
         public ICommand ConnectCommand { get; }
+        public ICommand CancelConnectCommand { get; }
         public ICommand DisconnectCommand { get; }
 
         // UI gating. Mirrors HubForm.ApplyConnState's per-state control enable/disable.
         public bool ConnectButtonEnabled    => _main.State == ConnState.Disconnected;
+        public bool CancelButtonEnabled     => _main.State == ConnState.Connecting;
         public bool DisconnectButtonEnabled => _main.State == ConnState.Connected;
         public bool TransportFieldsEnabled  => _main.State == ConnState.Disconnected;
         public bool AutoDetectEnabled       => _main.State == ConnState.Disconnected && !_isAutoDetecting;
@@ -83,6 +85,7 @@ namespace ASCOM.OnStepX.ViewModels
             _main = main;
             AutoDetectCommand = new RelayCommand(DoAutoDetect, () => AutoDetectEnabled);
             ConnectCommand    = new RelayCommand(DoConnect,    () => ConnectButtonEnabled);
+            CancelConnectCommand = new RelayCommand(DoCancelConnect, () => CancelButtonEnabled);
             DisconnectCommand = new RelayCommand(DoDisconnect, () => DisconnectButtonEnabled);
 
             RefreshSerialPorts();
@@ -93,6 +96,7 @@ namespace ASCOM.OnStepX.ViewModels
         internal void OnConnStateChanged()
         {
             OnPropertyChanged(nameof(ConnectButtonEnabled));
+            OnPropertyChanged(nameof(CancelButtonEnabled));
             OnPropertyChanged(nameof(DisconnectButtonEnabled));
             OnPropertyChanged(nameof(TransportFieldsEnabled));
             OnPropertyChanged(nameof(AutoDetectEnabled));
@@ -214,6 +218,7 @@ namespace ASCOM.OnStepX.ViewModels
                     if (err != null)
                     {
                         _main.SetState(ConnState.Disconnected);
+                        DebugLogger.LogError("CONNECT", "Connect failed: " + err.Message);
                         Views.CopyableMessage.Show("Connect failed", err.ToString());
                         return;
                     }
@@ -232,6 +237,15 @@ namespace ASCOM.OnStepX.ViewModels
                 }
                 catch { }
             });
+        }
+
+        // Cancels an in-flight connect attempt. The connect worker observes the
+        // token inside MountSession.Open, unwinds the half-open transport, and
+        // posts ConnState.Disconnected back on the UI thread.
+        public void DoCancelConnect()
+        {
+            DebugLogger.Log("CONNECT", "Connection attempt canceled by user");
+            try { _connectCts?.Cancel(); } catch { }
         }
 
         public void DoDisconnect()

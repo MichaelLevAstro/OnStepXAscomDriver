@@ -12,9 +12,10 @@ using Microsoft.Win32;
 namespace ASCOM.OnStepX.Diagnostics
 {
     // Single application logger. Driver and hub both call Init at startup; every
-    // log line goes through Log() and fans out to:
+    // log line goes through Log()/LogError() and fans out to:
     //   - LineEmitted event (hub UI subscribes to render the console)
-    //   - File under %APPDATA%\OnStepX\logs when VerboseFileLog setting is ON
+    //   - File under %APPDATA%\OnStepX\logs. Errors and exceptions are always
+    //     written; all other lines are written only when VerboseFileLog is ON.
     // Both processes share one session file so driver+hub timelines interleave
     // in chronological order. The session tag is registered in HKCU on first
     // Init() and reused by the second process.
@@ -92,6 +93,8 @@ namespace ASCOM.OnStepX.Diagnostics
             }
         }
 
+        // Verbose-gated. The hub console always shows the line; the file gets it
+        // only when VerboseFileLog is ON. Use for routine/informational logs.
         public static void Log(string category, string message)
         {
             if (!_initialized) return;
@@ -100,10 +103,20 @@ namespace ASCOM.OnStepX.Diagnostics
             if (VerboseFileLog) _queue.Enqueue(line);
         }
 
+        // Always written to file regardless of VerboseFileLog so a failure is
+        // captured on disk even when verbose logging is off.
+        public static void LogError(string category, string message)
+        {
+            if (!_initialized) return;
+            string line = Format(category, message ?? "");
+            try { LineEmitted?.Invoke(line); } catch { }
+            _queue.Enqueue(line);
+        }
+
         public static void LogException(string category, Exception ex)
         {
             if (ex == null) return;
-            Log(category, ex.GetType().Name + ": " + ex.Message);
+            LogError(category, ex.GetType().Name + ": " + ex.Message);
         }
 
         private static void OnTransportPair(string cmd, string reply, int elapsedMs)

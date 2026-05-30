@@ -66,6 +66,10 @@
                         Command="{Binding Connection.AutoDetectCommand}" Margin="0,0,6,0"/>
                 <Button Style="{StaticResource Btn.Sm}" Content="Connect"
                         Command="{Binding Connection.ConnectCommand}" Margin="0,0,6,0"/>
+                <Button Style="{StaticResource Btn.Sm}" Content="Cancel"
+                        Command="{Binding Connection.CancelConnectCommand}"
+                        Visibility="{Binding Connection.CancelButtonEnabled, Converter={StaticResource BoolToVis}}"
+                        Margin="0,0,6,0"/>
                 <Button Style="{StaticResource Btn.SmPrimary}" Content="Disconnect"
                         Command="{Binding Connection.DisconnectCommand}"/>
               </StackPanel>
