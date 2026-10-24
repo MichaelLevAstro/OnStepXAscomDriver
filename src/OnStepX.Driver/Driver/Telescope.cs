@@ -583,7 +583,34 @@ namespace ASCOM.OnStepX.Driver
         public void Park()      { RequireConnected(); _protocol.Park(); }
         public void Unpark()    { RequireConnected(); _protocol.Unpark(); }
         public void SetPark()   { RequireConnected(); _protocol.SetParkHere(); }
-        public void FindHome()  { RequireConnected(); _protocol.FindHome(); }
+        // ASCOM FindHome MOVES the mount to its home position and is specified
+        // synchronous. That is :hC#. It is NOT :hF#, which only tells the
+        // firmware the axes are already home without moving them — wired here
+        // that would reset the mount's position on every client that offers a
+        // "Find Home" button.
+        public void FindHome()
+        {
+            RequireConnected();
+            DebugLogger.Log("HOME", "FindHome :hC# requested");
+            _protocol.GoHome();
+
+            // Without home switches :hC# runs as a goto ('N' clears); with
+            // them it runs as a guide move ('h' is set). Wait on both. A short
+            // lead-in lets the firmware raise its flags before the first read,
+            // and the deadline keeps a mount that never arrives — or one that
+            // rejected the command outright, which is blind and silent — from
+            // wedging the client thread.
+            var deadline = DateTime.UtcNow.AddMinutes(5);
+            System.Threading.Thread.Sleep(500);
+            while (DateTime.UtcNow < deadline)
+            {
+                var raw = (TryGet(() => _protocol.GetStatus()) ?? "").TrimEnd('#');
+                bool moving = raw.IndexOf('N') < 0 || raw.IndexOf('h') >= 0;
+                if (!moving) break;
+                System.Threading.Thread.Sleep(200);
+            }
+            DebugLogger.Log("HOME", "FindHome finished; atHome=" + AtHome);
+        }
 
         // ---------- Helpers ----------
         private void RequireConnected()

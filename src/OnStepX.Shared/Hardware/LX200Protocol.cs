@@ -187,7 +187,12 @@ namespace ASCOM.OnStepX.Hardware
         public bool Park()         => Bool(_transport.SendAndReceive(":hP#"));
         public bool Unpark()       => Bool(_transport.SendAndReceive(":hR#"));
         public bool SetParkHere()  => Bool(_transport.SendAndReceive(":hQ#"));
-        public void FindHome()     => _transport.SendBlind(":hF#");
+        // :hF# does NOT move anything — it rewrites the firmware's coordinate
+        // basis to "the axes are at home" wherever they physically are. Only
+        // :hC# slews. The names are kept apart on purpose: wiring an ASCOM
+        // FindHome() to :hF# silently destroys the mount's position, and every
+        // goto afterwards is offset by however far it really was from home.
+        public void SetHomeHere()  => _transport.SendBlind(":hF#");
         public void GoHome()       => _transport.SendBlind(":hC#");
 
         // ---------- Limits ----------

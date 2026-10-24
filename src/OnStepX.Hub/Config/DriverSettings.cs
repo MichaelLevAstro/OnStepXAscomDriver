@@ -107,6 +107,13 @@ namespace ASCOM.OnStepX.Config
         public static double PaPositionAz  { get => GetDouble("PaPositionAz",  double.NaN); set => SetDouble("PaPositionAz",  value); }
         public static string PaPositionPier { get => Get("PaPositionPier", ""); set => Set("PaPositionPier", value ?? ""); }
 
+        // Last mechanical axis angles (:GX42#/:GX43#) seen while connected.
+        // Persisted so a reconnect can tell a mount that is genuinely at home
+        // from a controller that cold-booted elsewhere and defaulted its
+        // coordinates to home. NaN until the first poll has run.
+        public static double LastAxis1Deg { get => GetDouble("LastAxis1Deg", double.NaN); set => SetDouble("LastAxis1Deg", value); }
+        public static double LastAxis2Deg { get => GetDouble("LastAxis2Deg", double.NaN); set => SetDouble("LastAxis2Deg", value); }
+
         // PA wedge: AXIS4 = Alt, AXIS5 = Az.
         public static bool   PolarAlignmentMode { get => GetBool("PolarAlignmentMode", false); set => SetBool("PolarAlignmentMode", value); }
         public static int    PolarAlignAltStepSize { get => GetInt("PolarAlignAltStepSize", 100); set => SetInt("PolarAlignAltStepSize", value); }

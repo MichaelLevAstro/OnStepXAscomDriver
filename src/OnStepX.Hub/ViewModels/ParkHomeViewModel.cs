@@ -49,7 +49,7 @@ namespace ASCOM.OnStepX.ViewModels
 
         public ICommand ParkCommand { get; }
         public ICommand UnparkCommand { get; }
-        public ICommand SetHomeCommand { get; }     // :hF# — set home reference to current axes
+        public ICommand SetHomeCommand { get; }     // :hF# — set home reference to current axes (confirms first)
         public ICommand SearchHomeCommand { get; }  // :hC# — go to home position
         public ICommand SetParkHereCommand { get; }
         public ICommand SlewToTargetCommand { get; }
@@ -64,7 +64,7 @@ namespace ASCOM.OnStepX.ViewModels
             _main = main;
             ParkCommand        = new RelayCommand(() => Guard(() => ReportIfRejected("Park",   _mount.Protocol.Park()))  , () => MountActionsEnabled);
             UnparkCommand      = new RelayCommand(() => Guard(() => ReportIfRejected("Unpark", _mount.Protocol.Unpark())), () => MountActionsEnabled);
-            SetHomeCommand     = new RelayCommand(() => Guard(() => _mount.Protocol.FindHome()),                          () => MountActionsEnabled);
+            SetHomeCommand     = new RelayCommand(DoSetHomeHere,                                                          () => MountActionsEnabled);
             SearchHomeCommand  = new RelayCommand(() => Guard(() => _mount.Protocol.GoHome()),                            () => MountActionsEnabled);
             SetParkHereCommand = new RelayCommand(() => Guard(() => _mount.Protocol.SetParkHere()),                       () => MountActionsEnabled);
             SlewToTargetCommand= new RelayCommand(OpenSlewTarget,                                                          () => MountActionsEnabled);
@@ -460,6 +460,31 @@ namespace ASCOM.OnStepX.ViewModels
                 Owner = Application.Current?.MainWindow
             };
             dlg.ShowDialog();
+        }
+
+        // :hF# moves nothing. It redefines the firmware's coordinate basis so
+        // the current axis angles read as the home position. Correct at
+        // counterweights-down pointing at the pole; anywhere else it writes a
+        // lie the mount will act on, and the next goto drives the OTA off by
+        // however far it actually was from home. The button sits beside
+        // "Go Home" in the same grid, so it asks before firing.
+        private void DoSetHomeHere()
+        {
+            if (_main.State != ConnState.Connected) return;
+            var r = MessageBox.Show(
+                "This does NOT move the mount.\r\n\r\n" +
+                "It tells the firmware that the axes are at the home position right now. " +
+                "Only use it when the mount is physically at home: counterweights down, " +
+                "OTA pointing at the celestial pole.\r\n\r\n" +
+                "If the mount is anywhere else, every goto from here on is wrong by that " +
+                "amount and can drive the OTA into the pier or the tripod legs.\r\n\r\n" +
+                "To slew the mount to home instead, cancel and use \"Go Home\".\r\n\r\n" +
+                "Is the mount physically at the home position?",
+                "Set Home — Rewrites Mount Position",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (r != MessageBoxResult.Yes) return;
+            Guard(() => _mount.Protocol.SetHomeHere());
         }
 
         private void DoNvReset()

@@ -191,6 +191,7 @@ namespace ASCOM.OnStepX.ViewModels
 
             _mount.ConnectionChanged += OnMountConnectionChanged;
             _mount.LimitWarning += OnMountLimitWarning;
+            _mount.PositionAuthorityWarning += OnPositionAuthorityWarning;
             ClientRegistry.Changed += OnClientRegistryChanged;
 
             _tppaBridge = new TppaSerialBridge(_mount);
@@ -225,6 +226,7 @@ namespace ASCOM.OnStepX.ViewModels
             try { _pollTimer?.Stop(); } catch { }
             _mount.ConnectionChanged -= OnMountConnectionChanged;
             _mount.LimitWarning -= OnMountLimitWarning;
+            _mount.PositionAuthorityWarning -= OnPositionAuthorityWarning;
             ClientRegistry.Changed -= OnClientRegistryChanged;
             try { _tppaBridge?.Dispose(); } catch { }
             Console.Detach();
@@ -318,6 +320,21 @@ namespace ASCOM.OnStepX.ViewModels
             {
                 Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
                     Limits.OnMountLimitWarning(reason)));
+            }
+            catch { }
+        }
+
+        // Modal on purpose. The user is about to issue a goto against a
+        // coordinate basis the mount invented at boot, and a sticky LED in the
+        // Limits panel is not loud enough for something that ends with the OTA
+        // against the tripod. Advisory — nothing is blocked either way.
+        private void OnPositionAuthorityWarning(string message)
+        {
+            try
+            {
+                Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    MessageBox.Show(message, "Mount position may be wrong",
+                                    MessageBoxButton.OK, MessageBoxImage.Warning)));
             }
             catch { }
         }

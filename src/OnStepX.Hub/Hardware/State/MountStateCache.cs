@@ -93,6 +93,7 @@ namespace ASCOM.OnStepX.Hardware.State
         private int _pollMs;
         private const int PaFastPollMs = 200;  // 200ms PA-mode cadence — keeps NINA TPPA's 300ms `?` polls always seeing fresh position
         private int _focuserPollTick; // counter for slow-cadence focuser ride-along
+        private int _positionSaveTick; // counter for persisting the last mechanical position
 
         // Lazy re-probe budget. On a cold mount boot the focuser axis often
         // isn't ready when MountSession declares the mount responsive (:GVP#
@@ -136,6 +137,91 @@ namespace ASCOM.OnStepX.Hardware.State
             // here guarantees fresh values without compounding lock time.
             if (PolarAlignmentMode)
                 _paFastPollTask = Task.Run(() => PaFastPollLoop(_cts.Token));
+        }
+
+        // Cold-boot position check, run once per connect.
+        //
+        // OnStepX built with MOUNT_COORDS_MEMORY OFF comes up believing the
+        // axes are at the home position regardless of where they physically
+        // are, and under MOUNT_STARTUP_MODE SA_AUTO it trusts that basis
+        // enough to accept gotos against it. Power the controller off while
+        // tracking — no park — and the next goto is offset by the whole
+        // distance from home, which is how an OTA ends up in the tripod legs.
+        //
+        // The firmware cannot tell; it has nothing to compare against. The hub
+        // can, because it persisted the last axis angles it saw. Parked mounts
+        // are exempt: unpark restores an authoritative position from NV.
+        //
+        // Returns a message to show the user, or null when there is nothing to
+        // say. Never blocks or rejects anything — the mount stays under the
+        // user's control either way.
+        public string CheckStartupPositionAuthority()
+        {
+            double lastA1, lastA2;
+            try
+            {
+                lastA1 = DriverSettings.LastAxis1Deg;
+                lastA2 = DriverSettings.LastAxis2Deg;
+            }
+            catch { return null; }
+            if (double.IsNaN(lastA1) || double.IsNaN(lastA2)) return null;
+
+            string raw;
+            double a1, a2;
+            try
+            {
+                raw = (_p.GetStatus() ?? "").TrimEnd('#');
+                a1 = _p.GetAxis1Degrees();
+                a2 = _p.GetAxis2Degrees();
+            }
+            catch { return null; }
+            if (double.IsNaN(a1) || double.IsNaN(a2)) return null;
+
+            // 'H' at home, 'P' parked, 'I' parking. Only at-home-and-unparked
+            // is suspicious; a parked mount restored its basis on unpark.
+            if (raw.IndexOf('H') < 0) return null;
+            if (raw.IndexOf('P') >= 0 || raw.IndexOf('I') >= 0) return null;
+
+            double d1 = Math.Abs(WrapDeg(lastA1 - a1));
+            double d2 = Math.Abs(WrapDeg(lastA2 - a2));
+            const double toleranceDeg = 5.0;
+            if (d1 <= toleranceDeg && d2 <= toleranceDeg) return null;
+
+            string msg =
+                "The mount reports it is at the HOME position, but the last position this " +
+                "hub saw was axis 1 = " + lastA1.ToString("F1", CultureInfo.InvariantCulture) +
+                "°, axis 2 = " + lastA2.ToString("F1", CultureInfo.InvariantCulture) + "°.\r\n\r\n" +
+                "That is " + d1.ToString("F1", CultureInfo.InvariantCulture) + "° and " +
+                d2.ToString("F1", CultureInfo.InvariantCulture) + "° away from where it now " +
+                "claims to be.\r\n\r\n" +
+                "This is what a controller looks like after it lost power without being " +
+                "parked: it assumes the axes are at home wherever they actually are, and it " +
+                "will accept gotos against that wrong basis. A goto from here can drive the " +
+                "OTA into the pier or the tripod legs.\r\n\r\n" +
+                "Before slewing, either:\r\n" +
+                "  • physically move the mount to home (counterweights down, pointing at the " +
+                "celestial pole) and press \"Set Home\", or\r\n" +
+                "  • park the mount before the next power-off so its position survives.\r\n\r\n" +
+                "If you already moved the mount to home by hand, this is expected — carry on.";
+
+            DebugLogger.Log("POSITION",
+                "startup authority suspect: firmware says home (a1=" +
+                a1.ToString("F3", CultureInfo.InvariantCulture) + "° a2=" +
+                a2.ToString("F3", CultureInfo.InvariantCulture) + "°) but last seen a1=" +
+                lastA1.ToString("F3", CultureInfo.InvariantCulture) + "° a2=" +
+                lastA2.ToString("F3", CultureInfo.InvariantCulture) + "° (delta " +
+                d1.ToString("F1", CultureInfo.InvariantCulture) + "°/" +
+                d2.ToString("F1", CultureInfo.InvariantCulture) + "°) gu='" + raw + "'");
+            return msg;
+        }
+
+        // Axis angles run past ±180°, so compare on the shortest arc.
+        private static double WrapDeg(double d)
+        {
+            d %= 360.0;
+            if (d > 180.0) d -= 360.0;
+            if (d < -180.0) d += 360.0;
+            return d;
         }
 
         // PA mode requires user toggle + firmware exposing ≥2 focuser axes.
@@ -343,6 +429,24 @@ namespace ASCOM.OnStepX.Hardware.State
                     LastStatusString = gus ?? "";
                     Axis1Deg = a1;
                     Axis2Deg = a2;
+
+                    // Persist the mechanical position every 8th cycle (~6 s).
+                    // CheckStartupPositionAuthority compares the next connect
+                    // against this, which is the only way to notice that a
+                    // controller rebooted somewhere other than where it claims.
+                    if (!double.IsNaN(a1) && !double.IsNaN(a2))
+                    {
+                        _positionSaveTick = (_positionSaveTick + 1) & 0x07;
+                        if (_positionSaveTick == 0)
+                        {
+                            try
+                            {
+                                DriverSettings.LastAxis1Deg = a1;
+                                DriverSettings.LastAxis2Deg = a2;
+                            }
+                            catch { }
+                        }
+                    }
 
                     // :GU# bytes: 'n'=not tracking, 'N'=not slewing, 'P'=parked,
                     // 'p'=not parked, 'I'=park in progress, 'F'=park failed,

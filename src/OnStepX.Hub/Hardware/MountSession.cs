@@ -29,6 +29,11 @@ namespace ASCOM.OnStepX.Hardware
         public event Action<string> LimitWarning;
         public void RaiseLimitWarning(string reason) => LimitWarning?.Invoke(reason);
 
+        // Raised once per connect when the firmware claims to be at home but
+        // the last position this hub saw was somewhere else — the signature of
+        // a controller that lost power without being parked. Advisory only.
+        public event Action<string> PositionAuthorityWarning;
+
         // Two-stage connection:
         //   Stage 1 (transport up): USB/TCP handle is open. Useful for UI to show
         //     "Connecting..." with the wire held, but commands to the mount will race
@@ -99,6 +104,16 @@ namespace ASCOM.OnStepX.Hardware
                     State?.Start();
                 }
                 ConnectionChanged?.Invoke(this, EventArgs.Empty);
+
+                // Outside the lock: this costs a few round-trips and only
+                // advises, so it must not hold up anyone reading connection
+                // state. A failure here is never allowed to fail the connect.
+                try
+                {
+                    var warning = State?.CheckStartupPositionAuthority();
+                    if (!string.IsNullOrEmpty(warning)) PositionAuthorityWarning?.Invoke(warning);
+                }
+                catch { }
             }
             catch
             {
