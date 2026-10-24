@@ -29,6 +29,7 @@ namespace ASCOM.OnStepX.ViewModels
         public ParkHomeViewModel ParkHome { get; }
         public ConsoleViewModel Console { get; }
         public AdvancedDiagnosticsViewModel Advanced { get; }
+        public HomeSwitchesViewModel HomeSwitches { get; }
         public VisualizerViewModel Visualizer { get; }
         public FocuserViewModel Focuser { get; }
         public RotatorViewModel Rotator { get; }
@@ -106,6 +107,7 @@ namespace ASCOM.OnStepX.ViewModels
                 Rotator.OnConnStateChanged();
                 PolarAlignment.OnConnStateChanged();
                 MountSettings.OnConnStateChanged();
+                HomeSwitches.OnConnStateChanged();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -136,6 +138,7 @@ namespace ASCOM.OnStepX.ViewModels
             ParkHome   = new ParkHomeViewModel(this);
             Console    = new ConsoleViewModel(this);
             Advanced   = new AdvancedDiagnosticsViewModel();
+            HomeSwitches = new HomeSwitchesViewModel(this);
             Visualizer = new VisualizerViewModel();
             Focuser    = new FocuserViewModel(this);
             Rotator    = new RotatorViewModel(this);
@@ -224,6 +227,7 @@ namespace ASCOM.OnStepX.ViewModels
         public void Detach()
         {
             try { _pollTimer?.Stop(); } catch { }
+            try { HomeSwitches.Detach(); } catch { }
             _mount.ConnectionChanged -= OnMountConnectionChanged;
             _mount.LimitWarning -= OnMountLimitWarning;
             _mount.PositionAuthorityWarning -= OnPositionAuthorityWarning;

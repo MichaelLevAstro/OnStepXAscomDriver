@@ -195,6 +195,11 @@ namespace ASCOM.OnStepX.Hardware
         public void SetHomeHere()  => _transport.SendBlind(":hF#");
         public void GoHome()       => _transport.SendBlind(":hC#");
 
+        // :hS# — live home-switch state, "s1,t1,r1,s2,t2,r2". Not in stock
+        // OnStepX: it comes from the home-sense diagnostics firmware patch.
+        // Stock firmware answers with its unknown-command reply instead.
+        public string GetHomeSenseRaw() => _transport.SendAndReceive(":hS#");
+
         // ---------- Limits ----------
         public int GetHorizonLimit()
         {

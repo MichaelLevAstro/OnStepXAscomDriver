@@ -59,6 +59,98 @@
             </StackPanel>
           </c:Section.Body>
         </c:Section>
+
+        <c:Section Title="HOME SWITCHES" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False" PersistKey="AdvancedHomeSwitches">
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Monitor home switches (4× per second)"
+                        IsChecked="{Binding HomeSwitches.IsMonitoring}"
+                        IsEnabled="{Binding HomeSwitches.MountActionsEnabled}" Margin="0,0,0,6"/>
+              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="{Binding HomeSwitches.StatusText}"/>
+
+              <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="96"/><ColumnDefinition Width="72"/><ColumnDefinition Width="52"/>
+                  <ColumnDefinition Width="60"/><ColumnDefinition Width="68"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Axis"    Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="1" Text="Switch"  Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="2" Text="Pin"     Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="3" Text="Trigger" Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="4" Text="Sense"   Style="{StaticResource Text.Label}"/>
+                <TextBlock Grid.Column="5" Text="Angle"   Style="{StaticResource Text.Label}"/>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding HomeSwitches.Axes}" Margin="0,0,0,8">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid Margin="0,2">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96"/><ColumnDefinition Width="72"/><ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="60"/><ColumnDefinition Width="68"/><ColumnDefinition Width="*"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Text="{Binding Name}" Style="{StaticResource Text.Body}"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Ellipse Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center">
+                          <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                              <Setter Property="Fill" Value="{DynamicResource Brush.Border}"/>
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding StateKey}" Value="On">
+                                  <Setter Property="Fill" Value="{DynamicResource Brush.Ok}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding StateKey}" Value="Off">
+                                  <Setter Property="Fill" Value="{DynamicResource Brush.TextFaint}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding StateKey}" Value="None">
+                                  <Setter Property="Fill" Value="{DynamicResource Brush.Warn}"/>
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock Text="{Binding StateText}" Style="{StaticResource Text.Mono}" VerticalAlignment="Center"/>
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding PinText}"     Style="{StaticResource Text.Mono}"/>
+                      <TextBlock Grid.Column="3" Text="{Binding TriggerText}" Style="{StaticResource Text.Mono}"/>
+                      <TextBlock Grid.Column="4" Text="{Binding ReverseText}" Style="{StaticResource Text.Mono}"/>
+                      <TextBlock Grid.Column="5" Text="{Binding AngleText}"   Style="{StaticResource Text.Mono}"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Transitions (newest first)" Style="{StaticResource Text.Label}" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="Clear" Style="{StaticResource Btn.Sm}"
+                        Command="{Binding HomeSwitches.ClearCommand}"/>
+              </Grid>
+              <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" Margin="0,0,0,8">
+                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                  <ItemsControl ItemsSource="{Binding HomeSwitches.Transitions}" Margin="6,4">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Style="{StaticResource Text.Mono}" TextWrapping="Wrap">
+                          <Run Text="{Binding Time, Mode=OneWay}"/>
+                          <Run Text="  "/>
+                          <Run Text="{Binding Axis, Mode=OneWay}"/>
+                          <Run Text="  "/>
+                          <Run Text="{Binding Change, Mode=OneWay}"/>
+                          <Run Text="  "/>
+                          <Run Text="{Binding Where, Mode=OneWay}"/>
+                        </TextBlock>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Border>
+
+              <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap"
+                         Text="Jog one axis slowly with the slew pad across where home should be (counterweights down, pointing at the pole). The firmware expects each switch to read ON on the clockwise side of home (axis 1 seen from the front, axis 2 from above) and OFF on the other. A switch that never changes is dead or unwired; one that reads the wrong way round needs its HIGH/LOW trigger flipped. Needs the patched firmware with :hS#."/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
       </StackPanel>
 
       <!-- RIGHT col: Pier / Meridian + Danger Zone -->
