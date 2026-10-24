@@ -69,6 +69,56 @@
               <TextBlock Style="{StaticResource Text.Hint}" TextWrapping="Wrap" Margin="0,0,0,8"
                          Text="{Binding HomeSwitches.StatusText}"/>
 
+              <Grid Margin="0,0,0,8">
+                <Grid.Resources>
+                  <Style x:Key="BootLed" TargetType="Ellipse">
+                    <Setter Property="Width" Value="10"/>
+                    <Setter Property="Height" Value="10"/>
+                    <Setter Property="Margin" Value="0,0,6,0"/>
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                    <Setter Property="Fill" Value="{DynamicResource Brush.Border}"/>
+                  </Style>
+                </Grid.Resources>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="168"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="Switch expander (I2C)" Style="{StaticResource Text.Label}"/>
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                  <Ellipse>
+                    <Ellipse.Style>
+                      <Style TargetType="Ellipse" BasedOn="{StaticResource BootLed}">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HomeSwitches.ExpanderKey}" Value="Ok">
+                            <Setter Property="Fill" Value="{DynamicResource Brush.Ok}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding HomeSwitches.ExpanderKey}" Value="Fail">
+                            <Setter Property="Fill" Value="{DynamicResource Brush.Danger}"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Ellipse.Style>
+                  </Ellipse>
+                  <TextBlock Text="{Binding HomeSwitches.ExpanderText}" Style="{StaticResource Text.Mono}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Row="1" Text="Position memory (FRAM)" Style="{StaticResource Text.Label}"/>
+                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                  <Ellipse>
+                    <Ellipse.Style>
+                      <Style TargetType="Ellipse" BasedOn="{StaticResource BootLed}">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HomeSwitches.NvKey}" Value="Ok">
+                            <Setter Property="Fill" Value="{DynamicResource Brush.Ok}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding HomeSwitches.NvKey}" Value="Fail">
+                            <Setter Property="Fill" Value="{DynamicResource Brush.Danger}"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Ellipse.Style>
+                  </Ellipse>
+                  <TextBlock Text="{Binding HomeSwitches.NvText}" Style="{StaticResource Text.Mono}" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Grid>
+
               <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="96"/><ColumnDefinition Width="72"/><ColumnDefinition Width="52"/>

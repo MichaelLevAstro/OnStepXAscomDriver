@@ -54,6 +54,18 @@ namespace ASCOM.OnStepX.ViewModels
         private string _statusText = "Not monitoring.";
         public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
 
+        // What the controller found on its I2C bus at boot. "Ok" / "Fail" /
+        // "Unknown" drive the LED colour in XAML.
+        private string _expanderKey = "Unknown";
+        public string ExpanderKey { get => _expanderKey; private set => Set(ref _expanderKey, value); }
+        private string _expanderText = "—";
+        public string ExpanderText { get => _expanderText; private set => Set(ref _expanderText, value); }
+
+        private string _nvKey = "Unknown";
+        public string NvKey { get => _nvKey; private set => Set(ref _nvKey, value); }
+        private string _nvText = "—";
+        public string NvText { get => _nvText; private set => Set(ref _nvText, value); }
+
         public ICommand ClearCommand { get; }
 
         public HomeSwitchesViewModel(MainViewModel main)
@@ -76,6 +88,8 @@ namespace ASCOM.OnStepX.ViewModels
             var cts = new CancellationTokenSource();
             _cts = cts;
             foreach (var a in Axes) a.Reset();
+            ExpanderKey = NvKey = "Unknown";
+            ExpanderText = NvText = "—";
             StatusText = "Monitoring…";
             DebugLogger.Log("HOMESENSE", "monitor started");
             Task.Run(() => PollLoop(cts.Token));
@@ -141,13 +155,28 @@ namespace ASCOM.OnStepX.ViewModels
                         prevAngle[i] = angle[i];
                     }
 
-                    string status = r.Trigger[0] == -1 && r.Trigger[1] == -1
-                        ? "This firmware has no home switches configured (AXIS1/AXIS2_SENSE_HOME OFF), " +
-                          "so \"Go Home\" runs as a plain goto and never reads a switch."
-                        : "Monitoring. Jog an axis slowly across home and watch for transitions.";
+                    string status;
+                    if (r.GpioMissing)
+                        // The expander driver answers every read with 0 when the
+                        // chip didn't respond at boot, so a LOW-triggered switch
+                        // reads ON for good and homing drives one way until it
+                        // times out.
+                        status = "The I/O expander that carries the home switches was NOT found when the " +
+                                 "controller booted. Every switch read returns LOW, so the switches can't " +
+                                 "change and Go Home drives one way until it times out. Check the expander's " +
+                                 "I2C wiring and power, then power-cycle the controller.";
+                    else if (r.Trigger[0] == -1 && r.Trigger[1] == -1)
+                        status = "This firmware has no home switches configured (AXIS1/AXIS2_SENSE_HOME OFF), " +
+                                 "so \"Go Home\" runs as a plain goto and never reads a switch.";
+                    else
+                        status = "Monitoring. Jog an axis slowly across home and watch for transitions.";
 
                     Ui(() =>
                     {
+                        ExpanderKey  = r.GpioMissing ? "Fail" : "Ok";
+                        ExpanderText = r.GpioMissing ? "NOT FOUND at boot" : "found at boot";
+                        NvKey        = r.NvError ? "Fail" : "Ok";
+                        NvText       = r.NvError ? "unusable at boot" : "OK at boot";
                         for (int i = 0; i < 2; i++) Axes[i].Update(r.State[i], r.Trigger[i], r.Reverse[i], angle[i]);
                         foreach (var c in changes) Transitions.Insert(0, c);
                         while (Transitions.Count > MaxTransitions) Transitions.RemoveAt(Transitions.Count - 1);
@@ -165,21 +194,26 @@ namespace ASCOM.OnStepX.ViewModels
         }
     }
 
-    // One :hS# reply. Per axis: state -1 no switch / 0 off / 1 on (as homing
-    // sees it, after trigger and reverse), the configured trigger (HIGH 1,
-    // LOW 0, OFF -1, otherwise an analog threshold), and whether the sense
-    // direction is effectively reversed.
+    // One :hS# reply, "s1,t1,r1,s2,t2,r2,g,n". Per axis: state -1 no switch /
+    // 0 off / 1 on (as homing sees it, after trigger and reverse), the
+    // configured trigger (HIGH 1, LOW 0, OFF -1, otherwise an analog
+    // threshold), and whether the sense direction is effectively reversed.
+    // Then two boot flags: g = the GPIO expander carrying the switches wasn't
+    // found, n = NV was unusable. Both sit on I2C, so one bus fault can take
+    // out the switches and the coordinate memory together.
     internal sealed class HomeSenseReading
     {
         public readonly int[] State = new int[2];
         public readonly long[] Trigger = new long[2];
         public readonly bool[] Reverse = new bool[2];
+        public bool GpioMissing;
+        public bool NvError;
 
         public static HomeSenseReading Parse(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return null;
             var parts = raw.TrimEnd('#').Split(',');
-            if (parts.Length != 6) return null;
+            if (parts.Length != 8) return null;
             var r = new HomeSenseReading();
             for (int i = 0; i < 2; i++)
             {
@@ -188,6 +222,10 @@ namespace ASCOM.OnStepX.ViewModels
                 if (!int.TryParse(parts[i * 3 + 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int rev)) return null;
                 r.Reverse[i] = rev != 0;
             }
+            if (!int.TryParse(parts[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out int g)) return null;
+            if (!int.TryParse(parts[7], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)) return null;
+            r.GpioMissing = g != 0;
+            r.NvError = n != 0;
             return r;
         }
     }
