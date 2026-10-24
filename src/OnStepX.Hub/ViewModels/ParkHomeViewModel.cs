@@ -1,9 +1,11 @@
 using System;
 using System.Globalization;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using ASCOM.OnStepX.Config;
+using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 
 namespace ASCOM.OnStepX.ViewModels
@@ -31,6 +33,20 @@ namespace ASCOM.OnStepX.ViewModels
         }
         public bool SlewPaEnabled => MountActionsEnabled && HasSavedPaPosition;
 
+        // Great-circle degrees the spiral search moves per step out — one FOV
+        // is the useful setting. Persisted so it survives reconnects.
+        private double _spiralStepDeg;
+        public double SpiralStepDeg
+        {
+            get => _spiralStepDeg;
+            set
+            {
+                double v = Math.Max(0.01, Math.Min(20.0, value));
+                if (!Set(ref _spiralStepDeg, v)) return;
+                try { DriverSettings.SpiralStepDeg = v; } catch { }
+            }
+        }
+
         public ICommand ParkCommand { get; }
         public ICommand UnparkCommand { get; }
         public ICommand SetHomeCommand { get; }     // :hF# — set home reference to current axes
@@ -57,6 +73,7 @@ namespace ASCOM.OnStepX.ViewModels
             NvResetCommand     = new RelayCommand(DoNvReset,                                                               () => MountActionsEnabled);
             SlewRateInfoCommand= new RelayCommand(DoSlewRateInfo,                                                          () => MountActionsEnabled);
             StopCommand        = new RelayCommand(() => Guard(() => _mount.Protocol.AbortSlew()),                         () => MountActionsEnabled);
+            try { _spiralStepDeg = DriverSettings.SpiralStepDeg; } catch { _spiralStepDeg = 0.5; }
         }
 
         internal void OnConnStateChanged()
@@ -85,6 +102,147 @@ namespace ASCOM.OnStepX.ViewModels
             if (dir.Contains("S")) _mount.Protocol.StopSouth();
             if (dir.Contains("E")) _mount.Protocol.StopEast();
             if (dir.Contains("W")) _mount.Protocol.StopWest();
+        }
+
+        // ---------- Spiral search ----------
+        // Press-and-hold, same contract as the pad's direction buttons.
+        // Runs a box spiral around the position held at press time: leg
+        // lengths 1,1,2,2,3,3,... x SpiralStepDeg, directions cycling
+        // E,N,W,S. Consecutive arms land exactly one step apart, so setting
+        // the step to the camera FOV sweeps without gaps.
+        //
+        // Legs are relative gotos rather than timed :Mn#/:Mw# holds. OnStepX
+        // ramps guide moves at R_max^2 / (2 * SLEW_ACCELERATION_DIST) — at a
+        // 3 deg/s mount that's 0.9 deg/s^2, so a sub-degree leg never leaves
+        // the acceleration ramp and an open-loop hold would fall short by an
+        // order of magnitude. Gotos let the firmware own accel/decel and land
+        // on the vertex. Goto speed already follows the Slew (deg/s) slider:
+        // both derive from usPerStepCurrent.
+        private CancellationTokenSource _spiralCts;
+        private Task _spiralTask;
+
+        public void BeginSpiral()
+        {
+            if (_main.State != ConnState.Connected) return;
+            if (_spiralTask != null && !_spiralTask.IsCompleted) return;
+            // Safe to release here: the previous loop has finished, so nothing
+            // can still be waiting on that token's handle.
+            _spiralCts?.Dispose();
+            var cts = new CancellationTokenSource();
+            _spiralCts = cts;
+            _spiralTask = Task.Run(() => SpiralLoop(cts.Token));
+        }
+
+        public void EndSpiral()
+        {
+            var cts = _spiralCts;
+            if (cts == null) return;
+            // Cancelling wakes the loop out of its wait immediately; the loop's
+            // finally issues :Q# and restores the pier preference. Stopping from
+            // inside the loop keeps a leg from being launched after the abort.
+            try { cts.Cancel(); } catch (Exception ex) { DebugLogger.LogException("SPIRAL", ex); }
+        }
+
+        private void SpiralLoop(CancellationToken ct)
+        {
+            bool pierPinned = false;
+            try
+            {
+                double raC   = CoordFormat.ParseHours(_mount.Protocol.GetRA());
+                double decC  = CoordFormat.ParseDegrees(_mount.Protocol.GetDec());
+                double step  = SpiralStepDeg;
+
+                // Steps are great-circle degrees. An RA span covers
+                // cos(dec) of that on the sky, so stretch RA legs by
+                // 1/cos(dec). Capped at 20x so the spiral stays finite
+                // within half a degree of the pole.
+                double cosDec  = Math.Max(0.05, Math.Cos(decC * Math.PI / 180.0));
+                double raScale = 1.0 / cosDec;
+
+                // Pin the pier for the duration: without it a leg that crosses
+                // the meridian can be answered with a flip instead of a nudge.
+                string pier = ExtractPier(_mount.Protocol.GetPierSide());
+                if (pier == "E" || pier == "W")
+                {
+                    try
+                    {
+                        pierPinned = _mount.Protocol.SetPreferredPierSide(pier == "E"
+                            ? LX200Protocol.PreferredPier.East
+                            : LX200Protocol.PreferredPier.West);
+                    }
+                    catch (Exception ex) { DebugLogger.LogException("SPIRAL", ex); }
+                }
+
+                DebugLogger.Log("SPIRAL", string.Format(CultureInfo.InvariantCulture,
+                    "start ra={0:0.0000}h dec={1:0.000}° step={2:0.000}° raScale={3:0.00} pier={4}",
+                    raC, decC, step, raScale, string.IsNullOrEmpty(pier) ? "?" : pier));
+
+                double x = 0.0, y = 0.0;
+                for (int leg = 0; !ct.IsCancellationRequested; leg++)
+                {
+                    int len = leg / 2 + 1;
+                    switch (leg & 3)
+                    {
+                        case 0:  x += len; break;
+                        case 1:  y += len; break;
+                        case 2:  x -= len; break;
+                        default: y -= len; break;
+                    }
+
+                    double dec = Math.Max(-89.5, Math.Min(89.5, decC + y * step));
+                    double ra  = WrapRaHours(raC + x * step * raScale / 15.0);
+
+                    if (ct.IsCancellationRequested) break;
+                    if (!_mount.Protocol.SetTargetRA(ra) || !_mount.Protocol.SetTargetDec(dec))
+                    {
+                        DebugLogger.LogError("SPIRAL", "target rejected at leg " + leg + "; stopping");
+                        break;
+                    }
+                    int rc = _mount.Protocol.SlewToTarget();
+                    if (rc != 0)
+                    {
+                        DebugLogger.LogError("SPIRAL", "leg " + leg + " rejected rc=" + rc + "; stopping");
+                        ReportOnUiThread("Spiral search", rc);
+                        break;
+                    }
+                    WaitForSlewComplete(ct);
+                }
+            }
+            catch (Exception ex) { DebugLogger.LogException("SPIRAL", ex); }
+            finally
+            {
+                try { _mount.Protocol.AbortSlew(); } catch (Exception ex) { DebugLogger.LogException("SPIRAL", ex); }
+                if (pierPinned) RestorePreferredPierFromSettings();
+                DebugLogger.Log("SPIRAL", "stopped");
+            }
+        }
+
+        // Poll :GU# until the mount reports not-slewing. The initial settle
+        // covers the window between :MS# returning and the firmware raising
+        // the flag. Per-leg deadline keeps a stuck axis from wedging the loop.
+        private void WaitForSlewComplete(CancellationToken ct)
+        {
+            const int pollMs = 150;
+            const int legTimeoutMs = 60000;
+            if (ct.WaitHandle.WaitOne(300)) return;
+            int deadline = Environment.TickCount + legTimeoutMs;
+            while (!ct.IsCancellationRequested && Environment.TickCount < deadline)
+            {
+                string raw = null;
+                try { raw = _mount.Protocol.GetStatus(); }
+                catch (Exception ex) { DebugLogger.LogException("SPIRAL", ex); }
+                raw = (raw ?? "").TrimEnd('#');
+                // 'N' = not slewing; 'I' = park in progress (still moving).
+                if (raw.IndexOf('N') >= 0 && raw.IndexOf('I') < 0) return;
+                if (ct.WaitHandle.WaitOne(pollMs)) return;
+            }
+        }
+
+        private void ReportOnUiThread(string op, int rc)
+        {
+            var d = Application.Current?.Dispatcher;
+            if (d == null) return;
+            d.BeginInvoke(new Action(() => ReportSlewFailure(op, rc)));
         }
 
         // Capture the current physical position so we can replay it later.

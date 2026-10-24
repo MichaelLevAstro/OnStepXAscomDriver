@@ -27,6 +27,9 @@ namespace ASCOM.OnStepX.Config
         public static int    SyncLimitDeg { get => GetInt("SyncLimitDeg", 0); set => SetInt("SyncLimitDeg", value); }
 
         public static double SlewRateDegPerSec { get => GetDouble("SlewRateDegPerSec", 3.0); set => SetDouble("SlewRateDegPerSec", value); }
+        // Spiral search: great-circle degrees the mount moves per step out.
+        // Set this to the camera FOV so consecutive spiral arms just touch.
+        public static double SpiralStepDeg { get => GetDouble("SpiralStepDeg", 0.5); set => SetDouble("SpiralStepDeg", value); }
         public static double GuideRateMultiplier { get => GetDouble("GuideRateMultiplier", 0.5); set => SetDouble("GuideRateMultiplier", value); }
         public static bool   MeridianAutoFlip { get => GetBool("MeridianAutoFlip", true); set => SetBool("MeridianAutoFlip", value); }
 

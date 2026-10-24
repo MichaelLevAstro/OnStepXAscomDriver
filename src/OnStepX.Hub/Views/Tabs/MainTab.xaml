@@ -94,6 +94,22 @@
               <c:SlewPad PadVM="{Binding ParkHome}"
                          IsArmed="{Binding ParkHome.MountActionsEnabled}"
                          Height="220" Margin="0,0,0,6"/>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Spiral step (°)" Style="{StaticResource Text.Label}"/>
+                <c:NumericBox Grid.Column="1" Width="72"
+                              Min="0.01" Max="20" Step="0.05" DecimalPlaces="2"
+                              Value="{Binding ParkHome.SpiralStepDeg}"
+                              ToolTip="Great-circle degrees moved per step out. Set this to the camera field of view so consecutive spiral arms just touch."/>
+                <Button Grid.Column="2" Content="SPIRAL — hold" Margin="6,0,0,0"
+                        IsEnabled="{Binding ParkHome.MountActionsEnabled}"
+                        PreviewMouseLeftButtonDown="OnSpiralPress"
+                        PreviewMouseLeftButtonUp="OnSpiralRelease"
+                        MouseLeave="OnSpiralRelease"
+                        ToolTip="Hold to run a box spiral search outward from the current position. Release to stop. Uses the Slew (°/s) rate; pier side is held so a leg can't trigger a meridian flip."/>
+              </Grid>
               <Button Content="Slew Rate Info…" Command="{Binding ParkHome.SlewRateInfoCommand}"
                       HorizontalAlignment="Stretch"/>
             </StackPanel>
