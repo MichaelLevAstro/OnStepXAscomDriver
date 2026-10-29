@@ -2,7 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <!--
+      netstandard2.0, not net48: this assembly has to be loadable by both the
+      net48 ASCOM COM driver (which can never move off .NET Framework) and the
+      modern .NET hub that replaces the WPF one. netstandard2.0 is the only
+      target both can reference.
+    -->
+    <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>ASCOM.OnStepX</RootNamespace>
     <AssemblyName>OnStepX.Shared</AssemblyName>
     <Platforms>AnyCPU;x86;x64</Platforms>
@@ -16,6 +22,15 @@
 
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <!--
+      net48 had Microsoft.Win32.Registry in the framework; netstandard2.0 does
+      not. DebugLogger's three registry calls (verbose-log flag, and the
+      session-tag rendezvous that makes driver and hub share one log file) are
+      all already wrapped in try/catch with sane defaults, so on Linux they
+      degrade rather than throw — the hub is the only process there anyway.
+      Replacing them with a cross-platform store is Phase 4 work.
+    -->
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 
 </Project>
