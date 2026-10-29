@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <!--
+      netstandard2.0 while the WPF hub is still the shipping one: net48 cannot
+      reference net8.0 or net10.0, and the point of this project is that both
+      the WPF hub and the Avalonia hub that replaces it compile against the
+      same mount logic and view models. Becomes net10.0 once WPF is retired.
+    -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>ASCOM.OnStepX</RootNamespace>
+    <AssemblyName>OnStepX.Core</AssemblyName>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Product>OnStepX</Product>
+    <Company>OnStepX Community</Company>
+    <AssemblyTitle>OnStepX Core</AssemblyTitle>
+    <Description>Mount session, state, astronomy and view models — no UI toolkit, no Windows API.</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnStepX.Shared\OnStepX.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DriverSettings still reads and writes HKCU on Windows. The calls are
+         behind ISettingsStore's Windows implementation in the host project;
+         this package is here for the migration reader that imports the old
+         values once. Windows-only at runtime, absent-friendly elsewhere. -->
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
+  </ItemGroup>
+
+  <!-- Astronomy catalogs keep their old manifest resource names so
+       DeepSkyCatalog.Load resolves them by name without code changes, even
+       though the assembly they live in has changed. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Astronomy\Data\ngc.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ngc.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Astronomy\Data\ic.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ic.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Astronomy\Data\sh2.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.sh2.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Astronomy\Data\ldn.txt">
+      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ldn.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

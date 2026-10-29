@@ -1,7 +1,7 @@
 <UserControl x:Class="ASCOM.OnStepX.Controls.ConsoleView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:ASCOM.OnStepX.ViewModels"
+             xmlns:vm="clr-namespace:ASCOM.OnStepX.ViewModels;assembly=OnStepX.Core"
              xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters">
   <UserControl.Resources>
     <cv:ConsoleResponseBrushConverter x:Key="RespBrush"/>
@@ -65,7 +65,7 @@
       <Border Background="{DynamicResource Brush.ConsoleBg}"
               BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0">
         <ListBox x:Name="LogList"
-                 ItemsSource="{Binding Entries}"
+                 ItemsSource="{Binding Entries.Items}"
                  SelectionMode="Extended"
                  Background="Transparent" BorderThickness="0"
                  Height="220"

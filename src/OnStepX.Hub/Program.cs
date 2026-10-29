@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO.Pipes;
 using System.Threading;
 using System.Windows;
@@ -8,6 +8,9 @@ using ASCOM.OnStepX.Diagnostics;
 using ASCOM.OnStepX.Hardware;
 using ASCOM.OnStepX.Hardware.Transport;
 using ASCOM.OnStepX.Notifications;
+using ASCOM.OnStepX.Platform;
+using ASCOM.OnStepX.Hub.Platform;
+using ASCOM.OnStepX.ViewModels;
 using ASCOM.OnStepX.Views;
 using Application = System.Windows.Application;
 
@@ -18,15 +21,12 @@ namespace ASCOM.OnStepX
     // only one hub of either flavor runs), same named-pipe server, same tray,
     // same /tray launch flag, same IPC SHOWHUB protocol.
     //
-    // Program.Hub remains a System.Windows.Forms.Form for compatibility with
-    // SyncLimitGuard's PromptOnUiThread (and any future code that takes
-    // an IWin32Window owner). It's a hidden, never-shown form whose handle
-    // sits on the UI/STA thread and provides Invoke semantics for the cross-
-    // thread MessageBox prompt.
+    // Also where the view models get their platform: everything in
+    // OnStepX.Core talks to the host through Ui and CommandRequery, and this
+    // is the only place that knows those are WPF.
     internal static class Program
     {
         internal static Mutex SingleInstanceMutex;
-        internal static System.Windows.Forms.Form Hub;
         internal static MainWindow MainWindow;
         private static HubPipeServer _pipeServer;
         private static NotifyIcon _tray;
@@ -74,23 +74,14 @@ namespace ASCOM.OnStepX
                 return 0;
             }
 
+            // Before anything else: DriverSettings reads its first value
+            // during RunMigrations, and every view model built after this point
+            // expects a real dispatcher and real dialogs.
+            InstallPlatform();
+
             DriverSettings.RunMigrations();
             DebugLogger.Init("hub");
             MountAlertBridge.Attach(MountSession.Instance);
-
-            // Hidden compat Form for SyncLimitGuard.PromptOnUiThread Invoke.
-            // Created on the STA thread; Handle realized so InvokeRequired
-            // returns a meaningful answer from worker threads.
-            Hub = new System.Windows.Forms.Form
-            {
-                ShowInTaskbar = false,
-                FormBorderStyle = FormBorderStyle.None,
-                Opacity = 0,
-                Size = new System.Drawing.Size(1, 1),
-                StartPosition = FormStartPosition.Manual,
-                Location = new System.Drawing.Point(-32000, -32000)
-            };
-            var _h = Hub.Handle;
 
             var app = new App();
 
@@ -126,6 +117,26 @@ namespace ASCOM.OnStepX
             try { DebugLogger.Shutdown(); } catch { }
             try { SingleInstanceMutex?.ReleaseMutex(); } catch { }
             return rc;
+        }
+
+        // The WPF half of OnStepX.Core's platform seams. The hidden WinForms
+        // form that used to live here existed only to give
+        // SyncLimitGuard.PromptOnUiThread an IWin32Window owner and Invoke
+        // semantics; WpfDialogs.ConfirmBlocking does both through the WPF
+        // Dispatcher, so the form is gone.
+        private static void InstallPlatform()
+        {
+            Ui.Install(
+                dialogs:    new WpfDialogs(),
+                dispatcher: new WpfDispatcher(),
+                shell:      new WpfShell(),
+                notifier:   new WindowsNotifier(),
+                windows:    new WpfWindowService(),
+                settings:   new RegistrySettingsStore(),
+                files:      new WpfFilePicker(),
+                location:   new WindowsLocationProvider());
+
+            CommandRequery.Install(new WpfCommandRequerySource());
         }
 
         private static void BuildTray()

@@ -64,7 +64,7 @@
       </Border>
 
       <!-- DataGrid is the easiest virtualized 5-column list. -->
-      <DataGrid ItemsSource="{Binding RowsView}" SelectedItem="{Binding SelectedRow}"
+      <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
                 AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
                 CanUserReorderColumns="False" CanUserResizeRows="False"
                 IsReadOnly="True" GridLinesVisibility="None" HeadersVisibility="Column"

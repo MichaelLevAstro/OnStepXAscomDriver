@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OnStepX.Shared\OnStepX.Shared.csproj" />
+    <ProjectReference Include="..\OnStepX.Core\OnStepX.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,22 +37,10 @@
     <PackageReference Include="HelixToolkit.Wpf" Version="2.25.0" />
   </ItemGroup>
 
-  <!-- Astronomy catalogs + app icon embedded under namespace-qualified names
-       so the existing reflective loaders (DeepSkyCatalog.Load, AppIconLoader)
-       resolve them by manifest resource name without code changes. -->
+  <!-- The astronomy catalogs moved to OnStepX.Core with their manifest names
+       intact. The icon stays here: AppIconLoader reads it out of the executing
+       assembly for the tray. -->
   <ItemGroup>
-    <EmbeddedResource Include="Astronomy\Data\ngc.txt">
-      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ngc.txt</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Astronomy\Data\ic.txt">
-      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ic.txt</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Astronomy\Data\sh2.txt">
-      <LogicalName>ASCOM.OnStepX.Astronomy.Data.sh2.txt</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Astronomy\Data\ldn.txt">
-      <LogicalName>ASCOM.OnStepX.Astronomy.Data.ldn.txt</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="AppIcon.ico">
       <LogicalName>ASCOM.OnStepX.AppIcon.ico</LogicalName>
     </EmbeddedResource>

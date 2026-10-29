@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
         xmlns:t="clr-namespace:ASCOM.OnStepX.Views.Tabs"
-        xmlns:vm="clr-namespace:ASCOM.OnStepX.ViewModels"
+        xmlns:vm="clr-namespace:ASCOM.OnStepX.ViewModels;assembly=OnStepX.Core"
         xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="OnStepX ASCOM Driver"
