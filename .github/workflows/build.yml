@@ -33,6 +33,11 @@ on:
   push:
     tags:
       - "v*"
+  # Build-only on a PR. The release job is gated on a tag or the input, so a
+  # pull request proves the installer still compiles without publishing
+  # anything. This is also the only way to exercise the workflow before it
+  # reaches main — workflow_dispatch is offered from the default branch only.
+  pull_request:
 
 permissions:
   contents: write
@@ -46,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref }}
 
       # Directory.Build.props is the single source. A tag push additionally has
       # to agree with it, or the release would be named one thing and contain
@@ -79,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref }}
 
       # The runner images carry the .NET Framework 4.8 targeting pack already;
       # this is for the SDK that drives the build and the NuGet restore of
