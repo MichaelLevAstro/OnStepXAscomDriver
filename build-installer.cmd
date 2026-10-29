@@ -4,7 +4,7 @@ setlocal EnableDelayedExpansion
 rem OnStepX ASCOM Driver - build Release + compile Inno Setup installer.
 rem
 rem Usage:
-rem   build-installer.cmd                       -> Release, version from .iss
+rem   build-installer.cmd                       -> Release, version from Directory.Build.props
 rem   build-installer.cmd 0.4.0                 -> Release, version 0.4.0
 rem   build-installer.cmd Debug                 -> Debug build (skips installer)
 rem   build-installer.cmd Release 0.4.0         -> explicit config + version
@@ -19,6 +19,20 @@ call :classify "%~2"
 set ROOT=%~dp0
 set SOLUTION=%ROOT%OnStepX.sln
 set ISS=%ROOT%installer\OnStepX.AscomDriver.iss
+set PROPS=%ROOT%Directory.Build.props
+
+rem No explicit version on the command line: take it from Directory.Build.props
+rem so dotnet, ISCC and CI all stamp the same number.
+if not defined VERSION (
+    rem findstr /c: keeps the needle literal — a bare space-separated string is
+    rem an OR of words and would also match the <FileVersion> line below it.
+    rem Indent, tag, value, closing tag -> the value is token 3.
+    for /f "tokens=3 delims=<>" %%V in ('findstr /c:"<OnStepXVersion " "%PROPS%"') do set VERSION=%%V
+)
+if not defined VERSION (
+    echo [ERROR] No version given and none found in %PROPS%.
+    exit /b 2
+)
 
 rem Locate ISCC (Inno Setup 6, 32-bit or 64-bit install).
 set ISCC=

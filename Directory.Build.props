@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Single source of truth for the product version.
+
+    Before this file the version lived nowhere: build-installer.cmd took it on
+    the command line and passed it to both dotnet and ISCC, so an unattended
+    build had no way to know what it was producing. CI reads OnStepXVersion
+    from here to name the tag and the release.
+
+    Bump OnStepXVersion and nothing else. A command-line -p:Version=x.y.z still
+    wins (global properties beat these), which keeps build-installer.cmd's
+    explicit-version form working.
+  -->
+  <PropertyGroup>
+    <OnStepXVersion Condition="'$(OnStepXVersion)' == ''">2.8.9</OnStepXVersion>
+
+    <Version>$(OnStepXVersion)</Version>
+    <AssemblyVersion>$(OnStepXVersion).0</AssemblyVersion>
+    <FileVersion>$(OnStepXVersion).0</FileVersion>
+  </PropertyGroup>
+
+</Project>

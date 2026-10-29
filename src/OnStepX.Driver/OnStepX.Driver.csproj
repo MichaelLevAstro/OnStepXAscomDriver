@@ -6,9 +6,6 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>ASCOM.OnStepX</RootNamespace>
     <AssemblyName>ASCOM.OnStepX</AssemblyName>
-    <Version>0.5.0</Version>
-    <AssemblyVersion>0.5.0.0</AssemblyVersion>
-    <FileVersion>0.5.0.0</FileVersion>
     <Platforms>AnyCPU;x86;x64</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
@@ -26,20 +23,25 @@
   </ItemGroup>
 
   <!--
-    Platform 6 GAC references. Driver DLL must marshal ITelescopeV3 through the
-    same ASCOM.DeviceInterfaces (v6.0.0.0) and ASCOM.Exceptions (v6.0.0.0) the
-    ASCOM Platform installs — Platform 7 NuGet has incompatible interface GUIDs
-    that fail at QueryInterface time even though GUIDs match.
+    Platform 6 interface assemblies. The driver DLL must marshal ITelescopeV3
+    through ASCOM.DeviceInterfaces / ASCOM.Exceptions v6.0.0.0 — the Platform 7
+    *.Components NuGet packages carry different interface GUIDs and fail at
+    QueryInterface time even though the class GUIDs match.
+
+    These used to be <Reference> elements pointing straight into
+    C:\Windows\assembly\GAC_MSIL, which no CI runner has. ASCOM.Platform 6.5.2
+    is the ASCOM Initiative's own build-server package of exactly those
+    assemblies. Verified against the GAC copy on a Platform 7 machine: same
+    strong name (6.0.0.0 / 565de7938946fba7) and every interface GUID in the
+    package is present and identical in the installed assembly — Platform 7
+    only adds the V4 interfaces alongside them.
+
+    ExcludeAssets="runtime" keeps the old <Private>false</Private> behaviour:
+    compile against them, never copy them to output. They are the ASCOM
+    Initiative's property and the installed Platform supplies them at runtime.
   -->
   <ItemGroup>
-    <Reference Include="ASCOM.DeviceInterfaces, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL">
-      <HintPath>C:\Windows\assembly\GAC_MSIL\ASCOM.DeviceInterfaces\6.0.0.0__565de7938946fba7\ASCOM.DeviceInterfaces.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="ASCOM.Exceptions, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL">
-      <HintPath>C:\Windows\assembly\GAC_MSIL\ASCOM.Exceptions\6.0.0.0__565de7938946fba7\ASCOM.Exceptions.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <PackageReference Include="ASCOM.Platform" Version="6.5.2" ExcludeAssets="runtime" />
   </ItemGroup>
 
 </Project>
