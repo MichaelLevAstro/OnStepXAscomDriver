@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ASCOM.OnStepX.Controls.SlewPad"
+             Focusable="False">
+
+  <!-- Hold-to-move pad. Press starts the slew, release or leaving the button
+       stops it — a press that is never released must not leave the mount
+       running, which is why pointer-exit stops it too. -->
+
+  <UserControl.Styles>
+    <Style Selector="Button.slew">
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="Height" Value="NaN"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Background" Value="{DynamicResource Brush.BtnBg}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="Button.stop">
+      <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.stop /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="TextElement.Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="TextElement.Foreground" Value="White"/>
+      <Setter Property="Opacity" Value="0.88"/>
+    </Style>
+  </UserControl.Styles>
+
+  <UniformGrid Name="PadGrid" Rows="3" Columns="3">
+    <Button Classes="slew" Content="NW" Tag="NW" Margin="0,0,3,3"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+    <Button Classes="slew" Content="N"  Tag="N"  Margin="3,0,3,3"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+    <Button Classes="slew" Content="NE" Tag="NE" Margin="3,0,0,3"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+
+    <Button Classes="slew" Content="W"  Tag="W"  Margin="0,3,3,3"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+    <Button Classes="slew stop" Content="STOP" Name="StopButton" Margin="3"
+            Click="OnStop"/>
+    <Button Classes="slew" Content="E"  Tag="E"  Margin="3,3,0,3"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+
+    <Button Classes="slew" Content="SW" Tag="SW" Margin="0,3,3,0"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+    <Button Classes="slew" Content="S"  Tag="S"  Margin="3,3,3,0"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+    <Button Classes="slew" Content="SE" Tag="SE" Margin="3,3,0,0"
+            PointerPressed="OnPress" PointerReleased="OnRelease" PointerExited="OnRelease"/>
+  </UniformGrid>
+</UserControl>

@@ -1,0 +1,27 @@
+﻿<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ASCOM.OnStepX.App"
+             RequestedThemeVariant="Dark">
+
+  <Application.Styles>
+    <!-- Fluent supplies the control templates. The hub's own look is layered
+         on top through the brushes in Resources/Themes and the class
+         selectors in Typography; porting Controls.xaml replaces most of what
+         Fluent draws. -->
+    <FluentTheme />
+    <StyleInclude Source="avares://OnStepHub/Resources/Typography.axaml"/>
+    <StyleInclude Source="avares://OnStepHub/Resources/Controls.axaml"/>
+  </Application.Styles>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://OnStepHub/Resources/Icons.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <!-- ThemeService appends the Dark/Light dictionary after these at startup
+       and swaps it on toggle, so the palette is not merged here. -->
+
+</Application>

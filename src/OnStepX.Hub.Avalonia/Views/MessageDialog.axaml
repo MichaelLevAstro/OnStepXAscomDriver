@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ASCOM.OnStepX.Views.MessageDialog"
+        Title="OnStepX"
+        SizeToContent="WidthAndHeight"
+        MinWidth="360" MaxWidth="620"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Brush.Panel}">
+
+  <!-- Avalonia has no MessageBox, so this is it: the one dialog shape the hub
+       needs, covering the OK / OK-Cancel / Yes-No / Yes-No-Cancel forms the
+       WPF hub got from System.Windows.MessageBox, plus the selectable-detail
+       variant that was a separate CopyableMessage window there. -->
+
+  <Grid RowDefinitions="*,Auto" Margin="18,16,18,14">
+
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*">
+      <!-- Severity mark. A coloured glyph rather than a system icon, because
+           the system icon sets differ per platform and this has to look the
+           same on a Pi as on Windows. -->
+      <Border Grid.Column="0" Name="Mark"
+              Width="28" Height="28" CornerRadius="14"
+              VerticalAlignment="Top" Margin="0,2,14,0">
+        <TextBlock Name="MarkGlyph" Text="i"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="16" FontWeight="SemiBold"
+                   Foreground="{DynamicResource Brush.AccentInk}"/>
+      </Border>
+
+      <StackPanel Grid.Column="1" Spacing="10">
+        <TextBlock Name="MessageText"
+                   Classes="body"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Top"
+                   MaxWidth="520"/>
+
+        <!-- Shown only by AlertDetail: an exception dump or a diagnostics
+             table the user will want to copy out. -->
+        <TextBox Name="DetailText"
+                 IsVisible="False"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="NoWrap"
+                 MaxHeight="280" MinWidth="460"
+                 FontFamily="{DynamicResource Font.Mono}"
+                 FontSize="{DynamicResource Font.Size.Mono}"
+                 Background="{DynamicResource Brush.ConsoleBg}"
+                 Foreground="{DynamicResource Brush.Text}"
+                 BorderBrush="{DynamicResource Brush.Border}"/>
+      </StackPanel>
+    </Grid>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal"
+                HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,0">
+      <Button Name="BtnCopy"    Content="Copy"   IsVisible="False" MinWidth="84"/>
+      <Button Name="BtnTertiary" IsVisible="False" MinWidth="84"/>
+      <Button Name="BtnSecondary" IsVisible="False" MinWidth="84"/>
+      <Button Name="BtnPrimary"  Content="OK"    MinWidth="84" IsDefault="True"/>
+    </StackPanel>
+  </Grid>
+</Window>

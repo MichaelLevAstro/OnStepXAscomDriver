@@ -1,0 +1,101 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.PolarTab"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid HorizontalAlignment="Center" MaxWidth="920">
+      <c:Section Title="POLAR ALIGNMENT (Experimental)" IconGeometry="{StaticResource Geo.Polar}"
+                 PersistKey="PolarAlignment">
+        <c:Section.HeaderRight>
+          <Button Classes="sm" Content="Advanced…"
+                  Command="{Binding PolarAlignment.OpenAdvancedCommand}"/>
+        </c:Section.HeaderRight>
+        <c:Section.Body>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="220"/>
+              <ColumnDefinition Width="18"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <c:PolarAlignmentPad Grid.Column="0"
+                                 PadVM="{Binding PolarAlignment}"
+                                 IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"
+                                 VerticalAlignment="Top"/>
+
+            <StackPanel Grid.Column="2">
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Slew speed" Classes="label"/>
+                <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                          ItemsSource="{Binding PolarAlignment.SpeedOptions}"
+                          DisplayMemberBinding="{Binding Label}"
+                          SelectedValueBinding="{Binding Value}"
+                          SelectedValue="{Binding PolarAlignment.SelectedSpeed}"
+                          IsEnabled="{Binding PolarAlignment.MountActionsEnabled}"/>
+              </Grid>
+
+              <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0"
+                      Padding="0,8,0,0" Margin="0,0,0,8">
+                <StackPanel>
+                  <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="↑ Alt position" Classes="label"/>
+                    <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AltPosition}" Classes="mono"/>
+                  </Grid>
+                  <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Alt step" Classes="label"/>
+                    <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                  Minimum="1" Maximum="100000" Increment="10"
+                                  Value="{Binding PolarAlignment.AltStepSize}"
+                                  IsEnabled="{Binding PolarAlignment.MountActionsEnabled}" FormatString="0"/>
+                  </Grid>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Alt goto" Classes="label"/>
+                    <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                  Minimum="0" Maximum="100000000" Increment="100"
+                                  Value="{Binding PolarAlignment.AltGotoTarget}"
+                                  IsEnabled="{Binding PolarAlignment.MountActionsEnabled}" FormatString="0"/>
+                    <Button Grid.Column="2" Classes="sm primary"
+                            Content="Goto" Command="{Binding PolarAlignment.GotoAltCommand}" Margin="6,0,0,0"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0"
+                      Padding="0,8,0,0">
+                <StackPanel>
+                  <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="→ Az position" Classes="label"/>
+                    <TextBlock Grid.Column="1" Text="{Binding PolarAlignment.AzPosition}" Classes="mono"/>
+                  </Grid>
+                  <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Az step" Classes="label"/>
+                    <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                  Minimum="1" Maximum="100000" Increment="10"
+                                  Value="{Binding PolarAlignment.AzStepSize}"
+                                  IsEnabled="{Binding PolarAlignment.MountActionsEnabled}" FormatString="0"/>
+                  </Grid>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Az goto" Classes="label"/>
+                    <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                  Minimum="0" Maximum="100000000" Increment="100"
+                                  Value="{Binding PolarAlignment.AzGotoTarget}"
+                                  IsEnabled="{Binding PolarAlignment.MountActionsEnabled}" FormatString="0"/>
+                    <Button Grid.Column="2" Classes="sm primary"
+                            Content="Goto" Command="{Binding PolarAlignment.GotoAzCommand}" Margin="6,0,0,0"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Grid>
+        </c:Section.Body>
+      </c:Section>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

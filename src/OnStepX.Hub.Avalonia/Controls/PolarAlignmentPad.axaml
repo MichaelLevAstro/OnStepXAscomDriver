@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ASCOM.OnStepX.Controls.PolarAlignmentPad"
+             Focusable="False">
+
+  <!-- Plus shape, five buttons. Vertical is Alt (focuser 1, AXIS4),
+       horizontal is Az (focuser 2, AXIS5). STOP halts both axes. Step size
+       and speed come from the surrounding section.
+
+       Unlike the slew pad these are single clicks, not hold-to-move: each
+       press jogs one configured step. -->
+
+  <UserControl.Styles>
+    <Style Selector="Button.paJog">
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="Height" Value="NaN"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="Button.paStop">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.paStop /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="TextElement.Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.paStop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+      <Setter Property="TextElement.Foreground" Value="White"/>
+      <Setter Property="Opacity" Value="0.88"/>
+    </Style>
+  </UserControl.Styles>
+
+  <UniformGrid Rows="3" Columns="3" HorizontalAlignment="Center" Width="200">
+    <Border/>
+    <Button Classes="paJog" Margin="3" Content="↑" Tag="1,1"  Click="OnJog"/>
+    <Border/>
+
+    <Button Classes="paJog" Margin="3" Content="←" Tag="2,-1" Click="OnJog"/>
+    <Button Classes="paJog paStop" Margin="3" Content="STOP" Click="OnStopAll"/>
+    <Button Classes="paJog" Margin="3" Content="→" Tag="2,1"  Click="OnJog"/>
+
+    <Border/>
+    <Button Classes="paJog" Margin="3" Content="↓" Tag="1,-1" Click="OnJog"/>
+    <Border/>
+  </UniformGrid>
+</UserControl>

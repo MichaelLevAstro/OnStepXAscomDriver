@@ -1,4 +1,4 @@
-; OnStepX — Inno Setup script
+﻿; OnStepX — Inno Setup script
 ; Build: iscc OnStepX.AscomDriver.iss
 ; Prereq: Release build of OnStepX.Driver, OnStepX.Shared, OnStepX.Hub
 ;         under src\*\bin\Release\
@@ -8,8 +8,8 @@
 ;   ASCOM.OnStepX.Focuser   (IFocuserV2)
 ;   ASCOM.OnStepX.Rotator   (IRotatorV3)
 
-#define MyAppName "OnStepX ASCOM + Hub"
-#define MyAppShortName "OnStepX"
+#define MyAppName "OnStepHub"
+#define MyAppShortName "OnStepHub"
 #define MyAppPublisher "OnStepX Community"
 ; Allow override from command line: ISCC /DMyAppVersion=0.5.0
 #ifndef MyAppVersion
@@ -25,6 +25,12 @@
 ; before laying down the current Inproc/Wpf-hub layout.
 #define MyAppAppId "{{A7F3B9C1-4E2D-4F5A-8B1C-9D3E2F4A5B6C}"
 
+; The COM identifiers, the install directory, the HKLM/HKCU key paths, the
+; setup filename and AppId all keep the OnStepX name. They are identities, not
+; labels: changing a ProgId or CLSID would orphan every NINA/PHD2/SGP profile
+; that already points at this driver, and changing the settings path would lose
+; every user's saved port, site and limits. Only what a user reads has changed.
+;
 ; --- Telescope COM identifiers (must match Telescope class [Guid]/[ProgId]) ---
 #define TelescopeClsid    "{E3F7B8A1-6C2D-4F3E-9A5B-1F2C3D4E5A6B}"
 #define TelescopeProgId   "ASCOM.OnStepX.Telescope"
@@ -243,12 +249,12 @@ Root: HKLM; Subkey: "SOFTWARE\OnStepX\Hub";                               ValueT
 Root: HKLM; Subkey: "SOFTWARE\OnStepX\Hub";                               ValueType: none;   ValueName: "WpfInstallPath"; Flags: deletevalue
 
 [Icons]
-Name: "{group}\{#MyAppShortName} Hub";               Filename: "{app}\{#HubExe}"
+Name: "{group}\{#MyAppShortName}";                    Filename: "{app}\{#HubExe}"
 Name: "{group}\Uninstall {#MyAppShortName}";         Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppShortName} Hub";         Filename: "{app}\{#HubExe}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppShortName}";              Filename: "{app}\{#HubExe}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#HubExe}"; Description: "Launch {#MyAppShortName} Hub"; Flags: postinstall nowait skipifsilent unchecked
+Filename: "{app}\{#HubExe}"; Description: "Launch {#MyAppShortName}"; Flags: postinstall nowait skipifsilent unchecked
 
 [UninstallRun]
 ; Let regasm tear down any [ComRegisterFunction] residue before we drop files.

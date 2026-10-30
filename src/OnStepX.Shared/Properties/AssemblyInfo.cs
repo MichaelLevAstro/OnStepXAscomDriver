@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 // Version/Title/Company/Product come from OnStepX.Shared.csproj via GenerateAssemblyInfo.
@@ -9,4 +9,6 @@ using System.Runtime.InteropServices;
 // Driver + Hub are the only intended consumers of internal types (LX200Protocol,
 // CoordFormat, ITransport, PipeTransport, TransportLogger).
 [assembly: InternalsVisibleTo("ASCOM.OnStepX")]
+[assembly: InternalsVisibleTo("OnStepX.Core")]
 [assembly: InternalsVisibleTo("OnStepX.Hub")]
+[assembly: InternalsVisibleTo("OnStepHub")]

@@ -1,0 +1,224 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.SetupTab"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="14"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- LEFT: Connection + Site -->
+      <StackPanel Grid.Column="0">
+        <c:Section Title="CONNECTION" IconGeometry="{StaticResource Geo.Connection}" PersistKey="Connection">
+          <c:Section.HeaderRight>
+            <c:StatusBadge Status="{Binding Connection.StatusKind}"
+                           Pulsing="{Binding Connection.StatusPulse}"
+                           Text="{Binding Connection.StatusText}"/>
+          </c:Section.HeaderRight>
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Transport" Classes="label"/>
+                <ComboBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                          ItemsSource="{Binding Connection.Transports}"
+                          SelectedItem="{Binding Connection.TransportKind}"
+                          IsEnabled="{Binding Connection.TransportFieldsEnabled}"/>
+              </Grid>
+              <Grid Margin="0,0,0,6" IsVisible="{Binding Connection.IsSerial}">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="COM port" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <!-- Avalonia has no editable ComboBox. AutoCompleteBox is
+                       the equivalent: it takes free text and offers the
+                       detected ports as you type, which is what the editable
+                       combo was for - a port that exists can be picked, one
+                       that is not listed can still be typed. -->
+                  <AutoCompleteBox Width="110" Margin="0,0,8,0"
+                                   ItemsSource="{Binding Connection.ComPorts}"
+                                   Text="{Binding Connection.SerialPort, Mode=TwoWay}"
+                                   IsEnabled="{Binding Connection.TransportFieldsEnabled}"
+                                   FilterMode="Contains"
+                                   MinimumPrefixLength="0"
+                                   GotFocus="ComPortFocused"/>
+                  <TextBlock Text="Baud" Classes="label" Margin="0,0,6,0"/>
+                  <NumericUpDown Width="92" Minimum="1200" Maximum="460800" Increment="1200"
+                                Value="{Binding Connection.SerialBaud}"
+                                IsEnabled="{Binding Connection.TransportFieldsEnabled}" FormatString="0"/>
+                </StackPanel>
+              </Grid>
+              <Grid Margin="0,0,0,6" IsVisible="{Binding Connection.IsTcp}">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="TCP host / port" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <TextBox Width="170"
+                           Text="{Binding Connection.TcpHost, UpdateSourceTrigger=LostFocus}"
+                           IsEnabled="{Binding Connection.TransportFieldsEnabled}"
+                           Margin="0,0,8,0"/>
+                  <NumericUpDown Width="72" Minimum="1" Maximum="65535" Increment="1"
+                                Value="{Binding Connection.TcpPort}"
+                                IsEnabled="{Binding Connection.TransportFieldsEnabled}" FormatString="0"/>
+                </StackPanel>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Margin="0,4,0,6">
+                <Button Classes="sm" Content="{Binding Connection.AutoDetectButtonText}"
+                        Command="{Binding Connection.AutoDetectCommand}" Margin="0,0,6,0"/>
+                <Button Classes="sm" Content="Connect"
+                        Command="{Binding Connection.ConnectCommand}" Margin="0,0,6,0"/>
+                <Button Classes="sm" Content="Cancel"
+                        Command="{Binding Connection.CancelConnectCommand}"
+                        IsVisible="{Binding Connection.CancelButtonEnabled}"
+                        Margin="0,0,6,0"/>
+                <Button Classes="sm primary" Content="Disconnect"
+                        Command="{Binding Connection.DisconnectCommand}"/>
+              </StackPanel>
+              <CheckBox Content="Auto-connect to saved port on open"
+                        IsChecked="{Binding Connection.AutoConnect}"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="MOUNT SETTINGS" IconGeometry="{StaticResource Geo.Telescope}" IsExpanded="False" PersistKey="MountSettings">
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Current mode" Classes="label"/>
+                <TextBlock Grid.Column="1" Text="{Binding MountSettings.CurrentModeText}" Classes="mono"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Mount mode" Classes="label"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding MountSettings.Modes}"
+                          SelectedItem="{Binding MountSettings.SelectedMode}"
+                          IsEnabled="{Binding MountSettings.MountActionsEnabled}"/>
+              </Grid>
+              <TextBlock TextWrapping="Wrap" Classes="hint" Margin="0,0,0,8"
+                         Text="Switching the mount mode writes the new type to NV memory and reboots the mount. The hub will disconnect — wait ~10 s and reconnect."/>
+              <UniformGrid Columns="2" HorizontalAlignment="Stretch">
+                <Button Content="Refresh" Command="{Binding MountSettings.RefreshCommand}" Margin="0,0,3,0"/>
+                <Button Classes="sm primary" Content="Apply"
+                        Command="{Binding MountSettings.ApplyCommand}" Margin="3,0,0,0"/>
+              </UniformGrid>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="SITE" IconGeometry="{StaticResource Geo.Site}" IsExpanded="False" PersistKey="Site">
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Latitude" Classes="label"/>
+                <TextBox Grid.Column="1" Text="{Binding Site.Latitude, UpdateSourceTrigger=LostFocus}"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Longitude" Classes="label"/>
+                <TextBox Grid.Column="1" Text="{Binding Site.Longitude, UpdateSourceTrigger=LostFocus}"/>
+              </Grid>
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Elevation (m)" Classes="label"/>
+                <TextBox Grid.Column="1" Text="{Binding Site.Elevation, UpdateSourceTrigger=LostFocus}"/>
+              </Grid>
+              <UniformGrid Columns="3" HorizontalAlignment="Stretch">
+                <Button Content="{Binding Site.SyncFromPcText}" Command="{Binding Site.SyncFromPcCommand}" Margin="0,0,6,0"/>
+                <Button Content="Upload" Command="{Binding Site.UploadCommand}" Margin="0,0,6,0"/>
+                <Button Content="Sites…" Command="{Binding Site.SitesCommand}"/>
+              </UniformGrid>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+
+      <!-- RIGHT: Date/Time + Limits -->
+      <StackPanel Grid.Column="2">
+        <c:Section Title="DATE / TIME" IconGeometry="{StaticResource Geo.Clock}" IsExpanded="False" PersistKey="DateTime">
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Local" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <TextBox Width="120" Margin="0,0,6,0"
+                           Text="{Binding DateTime.LocalDateText, UpdateSourceTrigger=LostFocus}"
+                           ToolTip.Tip="dd/MM/yyyy"/>
+                  <TextBox Width="100"
+                           Text="{Binding DateTime.LocalTimeText, UpdateSourceTrigger=LostFocus}"
+                           ToolTip.Tip="HH:mm:ss"/>
+                </StackPanel>
+              </Grid>
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Timezone (h)" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <NumericUpDown Width="80" Minimum="-14" Maximum="14" Increment="0.5"
+                                Value="{Binding DateTime.UtcOffsetHours}" FormatString="0.0"/>
+                  <Button Content="Sync from PC" Command="{Binding DateTime.SyncFromPcCommand}" Margin="8,0,0,0"/>
+                </StackPanel>
+              </Grid>
+              <Button Content="Upload" Command="{Binding DateTime.UploadCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,8"/>
+              <CheckBox Content="Auto-sync date/time from PC on connect"
+                        IsChecked="{Binding DateTime.AutoSyncOnConnect}"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="LIMITS" IconGeometry="{StaticResource Geo.Limits}" IsExpanded="False" PersistKey="Limits">
+          <c:Section.HeaderRight>
+            <c:StatusBadge Status="{Binding Limits.StatusKind}"
+                           Pulsing="{Binding Limits.StatusPulse}"
+                           Text="{Binding Limits.StatusText}"
+                           IsVisible="{Binding Limits.StatusVisible}"/>
+          </c:Section.HeaderRight>
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Horizon (°)" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="72" HorizontalAlignment="Left"
+                              Minimum="-30" Maximum="30" Increment="1"
+                              Value="{Binding Limits.HorizonLimit}" FormatString="0"/>
+                <TextBlock Grid.Column="2" Text="Overhead (°)" Classes="label"/>
+                <NumericUpDown Grid.Column="3" Width="72" HorizontalAlignment="Left"
+                              Minimum="60" Maximum="90" Increment="1"
+                              Value="{Binding Limits.OverheadLimit}" FormatString="0"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Merid. E (min)" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="72" HorizontalAlignment="Left"
+                              Minimum="-270" Maximum="270" Increment="1"
+                              Value="{Binding Limits.MeridianEastMin}" FormatString="0"/>
+                <TextBlock Grid.Column="2" Text="Merid. W (min)" Classes="label"/>
+                <NumericUpDown Grid.Column="3" Width="72" HorizontalAlignment="Left"
+                              Minimum="-270" Maximum="270" Increment="1"
+                              Value="{Binding Limits.MeridianWestMin}" FormatString="0"/>
+              </Grid>
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Sync limit (°)" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="72"
+                              Minimum="0" Maximum="180" Increment="1"
+                              Value="{Binding Limits.SyncLimit}" FormatString="0"/>
+                <TextBlock Grid.Column="2" Text="0 = disabled" Classes="hint" Margin="8,0,0,0"/>
+              </Grid>
+              <Button Content="Upload" Command="{Binding Limits.UploadCommand}" HorizontalAlignment="Right" MinWidth="100"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

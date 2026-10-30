@@ -1,0 +1,163 @@
+name: build
+
+# Builds the installer on a clean runner and, on request, publishes it as the
+# release the hub's own "check for updates" reads (Services/UpdateService.cs
+# looks for an asset named OnStepX-Setup-<version>.exe on /releases/latest).
+#
+# The version comes from Directory.Build.props and nowhere else: the tag, the
+# release name and the asset name are all derived from it, so a release cannot
+# disagree with the assembly version stamped into ASCOM.OnStepX.dll — which
+# matters, because the installer writes that version into the COM
+# InprocServer32 Assembly= token and activation fails if the two differ.
+#
+# Start a run from the Actions tab, or:
+#
+#     gh workflow run build.yml -R MichaelLevAstro/OnStepXAscomDriver -f release=true
+#
+# Pushing a v* tag builds and releases without the input.
+#
+# Linux and macOS legs land once the hub is Avalonia rather than WPF; the
+# matrix is shaped to take them as extra rows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to build"
+        type: string
+        default: main
+      release:
+        description: "Publish the installer as a release the app can update from"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+  # Build-only on a PR. The release job is gated on a tag or the input, so a
+  # pull request proves the installer still compiles without publishing
+  # anything. This is also the only way to exercise the workflow before it
+  # reaches main — workflow_dispatch is offered from the default branch only.
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # Directory.Build.props is the single source. A tag push additionally has
+      # to agree with it, or the release would be named one thing and contain
+      # another.
+      - name: Read the version
+        id: read
+        shell: bash
+        run: |
+          version=$(sed -n 's/.*<OnStepXVersion[^>]*>\([0-9][^<]*\)<.*/\1/p' Directory.Build.props | head -1)
+          test -n "$version" || { echo 'no OnStepXVersion in Directory.Build.props'; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Directory.Build.props version ${version}"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building $version"
+
+  build:
+    name: ${{ matrix.label }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows
+            artifact: installer/OnStepX-Setup-*.exe
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The runner images carry the .NET Framework 4.8 targeting pack already;
+      # this is for the SDK that drives the build and the NuGet restore of
+      # ASCOM.Platform (the Platform 6 interface assemblies, which no runner
+      # has in its GAC).
+      - uses: actions/setup-dotnet@v4
+        with:
+          # 8.0 drives the net48 build and the NuGet restore of ASCOM.Platform;
+          # 10.0 is what the Avalonia hub targets. Both, because one solution
+          # now spans .NET Framework and current .NET.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
+      # A tracked OnStepX-Setup-*.exe from a previous release sits in
+      # installer/. build-installer.cmd sweeps that folder before compiling, so
+      # the artifact glob can only match what this run produced.
+      - name: Build and package
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: build-installer.cmd Release ${{ needs.version.outputs.version }}
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: OnStepX-${{ matrix.label }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: release
+    needs: [version, build]
+    if: github.ref_type == 'tag' || inputs.release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      # Flattened. The Windows installer already carries the version in its
+      # name and is the name UpdateService matches on, so it is copied through
+      # untouched; the per-platform legs added later are renamed to carry their
+      # platform, since two files called the same thing are two files a browser
+      # cannot tell apart in one download folder.
+      - name: Gather
+        shell: bash
+        run: |
+          mkdir -p release
+          for one in downloaded/*/*; do
+            [ -f "$one" ] || continue
+            cp "$one" "release/$(basename "$one")"
+          done
+          ls -l release
+          test -n "$(ls -A release)" || { echo 'nothing to release'; exit 1; }
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Version ${{ needs.version.outputs.version }}
+          files: release/*
+          fail_on_unmatched_files: true
+          body: |
+            OnStepX ${{ needs.version.outputs.version }}.
+
+            Run `OnStepX-Setup-${{ needs.version.outputs.version }}.exe`. The
+            installer is not code-signed, so SmartScreen warns on first run —
+            More info, then Run anyway.
+
+            Upgrading over an older install is supported and keeps your
+            settings and sites.

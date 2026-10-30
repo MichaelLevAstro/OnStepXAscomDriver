@@ -1,0 +1,194 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.AdvancedTab"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+             xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters">
+  <UserControl.Resources>
+    <!-- The home-switch LEDs: WPF drove their fill with a DataTrigger per
+         value, which Avalonia has no equivalent for. -->
+    <cv:LedBrushConverter x:Key="LedBrush"/>
+  </UserControl.Resources>
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="14"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- LEFT col: Software Updates + Experimental + Diagnostics -->
+      <StackPanel Grid.Column="0">
+        <c:Section Title="SOFTWARE UPDATES" IconGeometry="{StaticResource Geo.Advanced}" PersistKey="AdvancedSoftwareUpdates">
+          <c:Section.Body>
+            <StackPanel>
+              <TextBlock Classes="hint" Margin="0,0,0,6">
+                <Run Text="Current version: "/>
+                <Run Text="{Binding Update.CurrentVersionText, Mode=OneWay}"/>
+              </TextBlock>
+              <CheckBox Content="Check for updates on startup"
+                        IsChecked="{Binding Update.CheckOnStartup}" Margin="0,0,0,8"/>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <Button Content="Check for Updates" Classes="primary"
+                        Command="{Binding Update.CheckCommand}" MinWidth="160"/>
+              </StackPanel>
+              <TextBlock Classes="hint" TextWrapping="Wrap"
+                         Text="{Binding Update.StatusText}"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="EXPERIMENTAL" IconGeometry="{StaticResource Geo.Advanced}" PersistKey="AdvancedExperimental">
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Enable Automatic Polar Alignment (Experimental)"
+                        IsChecked="{Binding Advanced.PolarAlignmentMode}" Margin="0,0,0,6"/>
+              <TextBlock Classes="hint" TextWrapping="Wrap"
+                         Text="Adds a Polar Alignment tab when ≥ 2 focuser axes are reported by the firmware."/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="DIAGNOSTICS &amp; LOGGING" IconGeometry="{StaticResource Geo.Console}" PersistKey="AdvancedDiagnostics">
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Notify on limits" IsChecked="{Binding Advanced.NotificationsEnabled}" Margin="0,0,0,6"/>
+              <CheckBox Content="Enable Verbose log file" IsChecked="{Binding Advanced.VerboseLog}" Margin="0,0,0,6"/>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Log path" Classes="label"/>
+                <TextBlock Grid.Column="1" Text="{Binding Advanced.LogPath, Mode=OneWay}"
+                           Classes="hint"
+                           TextTrimming="CharacterEllipsis"/>
+              </Grid>
+              <Button Content="Open Log Folder" Command="{Binding Advanced.OpenLogFolderCommand}"
+                      HorizontalAlignment="Left" MinWidth="140"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="HOME SWITCHES" IconGeometry="{StaticResource Geo.Console}" IsExpanded="False" PersistKey="AdvancedHomeSwitches">
+          <c:Section.Body>
+            <StackPanel>
+              <CheckBox Content="Monitor home switches (4× per second)"
+                        IsChecked="{Binding HomeSwitches.IsMonitoring}"
+                        IsEnabled="{Binding HomeSwitches.MountActionsEnabled}" Margin="0,0,0,6"/>
+              <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="{Binding HomeSwitches.StatusText}"/>
+
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="168"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="Switch expander (I2C)" Classes="label"/>
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                  <Ellipse Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center" Fill="{Binding HomeSwitches.ExpanderKey, Converter={StaticResource LedBrush}}"/>
+                  <TextBlock Text="{Binding HomeSwitches.ExpanderText}" Classes="mono" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Row="1" Text="Position memory (FRAM)" Classes="label"/>
+                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                  <Ellipse Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center" Fill="{Binding HomeSwitches.NvKey, Converter={StaticResource LedBrush}}"/>
+                  <TextBlock Text="{Binding HomeSwitches.NvText}" Classes="mono" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Grid>
+
+              <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="96"/><ColumnDefinition Width="72"/><ColumnDefinition Width="52"/>
+                  <ColumnDefinition Width="60"/><ColumnDefinition Width="68"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Axis"    Classes="label"/>
+                <TextBlock Grid.Column="1" Text="Switch"  Classes="label"/>
+                <TextBlock Grid.Column="2" Text="Pin"     Classes="label"/>
+                <TextBlock Grid.Column="3" Text="Trigger" Classes="label"/>
+                <TextBlock Grid.Column="4" Text="Sense"   Classes="label"/>
+                <TextBlock Grid.Column="5" Text="Angle"   Classes="label"/>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding HomeSwitches.Axes}" Margin="0,0,0,8">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Grid Margin="0,2">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96"/><ColumnDefinition Width="72"/><ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="60"/><ColumnDefinition Width="68"/><ColumnDefinition Width="*"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Text="{Binding Name}" Classes="body"/>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Ellipse Margin="0,0,6,0" VerticalAlignment="Center" Width="10" Height="10" Fill="{Binding StateKey, Converter={StaticResource LedBrush}}"/>
+                        <TextBlock Text="{Binding StateText}" Classes="mono" VerticalAlignment="Center"/>
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding PinText}"     Classes="mono"/>
+                      <TextBlock Grid.Column="3" Text="{Binding TriggerText}" Classes="mono"/>
+                      <TextBlock Grid.Column="4" Text="{Binding ReverseText}" Classes="mono"/>
+                      <TextBlock Grid.Column="5" Text="{Binding AngleText}"   Classes="mono"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Transitions (newest first)" Classes="label" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="Clear" Classes="sm"
+                        Command="{Binding HomeSwitches.ClearCommand}"/>
+              </Grid>
+              <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" Margin="0,0,0,8">
+                <ScrollViewer MaxHeight="150">
+                  <ItemsControl ItemsSource="{Binding HomeSwitches.Transitions}" Margin="6,4">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Classes="mono" TextWrapping="Wrap">
+                          <Run Text="{Binding Time, Mode=OneWay}"/>
+                          <Run Text="  "/>
+                          <Run Text="{Binding Axis, Mode=OneWay}"/>
+                          <Run Text="  "/>
+                          <Run Text="{Binding Change, Mode=OneWay}"/>
+                          <Run Text="  "/>
+                          <Run Text="{Binding Where, Mode=OneWay}"/>
+                        </TextBlock>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Border>
+
+              <TextBlock Classes="hint" TextWrapping="Wrap"
+                         Text="Jog one axis slowly with the slew pad across where home should be (counterweights down, pointing at the pole). The firmware expects each switch to read ON on the clockwise side of home (axis 1 seen from the front, axis 2 from above) and OFF on the other. A switch that never changes is dead or unwired; one that reads the wrong way round needs its HIGH/LOW trigger flipped. Needs the patched firmware with :hS#."/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+
+      <!-- RIGHT col: Pier / Meridian + Danger Zone -->
+      <StackPanel Grid.Column="2">
+        <c:Section Title="PIER / MERIDIAN POLICY" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="AdvancedPierMeridian">
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Preferred pier side" Classes="label"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding PierMeridian.PierOptions}"
+                          SelectedIndex="{Binding PierMeridian.PreferredPierIndex}"/>
+              </Grid>
+              <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="Recommended: Best. Prevents spurious flips from plate-solve corrections near the meridian."/>
+              <CheckBox Content="Pause at home on meridian flip"
+                        IsChecked="{Binding PierMeridian.PauseAtHome}"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="DANGER ZONE" IconGeometry="{StaticResource Geo.Advanced}" IsExpanded="False" PersistKey="AdvancedDanger">
+          <c:Section.Body>
+            <StackPanel>
+              <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,8"
+                         Text="Wipes mount non-volatile memory. Site, model, park position, and limits will be lost."/>
+              <Button Content="NV Reset…" Classes="danger"
+                      Command="{Binding ParkHome.NvResetCommand}"
+                      HorizontalAlignment="Stretch"/>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

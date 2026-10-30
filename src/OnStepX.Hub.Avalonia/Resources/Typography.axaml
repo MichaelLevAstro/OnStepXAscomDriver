@@ -1,0 +1,75 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Port of the WPF hub's Typography.xaml.
+
+    Two things could not come across unchanged:
+
+    WPF named a text style with x:Key and applied it with StaticResource.
+    Avalonia has no keyed Style — a Style is selected, not referenced — so each
+    one becomes a class selector and the markup says Classes="label" instead of
+    Style="{StaticResource Text.Label}".
+
+    Fonts are avares:// rather than pack://, and the fallback list is spelled
+    with commas after the family name just as it was. Inter and JetBrains Mono
+    ship in Assets/Fonts; the fallbacks keep the UI readable if a build ever
+    loses them.
+  -->
+
+  <Styles.Resources>
+    <FontFamily x:Key="Font.Sans">avares://OnStepHub/Assets/Fonts/Inter.ttf#Inter, Segoe UI, Noto Sans, sans-serif</FontFamily>
+    <FontFamily x:Key="Font.Mono">avares://OnStepHub/Assets/Fonts/JetBrainsMono.ttf#JetBrains Mono, Cascadia Mono, Consolas, DejaVu Sans Mono, monospace</FontFamily>
+
+    <x:Double x:Key="Font.Size.Body">12</x:Double>
+    <x:Double x:Key="Font.Size.Label">11.5</x:Double>
+    <x:Double x:Key="Font.Size.Title">12.5</x:Double>
+    <x:Double x:Key="Font.Size.Section">12</x:Double>
+    <x:Double x:Key="Font.Size.Mono">12</x:Double>
+    <x:Double x:Key="Font.Size.Hint">11.5</x:Double>
+  </Styles.Resources>
+
+  <Style Selector="TextBlock.label">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Label}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Label}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style Selector="TextBlock.body">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Mono}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style Selector="TextBlock.hint">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Hint}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextFaint}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+  <Style Selector="TextBlock.sectionTitle">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Section}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+  </Style>
+
+  <Style Selector="TextBlock.windowTitle">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Title}"/>
+    <Setter Property="FontWeight" Value="Medium"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
+</Styles>

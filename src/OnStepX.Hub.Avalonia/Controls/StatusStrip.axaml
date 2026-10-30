@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+             x:Class="ASCOM.OnStepX.Controls.StatusStrip"
+             Height="36"
+             Background="{DynamicResource Brush.Panel2}"
+             Focusable="False">
+
+  <!-- Connection, tracking and slew state on the left; live coordinates on
+       the right. On every tab, so the mount's state is always in view. -->
+
+  <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1" Padding="14,0">
+    <Grid ColumnDefinitions="Auto,*,Auto">
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+        <c:StatusBadge Status="{Binding Connection.StatusKind}"
+                       Pulsing="{Binding Connection.StatusPulse}"
+                       Text="{Binding Connection.StatusText}"/>
+
+        <Border Width="1" Height="16" Background="{DynamicResource Brush.BorderStrong}" Margin="10,0"/>
+
+        <!-- Both badges are mounted; the slewing one takes over while a slew
+             is running. "!" is Avalonia's inverted binding — the WPF hub
+             needed a converter for this. -->
+        <Panel VerticalAlignment="Center">
+          <c:StatusBadge Status="{Binding Tracking.StateKind}"
+                         Pulsing="{Binding Tracking.StatePulse}"
+                         Text="{Binding Tracking.StateText}"
+                         IsVisible="{Binding !Tracking.IsSlewing}"/>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                      IsVisible="{Binding Tracking.IsSlewing}">
+            <c:PulseDot Status="Info" Pulsing="True" Margin="0,0,6,0"/>
+            <TextBlock Text="Slewing" FontWeight="Medium" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Brush.Info}" Margin="0,0,8,0"/>
+            <TextBlock Text="{Binding Tracking.SlewCoord}" Classes="mono"
+                       Foreground="{DynamicResource Brush.TextDim}"/>
+          </StackPanel>
+        </Panel>
+      </StackPanel>
+
+      <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+        <Border Classes="chip">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="RA " Foreground="{DynamicResource Brush.TextFaint}" FontSize="11"
+                       FontFamily="{DynamicResource Font.Mono}" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding Position.RightAscension}" Foreground="{DynamicResource Brush.Text}"
+                       FontFamily="{DynamicResource Font.Mono}" FontSize="11.5" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Border>
+        <Border Classes="chip">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Dec " Foreground="{DynamicResource Brush.TextFaint}" FontSize="11"
+                       FontFamily="{DynamicResource Font.Mono}" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding Position.Declination}" Foreground="{DynamicResource Brush.Text}"
+                       FontFamily="{DynamicResource Font.Mono}" FontSize="11.5" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Border>
+        <!-- ConsoleVisible is a settable bool rather than a command, so this
+             is a toggle bound straight to it, as in the WPF hub. -->
+        <ToggleButton Classes="sm" Content="Console" Height="24" Padding="8,0"
+                      IsChecked="{Binding Console.ConsoleVisible, Mode=TwoWay}"
+                      ToolTip.Tip="Show or hide the command console"/>
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

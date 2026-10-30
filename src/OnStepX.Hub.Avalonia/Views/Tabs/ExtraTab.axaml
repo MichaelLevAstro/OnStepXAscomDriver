@@ -1,0 +1,312 @@
+<UserControl x:Class="ASCOM.OnStepX.Views.Tabs.ExtraTab"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls">
+  <Grid>
+    <!-- Empty-state placeholder: shown when neither Focuser nor Rotator is
+         available (either firmware doesn't expose them, or PA mode is on and
+         has commandeered AXIS3/4). -->
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                IsVisible="{Binding IsExtraTabEmpty}"
+                MaxWidth="520">
+      <Path Width="32" Height="32" HorizontalAlignment="Center" Margin="0,0,0,12"
+            Stretch="Uniform"
+            Stroke="{DynamicResource Brush.TextFaint}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round"
+            Data="{StaticResource Geo.Focuser}"/>
+      <TextBlock Text="No relevant sections to show"
+                 HorizontalAlignment="Center"
+                 FontSize="14" Foreground="{DynamicResource Brush.TextDim}"
+                 Margin="0,0,0,6"/>
+      <TextBlock Classes="hint" TextWrapping="Wrap" TextAlignment="Center"
+                 Text="Enable AXIS3_DRIVER_MODEL (rotator) and/or AXIS4_DRIVER_MODEL (focuser) in the firmware Config.h and reflash to use them here."/>
+    </StackPanel>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="14"
+                  IsVisible="{Binding !IsExtraTabEmpty}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="14"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+      <!-- LEFT: FOCUSER (or its hint card) -->
+      <StackPanel Grid.Column="0">
+        <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
+                   IsVisible="{Binding Focuser.IsAvailable}"
+                   PersistKey="Focuser">
+          <c:Section.HeaderRight>
+            <StackPanel Orientation="Horizontal">
+              <c:StatusBadge Status="{Binding Focuser.StatusKind}"
+                             Pulsing="{Binding Focuser.StatusPulse}"
+                             Text="{Binding Focuser.StatusText}"
+                             Margin="0,0,8,0"/>
+              <Button Classes="sm" Content="Advanced…"
+                      Command="{Binding Focuser.OpenAdvancedCommand}"/>
+            </StackPanel>
+          </c:Section.HeaderRight>
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Margin="0,0,0,6"
+                    IsVisible="{Binding Focuser.FocuserSelectionVisible}">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Focuser #" Classes="label"/>
+                <ComboBox Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                          ItemsSource="{Binding Focuser.FocuserOptions}"
+                          SelectedItem="{Binding Focuser.ActiveIndex}"
+                          IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+              </Grid>
+              <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Position" Classes="label"/>
+                <TextBlock Grid.Column="1" Text="{Binding Focuser.Position}" Classes="mono" Margin="0,0,8,0"/>
+                <TextBlock Grid.Column="2" Text="{Binding Focuser.PositionMm}" Classes="hint"/>
+              </Grid>
+              <ProgressBar Margin="0,0,0,6"
+                           Minimum="{Binding Focuser.MinSteps}"
+                           Maximum="{Binding Focuser.MaxSteps}"
+                           Value="{Binding Focuser.Position, Mode=OneWay}"/>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Goto" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                              Minimum="{Binding Focuser.MinSteps}" Maximum="{Binding Focuser.MaxSteps}" Increment="1"
+                              Value="{Binding Focuser.TargetPosition}"
+                              IsEnabled="{Binding Focuser.MountActionsEnabled}" FormatString="0"/>
+                <Button Grid.Column="2" Classes="sm primary"
+                        Content="Goto" Command="{Binding Focuser.GotoCommand}" Margin="6,0,0,0"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Move" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <Button Classes="sm" Content="◀ In"  Command="{Binding Focuser.MoveInCommand}"  Margin="0,0,4,0"/>
+                  <Button Classes="sm primary" Content="Halt" Command="{Binding Focuser.HaltCommand}" Margin="0,0,4,0"/>
+                  <Button Classes="sm" Content="Out ▶" Command="{Binding Focuser.MoveOutCommand}"/>
+                </StackPanel>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Step" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                              Minimum="1" Maximum="100000" Increment="10"
+                              Value="{Binding Focuser.StepSize}"
+                              IsEnabled="{Binding Focuser.MountActionsEnabled}" FormatString="0"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Rate" Classes="label"/>
+                <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                          ItemsSource="{Binding Focuser.GotoRateOptions}"
+                          DisplayMemberBinding="{Binding Label}"
+                          SelectedValueBinding="{Binding Value}"
+                          SelectedValue="{Binding Focuser.GotoRatePreset}"
+                          IsEnabled="{Binding Focuser.MountActionsEnabled}"/>
+              </Grid>
+              <UniformGrid Columns="3" Margin="0,0,0,6">
+                <Button Content="Set Home" Command="{Binding Focuser.SetHomeCommand}" Margin="0,0,3,0"/>
+                <Button Content="Go Home"  Command="{Binding Focuser.GoHomeCommand}"  Margin="3,0,3,0"/>
+                <Button Content="Zero"     Command="{Binding Focuser.ZeroCommand}"    Margin="3,0,0,0"/>
+              </UniformGrid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Backlash" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                              Minimum="0" Maximum="10000" Increment="1"
+                              Value="{Binding Focuser.Backlash}"
+                              IsEnabled="{Binding Focuser.MountActionsEnabled}" FormatString="0"/>
+                <Button Grid.Column="2" Classes="sm"
+                        Content="Apply" Command="{Binding Focuser.ApplyBacklashCommand}" Margin="6,0,0,0"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Limits" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <TextBlock Text="min " Classes="hint"/>
+                  <TextBlock Text="{Binding Focuser.MinSteps}" Classes="mono" Margin="0,0,12,0"/>
+                  <TextBlock Text="max " Classes="hint"/>
+                  <TextBlock Text="{Binding Focuser.MaxSteps}" Classes="mono"/>
+                </StackPanel>
+              </Grid>
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Temp" Classes="label"/>
+                <TextBlock Grid.Column="1" Text="{Binding Focuser.TemperatureText}" Classes="mono"/>
+              </Grid>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <!-- Hint card when no focuser configured. -->
+        <c:Section Title="FOCUSER" IconGeometry="{StaticResource Geo.Focuser}"
+                   IsVisible="{Binding ShowFocuserHint}">
+          <c:Section.Body>
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Text="No focuser detected on this OnStepX board. Enable AXIS4_DRIVER_MODEL (or higher) in the firmware Config.h and reflash to use a focuser here."/>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+
+      <!-- RIGHT: ROTATOR (or its hint card) -->
+      <StackPanel Grid.Column="2">
+        <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
+                   IsVisible="{Binding Rotator.IsAvailable}"
+                   PersistKey="Rotator">
+          <c:Section.HeaderRight>
+            <StackPanel Orientation="Horizontal">
+              <c:StatusBadge Status="{Binding Rotator.StatusKind}"
+                             Pulsing="{Binding Rotator.StatusPulse}"
+                             Text="{Binding Rotator.StatusText}"
+                             Margin="0,0,8,0"/>
+              <Button Classes="sm" Content="Advanced…"
+                      Command="{Binding Rotator.OpenAdvancedCommand}"/>
+            </StackPanel>
+          </c:Section.HeaderRight>
+          <c:Section.Body>
+            <StackPanel>
+              <Grid Width="130" Height="130" HorizontalAlignment="Center" Margin="0,2,0,8">
+                <Ellipse Stroke="{DynamicResource Brush.InputBorder}" StrokeThickness="1.4"
+                         Fill="{DynamicResource Brush.InputBg}"/>
+                <Path Stroke="{DynamicResource Brush.TextFaint}" StrokeThickness="1"
+                      Data="M65,5 L65,14 M125,65 L116,65 M65,125 L65,116 M5,65 L14,65"/>
+                <TextBlock Text="0°" FontSize="10"
+                           Foreground="{DynamicResource Brush.TextFaint}"
+                           HorizontalAlignment="Center" VerticalAlignment="Top"
+                           Margin="0,16,0,0"/>
+                <TextBlock Text="90"  FontSize="9" Foreground="{DynamicResource Brush.TextFaint}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <TextBlock Text="180" FontSize="9" Foreground="{DynamicResource Brush.TextFaint}"
+                           HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,14"/>
+                <TextBlock Text="270" FontSize="9" Foreground="{DynamicResource Brush.TextFaint}"
+                           HorizontalAlignment="Left"  VerticalAlignment="Center" Margin="14,0,0,0"/>
+                <Path Stroke="{DynamicResource Brush.Accent}" StrokeThickness="2.4" StrokeLineCap="Round"
+                      Data="M65,65 L65,18">
+                  <Path.RenderTransform>
+                    <RotateTransform CenterX="65" CenterY="65"
+                                     Angle="{Binding Rotator.DisplayAngleDegSafe}"/>
+                  </Path.RenderTransform>
+                </Path>
+                <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.Accent}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Rotator.AngleText}"
+                           Classes="mono" FontSize="14"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Margin="0,46,0,0"/>
+              </Grid>
+
+              <Border Margin="0,0,0,8" Padding="8,6" CornerRadius="4"
+                      Background="{DynamicResource Brush.AccentSoft}"
+                      BorderBrush="{DynamicResource Brush.Accent}" BorderThickness="1"
+                      IsVisible="{Binding Rotator.RestoreVisible}">
+                <StackPanel>
+                  <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel>
+                      <TextBlock Text="Last position recorded" Classes="label"/>
+                      <TextBlock Text="{Binding Rotator.LastSavedAngleText}" Classes="mono" FontSize="14"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="sm primary"
+                            Content="Restore" Command="{Binding Rotator.RestoreLastAngleCommand}"
+                            ToolTip.Tip="Update displayed angle to the saved value. Does not move the rotator."
+                            Margin="0,0,4,0"/>
+                    <Button Grid.Column="2" Classes="sm"
+                            Content="Dismiss" Command="{Binding Rotator.DismissRestoreCommand}"
+                            ToolTip.Tip="Forget the saved value and start fresh."/>
+                  </Grid>
+                  <TextBlock Classes="hint" TextWrapping="Wrap"
+                             Text="Firmware doesn't persist rotator position across power cycles. Restore re-applies a sync offset so the app angle matches last session. Use only if the camera train hasn't moved while powered off."/>
+                </StackPanel>
+              </Border>
+
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Position" Classes="label"/>
+                <TextBlock Grid.Column="1" Text="{Binding Rotator.AngleText}" Classes="mono"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Goto (°)" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                              Minimum="0" Maximum="360" Increment="0.1"
+                              Value="{Binding Rotator.TargetDeg}"
+                              IsEnabled="{Binding Rotator.MountActionsEnabled}" FormatString="0.00"/>
+                <Button Grid.Column="2" Classes="sm primary"
+                        Content="Goto" Command="{Binding Rotator.GotoCommand}" Margin="6,0,0,0"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Move" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <Button Classes="sm"        Content="◀ CCW" Command="{Binding Rotator.JogCcwCommand}" Margin="0,0,4,0"/>
+                  <Button Classes="sm primary" Content="Halt"  Command="{Binding Rotator.HaltCommand}"   Margin="0,0,4,0"/>
+                  <Button Classes="sm"        Content="CW ▶"  Command="{Binding Rotator.JogCwCommand}"/>
+                </StackPanel>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Move rate" Classes="label"/>
+                <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                          ItemsSource="{Binding Rotator.MoveRateOptions}"
+                          DisplayMemberBinding="{Binding Label}"
+                          SelectedValueBinding="{Binding Value}"
+                          SelectedValue="{Binding Rotator.MoveRatePreset}"
+                          IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Goto rate" Classes="label"/>
+                <ComboBox Grid.Column="1" Width="120" HorizontalAlignment="Left"
+                          ItemsSource="{Binding Rotator.GotoRateOptions}"
+                          DisplayMemberBinding="{Binding Label}"
+                          SelectedValueBinding="{Binding Value}"
+                          SelectedValue="{Binding Rotator.GotoRatePreset}"
+                          IsEnabled="{Binding Rotator.MountActionsEnabled}"/>
+              </Grid>
+              <UniformGrid Columns="3" Margin="0,0,0,6">
+                <Button Content="Half-Travel" Command="{Binding Rotator.HalfTravelCommand}" Margin="0,0,3,0"/>
+                <Button Content="Go Home"     Command="{Binding Rotator.GoHomeCommand}"     Margin="3,0,3,0"/>
+                <Button Content="Zero"        Command="{Binding Rotator.ZeroCommand}"       Margin="3,0,0,0"/>
+              </UniformGrid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Backlash" Classes="label"/>
+                <NumericUpDown Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                              Minimum="0" Maximum="10000" Increment="1"
+                              Value="{Binding Rotator.Backlash}"
+                              IsEnabled="{Binding Rotator.MountActionsEnabled}" FormatString="0"/>
+                <Button Grid.Column="2" Classes="sm"
+                        Content="Apply" Command="{Binding Rotator.ApplyBacklashCommand}" Margin="6,0,0,0"/>
+              </Grid>
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Limits" Classes="label"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <TextBlock Text="min " Classes="hint"/>
+                  <TextBlock Text="{Binding Rotator.MinDeg}" Classes="mono" Margin="0,0,4,0"/>
+                  <TextBlock Text="°"   Classes="hint" Margin="0,0,12,0"/>
+                  <TextBlock Text="max " Classes="hint"/>
+                  <TextBlock Text="{Binding Rotator.MaxDeg}" Classes="mono" Margin="0,0,4,0"/>
+                  <TextBlock Text="°"   Classes="hint"/>
+                </StackPanel>
+              </Grid>
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="92"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Step size" Classes="label"/>
+                <TextBlock Grid.Column="1" Text="{Binding Rotator.StepSizeText}" Classes="mono"/>
+              </Grid>
+            </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="ROTATOR" IconGeometry="{StaticResource Geo.Rotator}"
+                   IsVisible="{Binding ShowRotatorHint}">
+          <c:Section.Body>
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Text="No rotator detected on this OnStepX board. Enable AXIS3_DRIVER_MODEL in the firmware Config.h and reflash to use a rotator here."/>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+      </Grid>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

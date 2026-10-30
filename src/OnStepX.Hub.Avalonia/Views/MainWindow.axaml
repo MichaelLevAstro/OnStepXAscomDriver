@@ -1,0 +1,98 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+        xmlns:t="clr-namespace:ASCOM.OnStepX.Views.Tabs"
+        xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters"
+        x:Class="ASCOM.OnStepX.Views.MainWindow"
+        Title="OnStepHub"
+        Width="1280" Height="780"
+        MinWidth="1000" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Icon="avares://OnStepHub/Assets/AppIcon.ico"
+        Background="{DynamicResource Brush.Bg}"
+        Foreground="{DynamicResource Brush.Text}"
+        FontFamily="{DynamicResource Font.Sans}"
+        FontSize="13">
+
+  <!-- The WPF hub removes the system caption and draws its own through
+       WindowChrome. This keeps the native one: the Pi runs labwc rather than
+       Windows, and custom chrome there costs a pile of per-compositor
+       special-casing for a border the window manager already draws. -->
+
+  <Window.Resources>
+    <cv:StringEqualsConverter x:Key="TabActive"/>
+  </Window.Resources>
+
+  <Window.Styles>
+    <!-- Tab strip. WPF built these items in code-behind and animated an
+         underline across them; Avalonia can express the whole thing in
+         markup, because a class can be bound: Classes.active flips with the
+         comparison and the underline is just a bottom border. -->
+    <Style Selector="Button.tab">
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="Padding" Value="14,0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0,0,0,2"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextDim}"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+    </Style>
+    <Style Selector="Button.tab /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0,0,0,2"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Panel2}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+    <Style Selector="Button.tab.active /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+  </Window.Styles>
+
+  <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1">
+    <DockPanel LastChildFill="True">
+
+      <c:TitleBar DockPanel.Dock="Top"/>
+      <c:StatusStrip DockPanel.Dock="Top"/>
+
+      <Border DockPanel.Dock="Top"
+              Background="{DynamicResource Brush.Panel}"
+              BorderBrush="{DynamicResource Brush.Border}"
+              BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Margin="8,0">
+          <Button Classes="tab" Content="Setup" Command="{Binding SetActiveTabCommand}" CommandParameter="setup"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=setup}"/>
+          <Button Classes="tab" Content="Main" Command="{Binding SetActiveTabCommand}" CommandParameter="main"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
+          <Button Classes="tab" Content="Extra" Command="{Binding SetActiveTabCommand}" CommandParameter="extra"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}"/>
+          <!-- The polar tab only exists while the mount reports it can do it. -->
+          <Button Classes="tab" Content="Polar Alignment" Command="{Binding SetActiveTabCommand}" CommandParameter="polar"
+                  IsVisible="{Binding PolarAlignment.IsAvailable}"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}"/>
+          <Button Classes="tab" Content="Advanced" Command="{Binding SetActiveTabCommand}" CommandParameter="adv"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}"/>
+        </StackPanel>
+      </Border>
+
+      <!-- Console drawer along the bottom. Mounted whether or not it is
+           showing, so its view model keeps buffering lines. -->
+      <c:ConsoleView DockPanel.Dock="Bottom" DataContext="{Binding Console}"/>
+
+      <!-- Every tab stays mounted and is shown or hidden, so the view models
+           behind the hidden ones keep polling - same as the WPF hub. -->
+      <Panel>
+        <t:SetupTab    IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=setup}"/>
+        <t:MainTab     IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
+        <t:ExtraTab    IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}"/>
+        <t:PolarTab    IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}"/>
+        <t:AdvancedTab IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}"/>
+      </Panel>
+    </DockPanel>
+  </Border>
+</Window>

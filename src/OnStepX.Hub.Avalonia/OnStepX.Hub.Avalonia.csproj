@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!--
+      net10.0 because it is the current LTS. net8.0 leaves support on
+      10 Nov 2026 and the Linux build is self-contained, so targeting it would
+      mean shipping an unsupported runtime inside the Pi tarball.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>ASCOM.OnStepX</RootNamespace>
+    <!-- Renamed to OnStepX.Hub when the WPF project is retired. Both exist for
+         now, and two assemblies cannot share a name in one solution. -->
+    <AssemblyName>OnStepHub</AssemblyName>
+    <Product>OnStepX</Product>
+    <Company>OnStepX Community</Company>
+    <AssemblyTitle>OnStepHub</AssemblyTitle>
+    <Description>OnStepX mount mediator — owns the serial/TCP link, serves ASCOM and INDI clients.</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <!-- The hub formats coordinates with InvariantCulture throughout; it has no
+         localised resources to lose, and this trims startup and size. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <!-- Diagnostics only in Debug: F12 opens the live visual tree, which is the
+         Avalonia equivalent of WPF's live property explorer. -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="12.1.4" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnStepX.Core\OnStepX.Core.csproj" />
+    <ProjectReference Include="..\OnStepX.Shared\OnStepX.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+</Project>
