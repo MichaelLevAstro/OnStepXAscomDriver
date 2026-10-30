@@ -17,7 +17,12 @@ call :classify "%~1"
 call :classify "%~2"
 
 set ROOT=%~dp0
-set SOLUTION=%ROOT%OnStepX.sln
+rem The Windows installer ships the WPF hub and the ASCOM driver. Building
+rem those two directly, rather than the whole solution, keeps this script off
+rem the Avalonia hub, which targets current .NET and would otherwise make an
+rem installer build require a second SDK it has no use for.
+set HUBPROJ=%ROOT%src\OnStepX.Hub\OnStepX.Hub.csproj
+set DRVPROJ=%ROOT%src\OnStepX.Driver\OnStepX.Driver.csproj
 set ISS=%ROOT%installer\OnStepX.AscomDriver.iss
 set PROPS=%ROOT%Directory.Build.props
 
@@ -43,12 +48,14 @@ if not defined ISCC (
     exit /b 2
 )
 
-echo === [1/2] dotnet build (%CONFIG%) — three projects via OnStepX.sln ===
-if defined VERSION (
-    dotnet build "%SOLUTION%" -c %CONFIG% -nologo -v minimal -p:Version=%VERSION% -p:AssemblyVersion=%VERSION%.0 -p:FileVersion=%VERSION%.0
-) else (
-    dotnet build "%SOLUTION%" -c %CONFIG% -nologo -v minimal
+echo === [1/2] dotnet build (%CONFIG%) — driver + WPF hub ===
+set STAMP=-p:Version=%VERSION% -p:AssemblyVersion=%VERSION%.0 -p:FileVersion=%VERSION%.0
+dotnet build "%DRVPROJ%" -c %CONFIG% -nologo -v minimal %STAMP%
+if errorlevel 1 (
+    echo [ERROR] Driver build failed.
+    exit /b 1
 )
+dotnet build "%HUBPROJ%" -c %CONFIG% -nologo -v minimal %STAMP%
 if errorlevel 1 (
     echo [ERROR] Build failed.
     exit /b 1

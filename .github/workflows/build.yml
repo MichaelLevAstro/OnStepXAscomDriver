@@ -92,7 +92,12 @@ jobs:
       # has in its GAC).
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          # 8.0 drives the net48 build and the NuGet restore of ASCOM.Platform;
+          # 10.0 is what the Avalonia hub targets. Both, because one solution
+          # now spans .NET Framework and current .NET.
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Inno Setup
         if: runner.os == 'Windows'
