@@ -1,105 +1,109 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+        xmlns:t="clr-namespace:ASCOM.OnStepX.Views.Tabs"
+        xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters"
         x:Class="ASCOM.OnStepX.Views.MainWindow"
         Title="OnStepX ASCOM Driver"
-        Width="520" MinWidth="440"
-        Height="520" MinHeight="420"
+        Width="1280" Height="780"
+        MinWidth="1000" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
         Icon="avares://OnStepX.Hub.Avalonia/Assets/AppIcon.ico"
         Background="{DynamicResource Brush.Bg}"
-        FontFamily="{DynamicResource Font.Sans}">
+        Foreground="{DynamicResource Brush.Text}"
+        FontFamily="{DynamicResource Font.Sans}"
+        FontSize="13">
 
-  <!--
-    First window of the Avalonia port. Deliberately not the finished hub: it
-    binds the same MainViewModel the WPF hub uses, so what it proves is that
-    OnStepX.Core drives a non-WPF UI unchanged — connect, poll, live position,
-    theme, fonts and commands.
+  <!-- The WPF hub removes the system caption and draws its own through
+       WindowChrome. This keeps the native one: the Pi runs labwc rather than
+       Windows, and custom chrome there costs a pile of per-compositor
+       special-casing for a border the window manager already draws. -->
 
-    The tabs, the slew pad, the console and the visualizer are still to come;
-    the standard window chrome stands in for the custom TitleBar until then.
-  -->
+  <Window.Resources>
+    <cv:StringEqualsConverter x:Key="TabActive"/>
+  </Window.Resources>
 
-  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+  <Window.Styles>
+    <!-- Tab strip. WPF built these items in code-behind and animated an
+         underline across them; Avalonia can express the whole thing in
+         markup, because a class can be bound: Classes.active flips with the
+         comparison and the underline is just a bottom border. -->
+    <Style Selector="Button.tab">
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="MinWidth" Value="0"/>
+      <Setter Property="Padding" Value="14,0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0,0,0,2"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextDim}"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+    </Style>
+    <Style Selector="Button.tab /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0,0,0,2"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Panel2}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+    <Style Selector="Button.tab.active /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}"/>
+    </Style>
+  </Window.Styles>
 
-    <!-- Identity + theme -->
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,14">
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-        <TextBlock Classes="windowTitle" Text="{Binding AppTitle}"/>
-        <TextBlock Classes="hint" Text="{Binding AppVersion}"/>
-      </StackPanel>
-      <Button Grid.Column="1" Content="Theme"
-              Command="{Binding ToggleThemeCommand}"
-              Padding="10,4"/>
-    </Grid>
+  <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1">
+    <DockPanel LastChildFill="True">
 
-    <!-- Connection -->
-    <Border Grid.Row="1"
-            Background="{DynamicResource Brush.Panel}"
-            BorderBrush="{DynamicResource Brush.Border}"
-            BorderThickness="1" CornerRadius="6"
-            Padding="14" Margin="0,0,0,12">
-      <StackPanel Spacing="10">
-        <TextBlock Classes="sectionTitle" Text="CONNECTION"/>
+      <c:TitleBar DockPanel.Dock="Top"/>
+      <c:StatusStrip DockPanel.Dock="Top"/>
 
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" >
-          <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="State" Margin="0,0,12,4"/>
-          <TextBlock Grid.Row="0" Grid.Column="1" Classes="body" Text="{Binding State}" Margin="0,0,0,4"/>
-
-          <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Transport" Margin="0,0,12,4"/>
-          <TextBlock Grid.Row="1" Grid.Column="1" Classes="body" Text="{Binding Connection.TransportKind}" Margin="0,0,0,4"/>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Clients" Margin="0,0,12,0"/>
-          <TextBlock Grid.Row="2" Grid.Column="1" Classes="body" Text="{Binding ClientCountText}"/>
-        </Grid>
-
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button Content="Connect"
-                  Command="{Binding Connection.ConnectCommand}"
-                  IsEnabled="{Binding Connection.ConnectButtonEnabled}"
-                  MinWidth="96"/>
-          <Button Content="Cancel"
-                  Command="{Binding Connection.CancelConnectCommand}"
-                  IsEnabled="{Binding Connection.CancelButtonEnabled}"
-                  MinWidth="96"/>
-          <Button Content="Disconnect"
-                  Command="{Binding Connection.DisconnectCommand}"
-                  IsEnabled="{Binding Connection.DisconnectButtonEnabled}"
-                  MinWidth="96"/>
+      <Border DockPanel.Dock="Top"
+              Background="{DynamicResource Brush.Panel}"
+              BorderBrush="{DynamicResource Brush.Border}"
+              BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal" Margin="8,0">
+          <Button Classes="tab" Content="Setup" Command="{Binding SetActiveTabCommand}" CommandParameter="setup"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=setup}"/>
+          <Button Classes="tab" Content="Main" Command="{Binding SetActiveTabCommand}" CommandParameter="main"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
+          <Button Classes="tab" Content="Extra" Command="{Binding SetActiveTabCommand}" CommandParameter="extra"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}"/>
+          <!-- The polar tab only exists while the mount reports it can do it. -->
+          <Button Classes="tab" Content="Polar Alignment" Command="{Binding SetActiveTabCommand}" CommandParameter="polar"
+                  IsVisible="{Binding PolarAlignment.IsAvailable}"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}"/>
+          <Button Classes="tab" Content="Advanced" Command="{Binding SetActiveTabCommand}" CommandParameter="adv"
+                  Classes.active="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}"/>
         </StackPanel>
-      </StackPanel>
-    </Border>
+      </Border>
 
-    <!-- Live position, straight off the poll loop in OnStepX.Core -->
-    <Border Grid.Row="2"
-            Background="{DynamicResource Brush.Panel}"
-            BorderBrush="{DynamicResource Brush.Border}"
-            BorderThickness="1" CornerRadius="6"
-            Padding="14" VerticalAlignment="Top">
-      <StackPanel Spacing="10">
-        <TextBlock Classes="sectionTitle" Text="CURRENT POSITION"/>
+      <!-- Every tab stays mounted and is shown or hidden, so the view models
+           behind the hidden ones keep polling — same as the WPF hub. -->
+      <Panel>
+        <t:MainTab IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
 
-        <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-          <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="RA"/>
-          <TextBlock Grid.Row="0" Grid.Column="1" Classes="mono" Text="{Binding Position.RightAscension}"/>
-
-          <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Dec"/>
-          <TextBlock Grid.Row="1" Grid.Column="1" Classes="mono" Text="{Binding Position.Declination}"/>
-
-          <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Altitude"/>
-          <TextBlock Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Position.Altitude}"/>
-
-          <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Azimuth"/>
-          <TextBlock Grid.Row="3" Grid.Column="1" Classes="mono" Text="{Binding Position.Azimuth}"/>
-
-          <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Pier side"/>
-          <TextBlock Grid.Row="4" Grid.Column="1" Classes="mono" Text="{Binding Position.PierSide}"/>
-
-          <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="LST / mount"/>
-          <TextBlock Grid.Row="5" Grid.Column="1" Classes="mono" Text="{Binding Position.Lst}"/>
-        </Grid>
-      </StackPanel>
-    </Border>
-
-    <TextBlock Grid.Row="3" Classes="hint" Margin="0,14,0,0" TextWrapping="Wrap"
-               Text="Avalonia port in progress — tabs, slew pad, console and visualizer are still to come."/>
-  </Grid>
+        <!-- Not ported yet. Named so it is obvious which tab is missing
+             rather than showing an empty stage. -->
+        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=setup}">
+          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Text="Setup tab not ported yet — use the Windows hub."/>
+        </Border>
+        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}">
+          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Text="Extra tab not ported yet — use the Windows hub."/>
+        </Border>
+        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}">
+          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Text="Polar Alignment tab not ported yet — use the Windows hub."/>
+        </Border>
+        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}">
+          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Text="Advanced tab not ported yet — use the Windows hub."/>
+        </Border>
+      </Panel>
+    </DockPanel>
+  </Border>
 </Window>

@@ -1,0 +1,293 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Port of the WPF hub's Controls.xaml.
+
+    Not a line-for-line one. That file is 672 lines because WPF restyling means
+    replacing a control's whole ControlTemplate and then reaching back into it
+    with named triggers. Avalonia already gives Fluent's templates named parts,
+    so the same look comes out of a setter on a selector. Nothing visual is
+    being given up — the brushes, sizes, radii and padding below are the same
+    values — there is simply far less scaffolding around them.
+
+    The other difference: WPF keyed each variant (Style x:Key="Btn.Primary")
+    and markup asked for it by name. Avalonia selects on classes, so a button
+    says Classes="primary" and the base Button style applies underneath.
+  -->
+
+  <Styles.Resources>
+    <!-- Sizing tokens from the design: input/select/button 28px high, the
+         small variant 24, numeric fields 72 and 56 wide. -->
+    <x:Double x:Key="Size.Control">28</x:Double>
+    <x:Double x:Key="Size.ControlSm">24</x:Double>
+    <x:Double x:Key="Size.NumWidth">72</x:Double>
+    <x:Double x:Key="Size.NumWidthSm">56</x:Double>
+    <CornerRadius x:Key="Size.Radius">4</CornerRadius>
+    <CornerRadius x:Key="Size.RadiusLg">6</CornerRadius>
+    <Thickness x:Key="Size.SectionPad">12,10,12,12</Thickness>
+    <Thickness x:Key="Size.SectionHeaderPad">10,8</Thickness>
+  </Styles.Resources>
+
+  <!-- ───────── Buttons ───────── -->
+
+  <Style Selector="Button">
+    <Setter Property="Height" Value="{StaticResource Size.Control}"/>
+    <Setter Property="MinWidth" Value="64"/>
+    <Setter Property="Padding" Value="12,0"/>
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}"/>
+    <Setter Property="FontWeight" Value="Medium"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.BtnBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource Size.Radius}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+
+  <!-- Fluent's Button paints through this part, so hover and pressed have to
+       be set on it rather than on the Button itself. -->
+  <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.BtnBgHover}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorderHover}"/>
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}"/>
+  </Style>
+  <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.BtnBgActive}"/>
+  </Style>
+  <Style Selector="Button:disabled">
+    <Setter Property="Opacity" Value="0.45"/>
+    <Setter Property="Cursor" Value="Arrow"/>
+  </Style>
+  <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.BtnBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text}"/>
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.AccentInk}"/>
+  </Style>
+  <Style Selector="Button.primary /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.AccentInk}"/>
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.AccentInk}"/>
+    <Setter Property="Opacity" Value="0.88"/>
+  </Style>
+
+  <Style Selector="Button.danger">
+    <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+    <Setter Property="Foreground" Value="White"/>
+  </Style>
+  <Style Selector="Button.danger /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="TextElement.Foreground" Value="White"/>
+  </Style>
+  <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}"/>
+    <Setter Property="TextElement.Foreground" Value="White"/>
+    <Setter Property="Opacity" Value="0.88"/>
+  </Style>
+
+  <Style Selector="Button.sm">
+    <Setter Property="Height" Value="{StaticResource Size.ControlSm}"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="Padding" Value="8,0"/>
+    <Setter Property="FontSize" Value="11.5"/>
+  </Style>
+
+  <!-- Window chrome: flat, borderless, no hit-test target beyond the glyph. -->
+  <Style Selector="Button.winChrome">
+    <Setter Property="Width" Value="42"/>
+    <Setter Property="Height" Value="38"/>
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.TextDim}"/>
+    <Setter Property="Focusable" Value="False"/>
+  </Style>
+  <Style Selector="Button.winChrome /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Button.winChrome:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brush.BtnBgHover}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Button.winClose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#e5484d"/>
+    <Setter Property="TextElement.Foreground" Value="White"/>
+  </Style>
+
+  <!-- ───────── Inputs ───────── -->
+
+  <Style Selector="TextBox">
+    <Setter Property="MinHeight" Value="{StaticResource Size.Control}"/>
+    <Setter Property="Height" Value="{StaticResource Size.Control}"/>
+    <Setter Property="Padding" Value="8,0"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Mono}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="SelectionBrush" Value="{DynamicResource Brush.Selection}"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource Size.Radius}"/>
+  </Style>
+  <Style Selector="TextBox /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+  </Style>
+  <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorderHover}"/>
+  </Style>
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+  </Style>
+  <Style Selector="TextBox.multiline">
+    <Setter Property="Height" Value="NaN"/>
+    <Setter Property="VerticalContentAlignment" Value="Top"/>
+    <Setter Property="Padding" Value="8,6"/>
+  </Style>
+
+  <!-- NumericUpDown replaces the WPF hub's hand-built NumericBox. Fluent's
+       spinner buttons are sized for touch and left only 34px of 120 for the
+       number, so they are narrowed to roughly the 14px the WPF control used
+       and the value is right-aligned as it was there. -->
+  <Style Selector="NumericUpDown">
+    <Setter Property="MinHeight" Value="{StaticResource Size.Control}"/>
+    <Setter Property="Height" Value="{StaticResource Size.Control}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Mono}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource Size.Radius}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Right"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="NumericUpDown /template/ RepeatButton">
+    <Setter Property="Width" Value="18"/>
+    <Setter Property="MinWidth" Value="18"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="NumericUpDown /template/ TextBox">
+    <Setter Property="TextAlignment" Value="Right"/>
+    <Setter Property="Padding" Value="4,0"/>
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="MinHeight" Value="{StaticResource Size.Control}"/>
+    <Setter Property="Height" Value="{StaticResource Size.Control}"/>
+    <Setter Property="Padding" Value="8,0"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource Size.Radius}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="ComboBox /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorder}"/>
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Brush.InputBg}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.InputBorderHover}"/>
+  </Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="Padding" Value="8,4"/>
+  </Style>
+
+  <Style Selector="CheckBox">
+    <Setter Property="FontFamily" Value="{DynamicResource Font.Sans}"/>
+    <Setter Property="FontSize" Value="{DynamicResource Font.Size.Body}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+    <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
+  </Style>
+
+  <Style Selector="Slider">
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="Slider /template/ Border#TrackBackground">
+    <Setter Property="Background" Value="{DynamicResource Brush.ScrollTrack}"/>
+  </Style>
+  <Style Selector="Slider /template/ Thumb">
+    <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+  </Style>
+
+  <Style Selector="ProgressBar.slim">
+    <Setter Property="Height" Value="4"/>
+    <Setter Property="MinHeight" Value="4"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="Background" Value="{DynamicResource Brush.ScrollTrack}"/>
+  </Style>
+
+  <!-- ───────── Surfaces ───────── -->
+
+  <!-- The chip used for status pills in the title bar and status strip. -->
+  <Style Selector="Border.chip">
+    <Setter Property="Background" Value="{DynamicResource Brush.Chip}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+
+  <Style Selector="Border.sectionCard">
+    <Setter Property="Background" Value="{DynamicResource Brush.Panel}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource Size.RadiusLg}"/>
+  </Style>
+
+  <!-- Section icon glyphs: 24x24 stroked paths, as in the WPF hub. -->
+  <Style Selector="Path.icon">
+    <Setter Property="Stroke" Value="{DynamicResource Brush.Accent}"/>
+    <Setter Property="StrokeThickness" Value="1.8"/>
+    <Setter Property="StrokeLineCap" Value="Round"/>
+    <Setter Property="StrokeJoin" Value="Round"/>
+    <Setter Property="Fill" Value="Transparent"/>
+    <Setter Property="Width" Value="16"/>
+    <Setter Property="Height" Value="16"/>
+    <Setter Property="Stretch" Value="Uniform"/>
+  </Style>
+
+  <Style Selector="ScrollViewer">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+
+</Styles>

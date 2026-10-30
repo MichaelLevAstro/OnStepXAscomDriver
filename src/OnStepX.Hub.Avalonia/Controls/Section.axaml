@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ASCOM.OnStepX.Controls.Section"
+             Focusable="False"
+             Margin="0,0,0,8">
+
+  <!-- Collapsible card. Every tab is a stack of these.
+       The WPF version bound its parts with RelativeSource AncestorType;
+       Avalonia spells the same thing as a $parent[UserControl] binding. -->
+
+  <Border Classes="sectionCard">
+    <StackPanel>
+
+      <Border Name="HeaderBorder"
+              Background="Transparent" Cursor="Hand"
+              PointerReleased="OnHeaderClick"
+              Padding="{StaticResource Size.SectionHeaderPad}">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+
+          <Path Name="IconPath" Grid.Column="0"
+                Width="14" Height="14" Margin="0,0,8,0"
+                Stretch="Uniform"
+                Stroke="{DynamicResource Brush.Accent}"
+                StrokeThickness="1.6"
+                StrokeLineCap="Round" StrokeJoin="Round"
+                Data="{Binding IconGeometry, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+
+          <TextBlock Name="TitleText" Grid.Column="1"
+                     Text="{Binding Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                     Classes="sectionTitle"
+                     VerticalAlignment="Center"
+                     FontSize="11.5"
+                     Foreground="{DynamicResource Brush.Text}"/>
+
+          <ContentPresenter Grid.Column="2"
+                            Content="{Binding HeaderRight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Margin="0,0,8,0" VerticalAlignment="Center"/>
+
+          <Path Name="Chevron" Grid.Column="3"
+                Width="12" Height="8"
+                Stretch="Uniform"
+                Stroke="{DynamicResource Brush.TextFaint}" StrokeThickness="1.4"
+                StrokeLineCap="Round"
+                Data="M2 4 L6 8 L10 4"
+                RenderTransformOrigin="50%,50%">
+            <Path.RenderTransform>
+              <RotateTransform Angle="0"/>
+            </Path.RenderTransform>
+          </Path>
+        </Grid>
+      </Border>
+
+      <Border Name="BodyBorder"
+              BorderThickness="0,1,0,0"
+              BorderBrush="{DynamicResource Brush.Border}"
+              Padding="{StaticResource Size.SectionPad}">
+        <ContentPresenter Content="{Binding Body, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+      </Border>
+
+    </StackPanel>
+  </Border>
+</UserControl>

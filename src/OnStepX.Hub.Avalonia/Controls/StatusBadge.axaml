@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+             x:Class="ASCOM.OnStepX.Controls.StatusBadge"
+             Focusable="False">
+  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+    <c:PulseDot Status="{Binding Status, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                Pulsing="{Binding Pulsing, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                Margin="0,0,6,0"/>
+    <TextBlock Text="{Binding Text, RelativeSource={RelativeSource AncestorType=UserControl}}"
+               Foreground="{Binding TextBrush, RelativeSource={RelativeSource AncestorType=UserControl}}"
+               FontFamily="{DynamicResource Font.Sans}"
+               FontSize="{DynamicResource Font.Size.Body}"
+               FontWeight="Medium"
+               VerticalAlignment="Center"/>
+  </StackPanel>
+</UserControl>

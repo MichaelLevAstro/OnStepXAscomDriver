@@ -1,4 +1,4 @@
-<Application xmlns="https://github.com/avaloniaui"
+﻿<Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ASCOM.OnStepX.App"
              RequestedThemeVariant="Dark">
@@ -10,9 +10,18 @@
          Fluent draws. -->
     <FluentTheme />
     <StyleInclude Source="avares://OnStepX.Hub.Avalonia/Resources/Typography.axaml"/>
+    <StyleInclude Source="avares://OnStepX.Hub.Avalonia/Resources/Controls.axaml"/>
   </Application.Styles>
 
-  <!-- ThemeService adds the Dark/Light dictionary at startup and swaps it on
-       toggle, so nothing is merged here. -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://OnStepX.Hub.Avalonia/Resources/Icons.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <!-- ThemeService appends the Dark/Light dictionary after these at startup
+       and swaps it on toggle, so the palette is not merged here. -->
 
 </Application>

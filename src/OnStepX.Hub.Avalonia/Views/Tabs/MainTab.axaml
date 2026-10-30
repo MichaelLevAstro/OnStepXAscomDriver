@@ -1,0 +1,181 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:ASCOM.OnStepX.Controls"
+             x:Class="ASCOM.OnStepX.Views.Tabs.MainTab">
+
+  <!-- Ported from the WPF MainTab. Three differences, all forced:
+       - Text styles are classes now (Classes="label") rather than keyed
+         styles, because Avalonia has no keyed Style.
+       - NumericBox became Avalonia's NumericUpDown, which already does the
+         parse / clamp / step / spinner work the custom control was written
+         for. Minimum/Maximum/Increment/FormatString replace Min/Max/Step/
+         DecimalPlaces.
+       - The 3D visualizer is not ported; it was HelixToolkit, which has no
+         Avalonia equivalent, so its card carries a note instead. -->
+
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="14">
+    <Grid ColumnDefinitions="*,14,1.05*">
+
+      <StackPanel Grid.Column="0">
+
+        <c:Section Title="CURRENT POSITION" IconGeometry="{StaticResource Geo.Position}" PersistKey="CurrentPosition">
+          <c:Section.Body>
+          <Grid ColumnDefinitions="92,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Classes="label" Text="RA"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Classes="mono" Text="{Binding Position.RightAscension}"/>
+            <TextBlock Grid.Row="1" Classes="label" Text="Dec"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Classes="mono" Text="{Binding Position.Declination}"/>
+            <TextBlock Grid.Row="2" Classes="label" Text="Altitude"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Position.Altitude}"/>
+            <TextBlock Grid.Row="3" Classes="label" Text="Azimuth"/>
+            <TextBlock Grid.Row="3" Grid.Column="1" Classes="mono" Text="{Binding Position.Azimuth}"/>
+            <TextBlock Grid.Row="4" Classes="label" Text="Pier side"/>
+            <TextBlock Grid.Row="4" Grid.Column="1" Classes="mono" Text="{Binding Position.PierSide}"/>
+            <TextBlock Grid.Row="5" Classes="label" Text="LST / mount"/>
+            <TextBlock Grid.Row="5" Grid.Column="1" Classes="mono" Text="{Binding Position.Lst}"/>
+          </Grid>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="TRACKING / SLEW" IconGeometry="{StaticResource Geo.Tracking}" PersistKey="TrackingSlew">
+          <c:Section.Body>
+          <StackPanel>
+            <CheckBox Content="Tracking enabled"
+                      IsChecked="{Binding Tracking.TrackingEnabled}"
+                      IsEnabled="{Binding Tracking.MountActionsEnabled}"
+                      Margin="0,0,0,8"/>
+
+            <Grid ColumnDefinitions="92,*" Margin="0,0,0,6">
+              <TextBlock Classes="label" Text="Tracking rate"/>
+              <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                        ItemsSource="{Binding Tracking.TrackingModes}"
+                        SelectedItem="{Binding Tracking.TrackingMode}"
+                        IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="92,Auto,Auto,*" Margin="0,0,0,6">
+              <TextBlock Classes="label" Text="Slew (°/s)"/>
+              <NumericUpDown Grid.Column="1" Width="124"
+                             Minimum="{Binding Tracking.SlewRateMin}"
+                             Maximum="{Binding Tracking.SlewRateMax}"
+                             Increment="0.25" FormatString="0.00"
+                             Value="{Binding Tracking.SlewRate}"
+                             IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+              <TextBlock Grid.Column="2" Classes="hint" Text="×" Margin="6,0"/>
+              <Slider Grid.Column="3" VerticalAlignment="Center"
+                      Minimum="{Binding Tracking.SlewRateMin}"
+                      Maximum="{Binding Tracking.SlewRateMax}"
+                      Value="{Binding Tracking.SlewRate}"
+                      IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="92,*" Margin="0,0,0,6">
+              <TextBlock Classes="label" Text="Guide rate (×)"/>
+              <NumericUpDown Grid.Column="1" Width="124" HorizontalAlignment="Left"
+                             Minimum="0.01" Maximum="1.0" Increment="0.05" FormatString="0.00"
+                             Value="{Binding Tracking.GuideRate}"
+                             IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="92,*">
+              <TextBlock Classes="label" Text="At meridian"/>
+              <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                        ItemsSource="{Binding Tracking.MeridianActions}"
+                        SelectedItem="{Binding Tracking.MeridianAction}"
+                        IsEnabled="{Binding Tracking.MountActionsEnabled}"/>
+            </Grid>
+          </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="MANUAL SLEW" IconGeometry="{StaticResource Geo.Slew}" PersistKey="ManualSlew">
+          <c:Section.Body>
+          <StackPanel>
+            <c:SlewPad PadVM="{Binding ParkHome}"
+                       IsArmed="{Binding ParkHome.MountActionsEnabled}"
+                       Height="220" Margin="0,0,0,6"/>
+
+            <Grid ColumnDefinitions="92,Auto,*" Margin="0,0,0,6">
+              <TextBlock Classes="label" Text="Spiral step (°)"/>
+              <NumericUpDown Grid.Column="1" Width="124"
+                             Minimum="0.01" Maximum="20" Increment="0.05" FormatString="0.00"
+                             Value="{Binding ParkHome.SpiralStepDeg}"
+                             ToolTip.Tip="Great-circle degrees moved per step out. Set this to the camera field of view so consecutive spiral arms just touch."/>
+              <Button Grid.Column="2" Content="SPIRAL — hold" Margin="6,0,0,0"
+                      HorizontalAlignment="Stretch"
+                      IsEnabled="{Binding ParkHome.MountActionsEnabled}"
+                      PointerPressed="OnSpiralPress"
+                      PointerReleased="OnSpiralRelease"
+                      PointerExited="OnSpiralRelease"
+                      ToolTip.Tip="Hold to run a box spiral search outward from the current position. Release to stop. Uses the Slew rate; pier side is held so a leg cannot trigger a meridian flip."/>
+            </Grid>
+
+            <Button Content="Slew Rate Info…" HorizontalAlignment="Stretch"
+                    Command="{Binding ParkHome.SlewRateInfoCommand}"/>
+          </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+
+        <c:Section Title="PARK / HOME / GO TO" IconGeometry="{StaticResource Geo.Park}" PersistKey="ParkHomeGoto">
+          <c:Section.Body>
+          <StackPanel>
+            <UniformGrid Columns="2" Margin="0,0,0,6">
+              <Button Content="Park"     Command="{Binding ParkHome.ParkCommand}"       Margin="0,0,3,3" HorizontalAlignment="Stretch"/>
+              <Button Content="Unpark"   Command="{Binding ParkHome.UnparkCommand}"     Margin="3,0,0,3" HorizontalAlignment="Stretch"/>
+              <Button Content="Set Home" Command="{Binding ParkHome.SetHomeCommand}"    Margin="0,3,3,0" HorizontalAlignment="Stretch"/>
+              <Button Content="Go Home"  Command="{Binding ParkHome.SearchHomeCommand}" Margin="3,3,0,0" HorizontalAlignment="Stretch"/>
+            </UniformGrid>
+
+            <Button Content="Set Park Here" HorizontalAlignment="Stretch" Margin="0,0,0,6"
+                    Command="{Binding ParkHome.SetParkHereCommand}"/>
+
+            <UniformGrid Columns="2" Margin="0,0,0,6">
+              <Button Content="Save PA Position" Margin="0,0,3,0" HorizontalAlignment="Stretch"
+                      Command="{Binding ParkHome.SavePaPositionCommand}"
+                      ToolTip.Tip="Capture the current physical mount position so it can be slewed to later. Stores HA+Dec, or Alt+Az on Alt-Az mounts, so the same physical orientation is restored year-round."/>
+              <Button Content="Slew to PA Position" Margin="3,0,0,0" HorizontalAlignment="Stretch"
+                      Command="{Binding ParkHome.SlewToPaPositionCommand}"
+                      ToolTip.Tip="Slew back to the saved physical position."/>
+            </UniformGrid>
+
+            <Button Classes="primary" HorizontalAlignment="Stretch" Margin="0,0,0,6"
+                    Command="{Binding ParkHome.SlewToTargetCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Path Width="12" Height="12" Stretch="Uniform"
+                      Stroke="{DynamicResource Brush.AccentInk}" StrokeThickness="1.6"
+                      Fill="Transparent" Data="{StaticResource Geo.Target}"
+                      VerticalAlignment="Center"/>
+                <TextBlock Text="Slew to Target…" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+          </StackPanel>
+          </c:Section.Body>
+        </c:Section>
+      </StackPanel>
+
+      <StackPanel Grid.Column="2">
+        <c:Section Title="VISUALIZER" IconGeometry="{StaticResource Geo.Position}" PersistKey="Visualizer">
+          <c:Section.Body>
+          <Border Height="240"
+                  Background="{DynamicResource Brush.PanelInset}"
+                  BorderBrush="{DynamicResource Brush.Border}"
+                  BorderThickness="1" CornerRadius="4">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
+              <TextBlock Classes="label" HorizontalAlignment="Center" Text="3D VIEW NOT PORTED"/>
+              <TextBlock Classes="hint" HorizontalAlignment="Center" TextWrapping="Wrap"
+                         MaxWidth="260" TextAlignment="Center"
+                         Text="The mount visualizer used HelixToolkit, which is WPF-only. Use the Windows hub for it until it is rebuilt."/>
+            </StackPanel>
+          </Border>
+          </c:Section.Body>
+        </c:Section>
+
+        <StackPanel HorizontalAlignment="Right" Margin="0,4,0,0">
+          <c:StatusBadge Status="{Binding ClientCountKind}"
+                         Pulsing="{Binding ClientCountPulse}"
+                         Text="{Binding ClientCountText}"/>
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</UserControl>

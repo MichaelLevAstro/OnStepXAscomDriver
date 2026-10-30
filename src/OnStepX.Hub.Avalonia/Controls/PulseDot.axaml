@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ASCOM.OnStepX.Controls.PulseDot"
+             Width="20" Height="20"
+             Focusable="False"
+             ClipToBounds="False">
+
+  <!-- Connected / warn / error dot with an optional halo.
+       WPF drove the halo with a Storyboard built in code-behind. Avalonia
+       animates from a style, so the pulse is a keyframe animation on the
+       "pulsing" class and the code-behind only decides when that class is set.
+       The 20x20 host leaves the halo room to grow without being clipped by the
+       parent card corner radius. -->
+
+  <UserControl.Styles>
+    <Style Selector="Ellipse#Halo">
+      <Setter Property="Opacity" Value="0.25"/>
+    </Style>
+    <Style Selector="UserControl.pulsing Ellipse#Halo">
+      <Style.Animations>
+        <Animation Duration="0:0:1.6" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%">
+            <Setter Property="Opacity" Value="0.30"/>
+            <Setter Property="ScaleTransform.ScaleX" Value="1.0"/>
+            <Setter Property="ScaleTransform.ScaleY" Value="1.0"/>
+          </KeyFrame>
+          <KeyFrame Cue="50%">
+            <Setter Property="Opacity" Value="0.05"/>
+            <Setter Property="ScaleTransform.ScaleX" Value="1.4"/>
+            <Setter Property="ScaleTransform.ScaleY" Value="1.4"/>
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Opacity" Value="0.30"/>
+            <Setter Property="ScaleTransform.ScaleX" Value="1.0"/>
+            <Setter Property="ScaleTransform.ScaleY" Value="1.0"/>
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </UserControl.Styles>
+
+  <Panel ClipToBounds="False">
+    <Ellipse Name="Halo"
+             Width="14" Height="14"
+             HorizontalAlignment="Center" VerticalAlignment="Center"
+             Fill="{Binding StatusBrush, RelativeSource={RelativeSource AncestorType=UserControl}}"
+             RenderTransformOrigin="50%,50%">
+      <Ellipse.RenderTransform>
+        <ScaleTransform ScaleX="1" ScaleY="1"/>
+      </Ellipse.RenderTransform>
+    </Ellipse>
+    <Ellipse Width="8" Height="8"
+             HorizontalAlignment="Center" VerticalAlignment="Center"
+             Fill="{Binding StatusBrush, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+  </Panel>
+</UserControl>

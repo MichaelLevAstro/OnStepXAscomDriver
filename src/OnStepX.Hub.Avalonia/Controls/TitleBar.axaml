@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ASCOM.OnStepX.Controls.TitleBar"
+             Height="38"
+             Background="{DynamicResource Brush.Panel}"
+             Focusable="False">
+
+  <!-- The WPF hub draws its own caption through WindowChrome and puts the
+       minimise / maximise / close buttons here. This one keeps the native
+       title bar instead: the window manager on a Pi is not Windows, custom
+       chrome there is a class of bugs with no payoff, and the buttons are
+       already drawn correctly by the compositor.
+
+       What is left is what the WPF title bar also carried — identity, the
+       update banner, and the theme switch. -->
+
+  <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1" Padding="14,0">
+    <Grid ColumnDefinitions="Auto,*,Auto">
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+        <TextBlock Classes="windowTitle" Text="{Binding AppTitle}"/>
+        <TextBlock Classes="hint" Text="{Binding AppVersion}"/>
+      </StackPanel>
+
+      <!-- Update banner. Shown only when a newer release exists; the WPF hub
+           lost this to a renamed property once, so it is bound to the bool
+           rather than to anything that defaults to visible. -->
+      <Button Grid.Column="1"
+              Classes="sm"
+              HorizontalAlignment="Center" VerticalAlignment="Center"
+              IsVisible="{Binding Update.BannerVisible}"
+              Command="{Binding Update.OpenDialogCommand}"
+              ToolTip.Tip="Click to view release notes and install">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Ellipse Width="6" Height="6" Fill="{DynamicResource Brush.Accent}" VerticalAlignment="Center"/>
+          <TextBlock Text="Update available" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+
+      <!-- The WPF title bar has a pair of buttons, one per mode, and lights
+           the active one. MainViewModel exposes only ToggleThemeCommand, so
+           this is the one control that command actually maps to. -->
+      <Button Grid.Column="2" Classes="sm" Content="Theme"
+              Command="{Binding ToggleThemeCommand}"
+              VerticalAlignment="Center"
+              ToolTip.Tip="Switch between the dark and light palettes"/>
+    </Grid>
+  </Border>
+</UserControl>
