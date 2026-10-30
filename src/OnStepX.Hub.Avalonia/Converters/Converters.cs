@@ -45,6 +45,44 @@ namespace ASCOM.OnStepX.Converters
             => throw new NotSupportedException();
     }
 
+    // Status key -> LED fill, for the home-switch diagnostics.
+    //
+    // WPF spelled these as a Style with one DataTrigger per value. Avalonia
+    // styles select on classes and pseudo-classes, not on arbitrary bound
+    // values, so a converter is both shorter and clearer than binding a class
+    // per possible key.
+    //
+    //   Ok / On  -> green      the thing is present and reading true
+    //   Fail     -> red        it answered and said no
+    //   Off      -> faint      present and reading false
+    //   None     -> amber      no switch configured on this axis
+    //   anything else          the neutral border colour, meaning not known yet
+    public sealed class LedBrushConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            string key = value as string ?? "";
+            string resource = key switch
+            {
+                "Ok" or "On" => "Brush.Ok",
+                "Fail" => "Brush.Danger",
+                "Off" => "Brush.TextFaint",
+                "None" => "Brush.Warn",
+                _ => "Brush.Border",
+            };
+
+            if (Application.Current != null
+                && Application.Current.TryFindResource(resource, out var res)
+                && res is IBrush brush)
+                return brush;
+
+            return Brushes.Gray;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotSupportedException();
+    }
+
     // true -> one star, false -> zero. Collapses the third column when the
     // board reports no focuser or rotator.
     public sealed class BoolToGridLengthConverter : IValueConverter

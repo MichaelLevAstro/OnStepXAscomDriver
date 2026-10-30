@@ -80,29 +80,18 @@
         </StackPanel>
       </Border>
 
-      <!-- Every tab stays mounted and is shown or hidden, so the view models
-           behind the hidden ones keep polling — same as the WPF hub. -->
-      <Panel>
-        <t:MainTab IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
+      <!-- Console drawer along the bottom. Mounted whether or not it is
+           showing, so its view model keeps buffering lines. -->
+      <c:ConsoleView DockPanel.Dock="Bottom" DataContext="{Binding Console}"/>
 
-        <!-- Not ported yet. Named so it is obvious which tab is missing
-             rather than showing an empty stage. -->
-        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=setup}">
-          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
-                     Text="Setup tab not ported yet — use the Windows hub."/>
-        </Border>
-        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}">
-          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
-                     Text="Extra tab not ported yet — use the Windows hub."/>
-        </Border>
-        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}">
-          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
-                     Text="Polar Alignment tab not ported yet — use the Windows hub."/>
-        </Border>
-        <Border IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}">
-          <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center"
-                     Text="Advanced tab not ported yet — use the Windows hub."/>
-        </Border>
+      <!-- Every tab stays mounted and is shown or hidden, so the view models
+           behind the hidden ones keep polling - same as the WPF hub. -->
+      <Panel>
+        <t:SetupTab    IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=setup}"/>
+        <t:MainTab     IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=main}"/>
+        <t:ExtraTab    IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=extra}"/>
+        <t:PolarTab    IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=polar}"/>
+        <t:AdvancedTab IsVisible="{Binding ActiveTab, Converter={StaticResource TabActive}, ConverterParameter=adv}"/>
       </Panel>
     </DockPanel>
   </Border>

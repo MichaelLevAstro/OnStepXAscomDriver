@@ -1,0 +1,118 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ASCOM.OnStepX.ViewModels;assembly=OnStepX.Core"
+             xmlns:cv="clr-namespace:ASCOM.OnStepX.Converters"
+             x:Class="ASCOM.OnStepX.Controls.ConsoleView">
+
+  <!-- The command console, as a drawer along the bottom. Stays mounted while
+       hidden so its view model keeps buffering lines. -->
+
+  <UserControl.Resources>
+    <cv:ConsoleResponseBrushConverter x:Key="RespBrush"/>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- WPF replaced the whole ListBoxItem template to get flush rows and its
+         own hover/selected colours. In Avalonia the same thing is three
+         selectors against Fluent's existing template. -->
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.BtnBgHover}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Border Background="{DynamicResource Brush.Panel}"
+          BorderBrush="{DynamicResource Brush.Border}"
+          BorderThickness="0,1,0,0"
+          IsVisible="{Binding ConsoleVisible}">
+    <DockPanel LastChildFill="True">
+
+      <Border DockPanel.Dock="Top"
+              Background="{DynamicResource Brush.Panel2}"
+              BorderBrush="{DynamicResource Brush.Border}"
+              BorderThickness="0,0,0,1"
+              Padding="14,8">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Path Width="14" Height="14" Stretch="Uniform" Margin="0,0,8,0"
+                  Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round"
+                  Data="{StaticResource Geo.Console}"/>
+            <TextBlock Classes="sectionTitle" Text="CONSOLE" Margin="0,0,12,0"/>
+            <CheckBox Content="Enabled"     IsChecked="{Binding IoEnabled}"  Margin="0,0,12,0"/>
+            <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}" Margin="0,0,12,0"/>
+            <Button Classes="sm" Content="Copy"  Command="{Binding CopyCommand}"  Margin="0,0,6,0"/>
+            <Button Classes="sm" Content="Clear" Command="{Binding ClearCommand}"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+            <TextBox Width="280" Margin="0,0,6,0"
+                     Text="{Binding CommandInput}"
+                     IsEnabled="{Binding MountActionsEnabled}"
+                     Watermark=":GVP#   — leading ':' and trailing '#' auto-added"
+                     KeyDown="OnCmdInputKeyDown"/>
+            <Button Classes="sm primary" Content="Send" Command="{Binding SendCommand}"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBox Width="160" Height="24" FontSize="11.5" Margin="0,0,6,0"
+                     Text="{Binding Filter}"
+                     ToolTip.Tip="Filter (case-sensitive)"/>
+            <Button Classes="sm" Content="Clear filter" Command="{Binding ClearFilterCommand}"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Border Background="{DynamicResource Brush.ConsoleBg}"
+              BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,1,0,0">
+        <ListBox Name="LogList"
+                 ItemsSource="{Binding Entries.Items}"
+                 SelectionMode="Multiple"
+                 Background="Transparent" BorderThickness="0"
+                 Height="220">
+          <ListBox.ContextMenu>
+            <ContextMenu>
+              <MenuItem Header="Copy selected lines" Command="{Binding CopySelectedCommand}"/>
+              <MenuItem Header="Copy all visible"    Command="{Binding CopyCommand}"/>
+            </ContextMenu>
+          </ListBox.ContextMenu>
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="vm:ConsoleEntry">
+              <Grid Margin="14,2,14,2" ColumnDefinitions="100,80,30,*,90">
+                <TextBlock Text="{Binding Timestamp}"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.ColTs}"/>
+                <TextBlock Grid.Column="1" Text="{Binding Command}"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.ColCmd}"/>
+                <TextBlock Grid.Column="2" Text="→"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.TextFaint}"
+                           IsVisible="{Binding Command, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <TextBlock Grid.Column="3" Text="{Binding Response}"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{Binding Kind, Converter={StaticResource RespBrush}}"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="4" Text="{Binding Elapsed}"
+                           TextAlignment="Right"
+                           FontFamily="{DynamicResource Font.Mono}" FontSize="12"
+                           Foreground="{DynamicResource Brush.ColMeta}"/>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Border>
+    </DockPanel>
+  </Border>
+</UserControl>
