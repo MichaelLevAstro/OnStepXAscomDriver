@@ -25,6 +25,15 @@ namespace ASCOM.OnStepX.Config
         // Driver-side sync distance guardrail (degrees). 0 disables.
         public static int    SyncLimitDeg { get => GetInt("SyncLimitDeg", 0); set => SetInt("SyncLimitDeg", value); }
 
+        // LX200 TCP bridge — serves the mount to KStars/Ekos through the stock
+        // indi_lx200_OnStep driver in network mode, while the hub keeps the
+        // serial port. Off by default, and loopback-only unless asked
+        // otherwise: an unauthenticated port that can slew a telescope does
+        // not belong on a network without the user saying so.
+        public static bool   Lx200BridgeEnabled     { get => GetBool("Lx200BridgeEnabled", false);  set => SetBool("Lx200BridgeEnabled", value); }
+        public static int    Lx200BridgePort        { get => GetInt("Lx200BridgePort", 9624);       set => SetInt("Lx200BridgePort", value); }
+        public static bool   Lx200BridgeAllowRemote { get => GetBool("Lx200BridgeAllowRemote", false); set => SetBool("Lx200BridgeAllowRemote", value); }
+
         public static double SlewRateDegPerSec { get => GetDouble("SlewRateDegPerSec", 3.0); set => SetDouble("SlewRateDegPerSec", value); }
         // Spiral search: great-circle degrees the mount moves per step out.
         // Set this to the camera FOV so consecutive spiral arms just touch.

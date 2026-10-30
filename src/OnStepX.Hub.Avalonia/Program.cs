@@ -31,6 +31,7 @@ namespace ASCOM.OnStepX
     {
         internal static Mutex SingleInstanceMutex;
         private static HubPipeServer _pipeServer;
+        private static Lx200TcpServer _lx200Bridge;
 
         [STAThread]
         public static int Main(string[] args)
@@ -70,8 +71,20 @@ namespace ASCOM.OnStepX
             _pipeServer = new HubPipeServer(MountSession.Instance, showHubHandler: ShowMainWindow);
             _pipeServer.Start();
 
+            // The LX200 bridge is what Ekos talks to. Off unless asked for,
+            // because it is a port that can slew a telescope.
+            if (DriverSettings.Lx200BridgeEnabled)
+            {
+                _lx200Bridge = new Lx200TcpServer(
+                    MountSession.Instance,
+                    DriverSettings.Lx200BridgePort,
+                    DriverSettings.Lx200BridgeAllowRemote);
+                _lx200Bridge.Start();
+            }
+
             int rc = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
+            try { _lx200Bridge?.Stop(); } catch { }
             try { _pipeServer?.Stop(); } catch { }
             try { MountSession.Instance.ForceCloseAll(); } catch { }
             try { DebugLogger.Shutdown(); } catch { }
