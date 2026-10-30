@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ASCOM.OnStepX.Hardware.Transport;
 using ASCOM.OnStepX.Platform;
 using Microsoft.Toolkit.Uwp.Notifications;
@@ -22,7 +22,7 @@ namespace ASCOM.OnStepX.Hub.Platform
                 var builder = new ToastContentBuilder()
                     .AddText(title ?? "")
                     .AddText(body ?? "")
-                    .AddAttributionText("OnStepX Hub");
+                    .AddAttributionText("OnStepHub");
 
                 if (severity == NotificationSeverity.Warning || severity == NotificationSeverity.Error)
                     builder.SetToastScenario(ToastScenario.Reminder);

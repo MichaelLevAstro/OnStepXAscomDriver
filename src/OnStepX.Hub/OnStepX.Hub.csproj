@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -12,7 +12,7 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Product>OnStepX</Product>
     <Company>OnStepX Community</Company>
-    <AssemblyTitle>OnStepX Hub</AssemblyTitle>
+    <AssemblyTitle>OnStepHub</AssemblyTitle>
     <Description>OnStepX mount mediator — owns serial/TCP link, serves multiple ASCOM clients over a named pipe.</Description>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <LangVersion>9.0</LangVersion>

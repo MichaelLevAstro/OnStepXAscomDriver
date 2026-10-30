@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -11,10 +11,10 @@
     <RootNamespace>ASCOM.OnStepX</RootNamespace>
     <!-- Renamed to OnStepX.Hub when the WPF project is retired. Both exist for
          now, and two assemblies cannot share a name in one solution. -->
-    <AssemblyName>OnStepX.Hub.Avalonia</AssemblyName>
+    <AssemblyName>OnStepHub</AssemblyName>
     <Product>OnStepX</Product>
     <Company>OnStepX Community</Company>
-    <AssemblyTitle>OnStepX Hub</AssemblyTitle>
+    <AssemblyTitle>OnStepHub</AssemblyTitle>
     <Description>OnStepX mount mediator — owns the serial/TCP link, serves ASCOM and INDI clients.</Description>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>

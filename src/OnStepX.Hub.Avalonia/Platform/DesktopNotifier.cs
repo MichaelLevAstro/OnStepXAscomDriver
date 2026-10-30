@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using ASCOM.OnStepX.Hardware.Transport;
@@ -41,13 +41,13 @@ namespace ASCOM.OnStepX.Hub.Platform
                            : severity == NotificationSeverity.Warning ? "normal"
                            : "low";
 
-            Run("notify-send", new[] { "--app-name=OnStepX Hub", "--urgency=" + urgency, title ?? "", body ?? "" });
+            Run("notify-send", new[] { "--app-name=OnStepHub", "--urgency=" + urgency, title ?? "", body ?? "" });
         }
 
         private static void Mac(string title, string body)
         {
             string script = "display notification " + Quote(body ?? "") +
-                            " with title " + Quote(title ?? "OnStepX Hub");
+                            " with title " + Quote(title ?? "OnStepHub");
             Run("osascript", new[] { "-e", script });
         }
 

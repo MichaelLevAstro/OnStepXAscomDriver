@@ -9,14 +9,14 @@
          selectors in Typography; porting Controls.xaml replaces most of what
          Fluent draws. -->
     <FluentTheme />
-    <StyleInclude Source="avares://OnStepX.Hub.Avalonia/Resources/Typography.axaml"/>
-    <StyleInclude Source="avares://OnStepX.Hub.Avalonia/Resources/Controls.axaml"/>
+    <StyleInclude Source="avares://OnStepHub/Resources/Typography.axaml"/>
+    <StyleInclude Source="avares://OnStepHub/Resources/Controls.axaml"/>
   </Application.Styles>
 
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <ResourceInclude Source="avares://OnStepX.Hub.Avalonia/Resources/Icons.axaml"/>
+        <ResourceInclude Source="avares://OnStepHub/Resources/Icons.axaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

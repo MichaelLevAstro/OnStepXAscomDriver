@@ -1,4 +1,4 @@
-<Styles xmlns="https://github.com/avaloniaui"
+﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!--
@@ -18,8 +18,8 @@
   -->
 
   <Styles.Resources>
-    <FontFamily x:Key="Font.Sans">avares://OnStepX.Hub.Avalonia/Assets/Fonts/Inter.ttf#Inter, Segoe UI, Noto Sans, sans-serif</FontFamily>
-    <FontFamily x:Key="Font.Mono">avares://OnStepX.Hub.Avalonia/Assets/Fonts/JetBrainsMono.ttf#JetBrains Mono, Cascadia Mono, Consolas, DejaVu Sans Mono, monospace</FontFamily>
+    <FontFamily x:Key="Font.Sans">avares://OnStepHub/Assets/Fonts/Inter.ttf#Inter, Segoe UI, Noto Sans, sans-serif</FontFamily>
+    <FontFamily x:Key="Font.Mono">avares://OnStepHub/Assets/Fonts/JetBrainsMono.ttf#JetBrains Mono, Cascadia Mono, Consolas, DejaVu Sans Mono, monospace</FontFamily>
 
     <x:Double x:Key="Font.Size.Body">12</x:Double>
     <x:Double x:Key="Font.Size.Label">11.5</x:Double>

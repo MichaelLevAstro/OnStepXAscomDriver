@@ -179,7 +179,7 @@ namespace ASCOM.OnStepX.ViewModels
                 }
             };
 
-            AppTitle = "OnStepX ASCOM Driver";
+            AppTitle = "OnStepHub";
             AppVersion = GetVersionString();
 
             ToggleThemeCommand = new RelayCommand(() => Ui.Shell.ToggleTheme());

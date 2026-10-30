@@ -11,4 +11,4 @@ using System.Runtime.InteropServices;
 [assembly: InternalsVisibleTo("ASCOM.OnStepX")]
 [assembly: InternalsVisibleTo("OnStepX.Core")]
 [assembly: InternalsVisibleTo("OnStepX.Hub")]
-[assembly: InternalsVisibleTo("OnStepX.Hub.Avalonia")]
+[assembly: InternalsVisibleTo("OnStepHub")]

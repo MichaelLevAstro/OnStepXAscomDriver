@@ -172,7 +172,7 @@ namespace ASCOM.OnStepX
             _tray = new NotifyIcon
             {
                 Icon = icon,
-                Text = "OnStepX Hub",
+                Text = "OnStepHub",
                 ContextMenuStrip = menu,
                 Visible = true
             };

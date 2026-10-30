@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
 using ASCOM.OnStepX.Config;
@@ -15,8 +15,8 @@ namespace ASCOM.OnStepX.Services
     {
         public static event EventHandler Changed;
 
-        private const string DarkUri = "avares://OnStepX.Hub.Avalonia/Resources/Themes/Dark.axaml";
-        private const string LightUri = "avares://OnStepX.Hub.Avalonia/Resources/Themes/Light.axaml";
+        private const string DarkUri = "avares://OnStepHub/Resources/Themes/Dark.axaml";
+        private const string LightUri = "avares://OnStepHub/Resources/Themes/Light.axaml";
 
         public static ThemeMode Mode { get; private set; }
 
