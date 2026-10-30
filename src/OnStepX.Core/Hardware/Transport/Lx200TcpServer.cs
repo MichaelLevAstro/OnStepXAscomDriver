@@ -140,7 +140,29 @@ namespace ASCOM.OnStepX.Hardware.Transport
                         catch { break; }
                         if (read <= 0) break;
 
-                        pending.Append(Encoding.ASCII.GetString(buffer, 0, read));
+                        var chunk = Encoding.ASCII.GetString(buffer, 0, read);
+
+                        // The LX200 ACK handshake. A client opens with a bare
+                        // 0x06 and waits for one character naming the mount's
+                        // alignment — no '#', no colon. indi_lx200_OnStep
+                        // sends it twice, five seconds apart, before it will
+                        // send anything else, so a bridge that only forwards
+                        // ':...#' frames never gets a client connected.
+                        //
+                        // Answered here rather than forwarded: the reply is
+                        // unterminated, and the mount transport frames on '#',
+                        // so passing it through would stall for the read
+                        // timeout on every one.
+                        int ack;
+                        while ((ack = chunk.IndexOf('\u0006')) >= 0)
+                        {
+                            chunk = chunk.Remove(ack, 1);
+                            var reply = Encoding.ASCII.GetBytes(AlignmentCharacter());
+                            try { stream.Write(reply, 0, reply.Length); }
+                            catch { return; }
+                        }
+
+                        pending.Append(chunk);
 
                         foreach (var command in TakeCommands(pending))
                         {
@@ -199,6 +221,27 @@ namespace ASCOM.OnStepX.Hardware.Transport
             }
 
             return found;
+        }
+
+        // What OnStep answers the ACK with: 'A' for ALTAZM, 'P' otherwise.
+        // Straight out of the firmware's BufferCmds, which rewrites a bare
+        // 0x06 into a command carrying that character.
+        private string AlignmentCharacter()
+        {
+            try
+            {
+                if (_mount.IsOpen && _mount.Protocol != null)
+                    return _mount.Protocol.GetMountType() == 3 ? "A" : "P";
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.LogException("LX200", ex);
+            }
+
+            // Equatorial is the safe assumption: it is what every mount this
+            // hub has driven is, and an ALTAZM reported as equatorial is a
+            // wrong label rather than a wrong movement.
+            return "P";
         }
 
         // Returns the reply to write back, or null when the command is one the
