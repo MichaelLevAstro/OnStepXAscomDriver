@@ -25,6 +25,14 @@ namespace ASCOM.OnStepX.Hardware.Tppa
 
         public static IReadOnlyList<PairInfo> GetManagedPairsFromRegistry()
         {
+            // com0com is a Windows kernel driver and this ledger is written by
+            // the Windows installer, so there is nothing to read anywhere else.
+            // Without this the registry call throws on every Linux start and
+            // logs an exception for a feature that cannot exist there.
+            if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                return Array.Empty<PairInfo>();
+
             try
             {
                 using (var k = Registry.LocalMachine.OpenSubKey(ManagedPairsRegPath))
